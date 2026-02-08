@@ -311,7 +311,7 @@ After completing setup, verify:
 - [ ] Tunnel is running (`sudo systemctl status cloudflared`)
 - [ ] DNS routes through tunnel (`dig <DOMAIN>` shows CNAME)
 - [ ] Cloudflare Access is enabled (incognito browser shows login page)
-- [ ] Direct IP access fails (`curl -sk https://<VPS_IP>/` times out or refused)
+- [ ] Direct IP access fails (`curl -sk https://<VPS1_IP>/` times out or refused)
 - [ ] Telegram/Slack bots still work (use outbound connections)
 
 ---

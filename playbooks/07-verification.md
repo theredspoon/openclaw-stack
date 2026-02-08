@@ -29,7 +29,7 @@ sudo reboot
 Wait 1-2 minutes for VPS-1 to come back online, then verify SSH access:
 
 ```bash
-ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS1-IP> "echo 'VPS-1 online'"
+ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS1_IP> "echo 'VPS-1 online'"
 ```
 
 ---
@@ -113,10 +113,10 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 sudo systemctl status cloudflared
 
 # Test external access (from any machine)
-curl -s https://claw.example.com<OPENCLAW_DOMAIN_PATH>/ | head -5
+curl -s https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ | head -5
 
 # Verify direct IP access is blocked
-curl -sk --connect-timeout 5 https://<VPS1-IP>/ || echo "Direct access blocked (expected)"
+curl -sk --connect-timeout 5 https://<VPS1_IP>/ || echo "Direct access blocked (expected)"
 ```
 
 ---

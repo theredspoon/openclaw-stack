@@ -109,7 +109,7 @@ sudo passwd openclaw
 **Workflow after setup:**
 ```bash
 # SSH as admin user
-ssh -p 222 adminclaw@<VPS_IP>
+ssh -p 222 adminclaw@<VPS1_IP>
 
 # Run commands as openclaw (no direct SSH)
 sudo -u openclaw docker compose up -d
@@ -223,10 +223,10 @@ ss -tlnp | grep 222
 
 ```bash
 # From your LOCAL machine, test SSH on port 222 (using adminclaw, not openclaw)
-ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS_IP> "echo 'Port 222 works!'"
+ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS1_IP> "echo 'Port 222 works!'"
 
 # If successful, SSH back in on port 222 and remove port 22 from UFW
-ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS_IP>
+ssh -i ~/.ssh/ovh_openclaw_ed25519 -p 222 adminclaw@<VPS1_IP>
 sudo ufw delete allow 22/tcp
 sudo ufw status
 ```

@@ -24,9 +24,13 @@ This playbook configures:
 
 From `../openclaw-config.env`:
 
+- `VPS1_IP` - Required, public IP of VPS-1
 - `AI_GATEWAY_WORKER_URL` - Required, AI Gateway Worker URL
 - `AI_GATEWAY_AUTH_TOKEN` - Required, AI Gateway auth token
+- `LOG_WORKER_URL` - Required, Log Receiver Worker URL
+- `LOG_WORKER_TOKEN` - Required, Log Receiver auth token
 - `TELEGRAM_BOT_TOKEN` - Optional
+- `TELEGRAM_CHAT_ID` - Optional (required for host alerter)
 - `DISCORD_BOT_TOKEN` - Optional
 - `OPENCLAW_DOMAIN_PATH` - URL subpath for the gateway UI (default: `/_openclaw`)
 
@@ -126,14 +130,6 @@ EOF
 # Generate gateway token
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 
-# Get config values (set these variables before running)
-# AI_GATEWAY_WORKER_URL=https://ai-gateway-proxy.<account>.workers.dev
-# AI_GATEWAY_AUTH_TOKEN=<worker-auth-token>
-# TELEGRAM_BOT_TOKEN=...
-# DISCORD_BOT_TOKEN=...
-# LOG_WORKER_URL=...
-# LOG_WORKER_TOKEN=...
-
 sudo -u openclaw tee /home/openclaw/openclaw/.env << EOF
 # Gateway authentication
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
@@ -144,6 +140,7 @@ AI_GATEWAY_AUTH_TOKEN=${AI_GATEWAY_AUTH_TOKEN}
 
 # Channels (add as needed)
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
 DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
 
 # Log shipping to Cloudflare Worker
@@ -381,7 +378,7 @@ sudo tee /home/openclaw/.openclaw/openclaw.json << 'JSONEOF'
     "mode": "local",
     "trustedProxies": ["172.30.0.1"],
     "controlUi": {
-      "basePath": "${OPENCLAW_DOMAIN_PATH:-/_openclaw}"
+      "basePath": "<OPENCLAW_DOMAIN_PATH>"
     }
   },
   "agents": {
@@ -697,7 +694,7 @@ sudo tee /home/openclaw/scripts/host-alert.sh << 'SCRIPTEOF'
 set -euo pipefail
 
 # Source config for Telegram credentials
-source /home/openclaw/openclaw-config.env 2>/dev/null || true
+source /home/openclaw/openclaw/.env 2>/dev/null || true
 
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
