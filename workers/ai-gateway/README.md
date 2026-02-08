@@ -39,7 +39,7 @@ Set your Cloudflare Account ID and AI Gateway ID:
 ```toml
 [vars]
 ACCOUNT_ID = "your-cloudflare-account-id"
-GATEWAY_ID = "your-ai-gateway-id"
+CF_AI_GATEWAY_ID = "your-ai-gateway-id"
 ```
 
 Find these in the Cloudflare dashboard under **AI > AI Gateway**.

@@ -3,9 +3,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-02-06",
   "vars": {
-    // Set these to your Cloudflare account and AI Gateway IDs
-    "GATEWAY_ID": "ai-gateway"
+    // Set CF_AI_GATEWAY_ID to your upstream Cloudflare AI Gateway ID
+    // This is the AI Gateway the worker is proxying, see also CF_AI_GATEWAY_TOKEN
+    "CF_AI_GATEWAY_ID": "ai-gateway"
     // Secrets (set via `wrangler secret put`):
+    // Secrets survive `wrangler deploy` and will not be overwritten during new deploys
     //   "ACCOUNT_ID": "YOUR_CLOUDFLARE_ACCOUNT_ID", - use `wrangler whoami` to get account ID
     //   AUTH_TOKEN       — token clients use to authenticate to this worker
     //   OPENAI_API_KEY   — forwarded to OpenAI via AI Gateway

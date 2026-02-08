@@ -60,7 +60,7 @@ npx wrangler secret put CF_AI_GATEWAY_TOKEN
 
 1. Go to **Cloudflare Dashboard** -> **AI** -> **AI Gateway**
 2. Create a new gateway (or use existing)
-3. Note the Gateway ID (used in `wrangler.jsonc` as `GATEWAY_ID`)
+3. Note the Gateway ID (used in `wrangler.jsonc` as `CF_AI_GATEWAY_ID`)
 
 ### Deploy
 

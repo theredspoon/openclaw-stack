@@ -1,11 +1,20 @@
 export interface Env {
   // Vars (wrangler.toml)
-  ACCOUNT_ID: string;
-  GATEWAY_ID: string;
+  /** Cloudflare AI Gateway ID */
+  CF_AI_GATEWAY_ID: string
 
+  //
   // Secrets (wrangler secret put)
-  AUTH_TOKEN: string;
-  OPENAI_API_KEY: string;
-  ANTHROPIC_API_KEY: string;
-  CF_AI_GATEWAY_TOKEN: string;
+  //
+
+  /** Cloudflare Account ID */
+  ACCOUNT_ID: string
+  /** Token used to authorize requests to this worker */
+  AUTH_TOKEN: string
+  /** OpenAI API Key - can be omitted if BYOK is configured in Cloudflare AI Gateway */
+  OPENAI_API_KEY: string
+  /** Anthropic API Key - can be omitted if BYOK is configured in Cloudflare AI Gateway */
+  ANTHROPIC_API_KEY: string
+  /** Token used to authorize the forwarded request in the Cloudflare AI Gateway */
+  CF_AI_GATEWAY_TOKEN: string
 }

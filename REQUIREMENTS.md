@@ -688,7 +688,7 @@ Proxies LLM requests through Cloudflare AI Gateway for analytics, rate limiting,
 
 | Var | Purpose |
 |-----|---------|
-| `GATEWAY_ID` | Cloudflare AI Gateway ID (e.g., `ai-gateway`) |
+| `CF_AI_GATEWAY_ID` | Cloudflare AI Gateway ID (e.g., `ai-gateway`) |
 
 ### 4.2 Log Receiver Worker (`workers/log-receiver/`)
 
