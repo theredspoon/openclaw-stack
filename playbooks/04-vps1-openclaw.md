@@ -155,6 +155,10 @@ OPENCLAW_WORKSPACE_DIR=/home/openclaw/.openclaw/workspace
 # OpenClaw CLI reads this env var and misparses IP:port as port number
 OPENCLAW_GATEWAY_PORT=18789
 OPENCLAW_BRIDGE_PORT=18790
+# Gateway bind mode: "lan" is required for Docker deployments.
+# loopback doesn't work because Docker port-forwards traffic through the bridge
+# network (172.30.0.1), not loopback. The openclaw doctor warning about lan binding
+# is expected — actual network security is enforced by daemon.json localhost binding.
 OPENCLAW_GATEWAY_BIND=lan
 EOF
 
@@ -222,7 +226,7 @@ services:
         "gateway",
         "--allow-unconfigured",
         "--bind",
-        "lan",
+        "lan",      # Required for Docker — loopback won't receive bridge-forwarded traffic
         "--port",
         "18789",
       ]
@@ -352,6 +356,12 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 # sudo docker exec --user node openclaw-gateway node dist/index.js gateway --help 2>&1 | grep -i restart
 # If OpenClaw rejects the key, remove the "commands" block below.
 
+# bind: "lan" is required because cloudflared (systemd) connects via Docker bridge.
+#   Traffic arrives inside the container from 172.30.0.1 on eth0, not loopback.
+#   Using "loopback" would make the gateway unreachable via the tunnel.
+#   The openclaw doctor warning about lan binding is expected and safe —
+#   Docker daemon.json forces all port bindings to 127.0.0.1 (see 03-docker.md).
+#
 # trustedProxies: cloudflared connects via Docker bridge (172.30.0.1). Without this,
 #   gateway rejects X-Forwarded-* headers from the tunnel.
 #   NOTE: Only exact IPs work — CIDR ranges are NOT supported.

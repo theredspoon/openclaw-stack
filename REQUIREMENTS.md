@@ -312,6 +312,12 @@ Key parameters:
 node dist/index.js gateway --allow-unconfigured --bind lan --port 18789
 ```
 
+`--bind lan` is required for Docker deployments. `loopback` doesn't work because Docker
+port-forwards traffic through the bridge network — inside the container, connections from
+cloudflared arrive from `172.30.0.1` on `eth0`, not on loopback. `openclaw doctor` warns
+about this, but the actual network security is enforced by daemon.json localhost binding
+(section 3.1).
+
 **Environment variables:**
 
 - `NODE_ENV=production`
@@ -439,6 +445,7 @@ git checkout -- Dockerfile 2>/dev/null || true
 | Setting | Rationale |
 |---------|-----------|
 | `commands.restart: true` | Agents can modify config and trigger in-process restart via SIGUSR1 |
+| `bind: "lan"` | Required for Docker deployments. cloudflared (systemd on host) connects via Docker bridge — traffic arrives from `172.30.0.1` on `eth0`, not loopback. `loopback` would make the gateway unreachable via the tunnel. `openclaw doctor` warns about this; the warning is expected. Actual security is enforced by daemon.json localhost binding (section 3.1). |
 | `trustedProxies: ["172.30.0.1"]` | cloudflared connects via Docker bridge gateway IP. Only exact IPs work — CIDR ranges NOT supported by `isTrustedProxyAddress()` |
 | `controlUi.basePath` | URL prefix for Control UI, set from `OPENCLAW_DOMAIN_PATH` in config |
 | `sandbox.mode: "all"` | All agents run in Docker sandboxes. Requires Docker installed inside container (build patch #2). Without Docker, `spawn docker` crashes with EACCES. Fallback: `"non-main"` |
@@ -657,7 +664,7 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
 | `OPENCLAW_WORKSPACE_DIR` | `/home/openclaw/.openclaw/workspace` |
 | `OPENCLAW_GATEWAY_PORT` | `18789` — Port number only (DO NOT use IP:port format; CLI misparses it). Localhost binding is handled by Docker daemon `"ip": "127.0.0.1"` in daemon.json, not here. |
 | `OPENCLAW_BRIDGE_PORT` | `18790` — Port number only |
-| `OPENCLAW_GATEWAY_BIND` | `lan` |
+| `OPENCLAW_GATEWAY_BIND` | `lan` — Required for Docker deployments (loopback won't receive Docker bridge-forwarded traffic from cloudflared). `openclaw doctor` warns about this; the warning is expected — see section 3.7. |
 | `LOG_WORKER_URL` | Full URL to Log Receiver Worker (must include `/logs` path) |
 | `LOG_WORKER_TOKEN` | Bearer token for Log Receiver Worker authentication |
 
