@@ -10,6 +10,7 @@ This playbook verifies:
 - Vector log shipping
 - Cloudflare Workers health
 - End-to-end connectivity
+- Security (port exposure, listening services, built-in audit)
 
 ## Prerequisites
 
@@ -195,6 +196,45 @@ sudo ss -tlnp | grep -E '187(89|90)'
 
 ---
 
+## 7.8 Security Verification
+
+Active security testing to confirm gateway ports aren't externally reachable and the built-in security audit passes. This is critical because Docker bypasses UFW — even with UFW blocking a port, a container binding to `0.0.0.0` exposes it to the internet.
+
+### External Port Reachability (run from LOCAL machine)
+
+Attempt to connect to gateway ports directly via the VPS public IP. Both should fail/timeout, confirming they're only bound to localhost.
+
+```bash
+# Run from LOCAL machine (not on VPS)
+nc -zv -w 5 <VPS1_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
+nc -zv -w 5 <VPS1_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
+```
+
+**Expected:** Both connections fail with timeout or connection refused. If either succeeds, the Docker daemon.json localhost binding is misconfigured — see `playbooks/03-docker.md` for the fix.
+
+### Full Listening Port Audit (run on VPS)
+
+Verify the only externally-bound port is SSH (222). All other listening ports should be on `127.0.0.1` only.
+
+```bash
+# On VPS-1: list all listening ports — only 222 should be on 0.0.0.0 or [::]
+sudo ss -tlnp
+```
+
+**Expected:** Only port 222 (sshd) is bound to `0.0.0.0` or `[::]`. All other ports (18789, 18790, dockerd, etc.) should show `127.0.0.1` only. Any unexpected `0.0.0.0` binding is a security issue.
+
+### OpenClaw Security Audit (run on VPS)
+
+Run OpenClaw's built-in security scanner. This does NOT need device pairing — it performs local HTTP probes inside the container.
+
+```bash
+sudo docker exec --user node openclaw-gateway node dist/index.js security audit --deep
+```
+
+**Expected:** 0 critical, 0 warnings. 1 info finding is normal. If the audit reports ECONNREFUSED on an unexpected port, check that `OPENCLAW_GATEWAY_PORT` in the container's `.env` is set to `18789` (port only, not `IP:port`).
+
+---
+
 ## Troubleshooting Quick Reference
 
 ### Container Issues
@@ -250,3 +290,5 @@ Deployment is complete when:
 7. Backup cron job configured on VPS-1
 8. Host alerter cron job configured on VPS-1
 9. LLM requests visible in Cloudflare AI Gateway analytics
+10. Gateway ports (18789, 18790) not reachable from external network
+11. Security audit passes with no critical or warning findings

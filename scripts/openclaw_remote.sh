@@ -17,4 +17,4 @@ printf '\033[32mStarting bash session in OpenClaw Gateway container \033[0m\n'
 printf 'OpenClaw CLI:\033[33m node openclaw.mjs \033[0m \n'
 printf 'Example: node openclaw.mjs security audit --deep \n'
 ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
-  "sudo docker exec -it -u 1000 openclaw-gateway bash"
+  "sudo docker exec -it -u node openclaw-gateway bash"
