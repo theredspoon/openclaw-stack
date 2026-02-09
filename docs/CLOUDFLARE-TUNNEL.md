@@ -66,18 +66,9 @@ sudo cloudflared service install eyJhIjoiYWJj...
 
 Copy just the **token** part — the long base64 string starting with `ey...`.
 
-### Step 3: Configure the Public Hostname
+### Step 3: Save Without Routes
 
-Still in the tunnel creation flow, add a public hostname:
-
-| Field | Value |
-|-------|-------|
-| **Subdomain** | `openclaw` (or your choice) |
-| **Domain** | Select your domain (e.g., `example.com`) |
-| **Service Type** | `HTTP` |
-| **URL** | `localhost:18789` |
-
-Save the tunnel.
+**Skip** the public hostname configuration — save the tunnel without adding any routes. The domain will be connected later, after Cloudflare Access is configured, so the domain is never accessible without authentication.
 
 ### Step 4: Add the Token to Config
 
@@ -94,13 +85,13 @@ CF_TUNNEL_TOKEN=eyJhIjoiYWJj...  # Paste the full token here
 
 ### What Happens During Deployment
 
-Claude installs `cloudflared` on the VPS and registers it as a systemd service using your token. No further tunnel configuration is needed on the server — hostname routing, origin settings, and access policies are all managed in the Cloudflare Dashboard.
+Claude installs `cloudflared` on the VPS and registers it as a systemd service using your token. The tunnel connects but has no public hostname yet — the domain won't be accessible until you configure Cloudflare Access and add the hostname route (see below).
 
 ---
 
 ## Cloudflare Access Configuration
 
-After the tunnel is working, add authentication via Cloudflare Access to control who can reach OpenClaw.
+Configure Cloudflare Access **before** connecting the domain to your tunnel. This ensures the domain is never publicly accessible without authentication.
 
 **In Cloudflare Dashboard:** [one.dash.cloudflare.com](https://one.dash.cloudflare.com/)
 
@@ -171,20 +162,24 @@ Access needs at least one IdP to authenticate users. If you haven't set one up:
 
 The **One-time PIN** option is great for getting started quickly — it requires zero external configuration.
 
-### Step 4: Verify Your Tunnel Config
+### Step 4: Connect Your Domain
 
-Claude should have already setup the published application routes if domains were added to
-openclaw-config.env before deploying.
-
-**Dashboard (Zero Trust → Networks → Tunnels):**
+Now that Access is configured, add the public hostname route to make the domain accessible (behind Access):
 
 1. Go to **Zero Trust Dashboard** → **Networks** → **Tunnels**
-2. For each tunnel → **Edit** → **Published application routes** tab
-3. Verify a route exists and looks correct
+2. Click your tunnel → **Configure**
+3. Add a public hostname:
 
-If asked to `Migrate` the tunnel to the Dashboard, accept. No need to modify any configuration here.
-Migrating to the Dashboard simply makes it easier to manage routes from the Cloudflare Dashboard
-instead of via the server config.
+| Field | Value |
+|-------|-------|
+| **Subdomain** | `openclaw` (or your choice) |
+| **Domain** | Select your domain (e.g., `example.com`) |
+| **Service Type** | `HTTP` |
+| **URL** | `localhost:18789` |
+
+4. Save
+
+The domain is now routable — and protected by Cloudflare Access from the first request.
 
 ### Step 5: Test Access Protection
 

@@ -132,11 +132,8 @@ If any required field is missing, report all missing fields and ask user to upda
 > 2. Click **Create a tunnel** -> Choose **Cloudflared**
 > 3. Name it (e.g., `openclaw`)
 > 4. Copy the **tunnel token** (long base64 string starting with `ey...`)
-> 5. Configure the public hostname:
->    - Subdomain + Domain: `<OPENCLAW_DOMAIN>`
->    - Service: `http://localhost:18789`
-> 6. Save the tunnel
-> 7. Paste the token into `openclaw-config.env` as `CF_TUNNEL_TOKEN=ey...`"
+> 5. **Skip** the public hostname configuration — save the tunnel without routes
+> 6. Paste the token into `openclaw-config.env` as `CF_TUNNEL_TOKEN=ey...`"
 
 **If all required fields are present:** Check for placeholder values in `AI_GATEWAY_WORKER_URL`, `AI_GATEWAY_AUTH_TOKEN`, `LOG_WORKER_URL`, and `LOG_WORKER_TOKEN`. Scan for angle-bracket placeholders (e.g., `<account>`, `<worker-auth-token>`, `<generated-token>`).
 

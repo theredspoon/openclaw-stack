@@ -12,7 +12,7 @@ This playbook configures:
 - cloudflared installation on VPS-1
 - Token-based tunnel (remotely managed via Cloudflare Dashboard)
 - Port 443 removal from firewall
-- Optional: Cloudflare Access authentication
+- Cloudflare Access authentication
 
 ## Why Cloudflare Tunnel?
 
@@ -77,11 +77,7 @@ Before running the VPS steps, create the tunnel in the Cloudflare Dashboard:
 2. Click **Create a tunnel** -> Choose **Cloudflared**
 3. Name it (e.g., `openclaw`)
 4. Copy the **tunnel token** (long base64 string starting with `ey...`)
-5. Configure the public hostname:
-   - **Subdomain:** `openclaw` (or your choice)
-   - **Domain:** `example.com` (select your domain)
-   - **Service:** `http://localhost:18789`
-6. Save the tunnel
+5. **Skip** the public hostname configuration — save the tunnel without routes
 
 Add the token to `openclaw-config.env`:
 
@@ -143,28 +139,32 @@ sudo ufw status
 
 ---
 
-## Cloudflare Access Configuration (Optional)
+## Cloudflare Access Configuration
 
-Add authentication via Cloudflare Access for additional security.
+Configure Cloudflare Access **before** connecting the domain. This ensures the domain is never publicly accessible without authentication.
 
-### In Cloudflare Dashboard
+See [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md) for detailed step-by-step instructions covering:
 
-1. Go to **Zero Trust** -> **Access** -> **Applications**
-2. Click **Add an application** -> **Self-hosted**
-3. Configure:
-   - **Application name:** OpenClaw
-   - **Session duration:** 24 hours
-   - **Application domain:** `<OPENCLAW_DOMAIN>`
-   - **Path:** `<OPENCLAW_DOMAIN_PATH>/*` (or leave blank to protect entire domain)
+- Creating an Access Application
+- Defining an Access Policy
+- Configuring an Identity Provider
 
-4. Add a policy:
-   - **Policy name:** Allowed Users
-   - **Action:** Allow
-   - **Include:**
-     - Emails: `your-email@example.com`
-     - Or: Login Methods -> GitHub/Google
+### Connect Your Domain
 
-### Test Access Protection
+After Access is configured, add the public hostname route to your tunnel:
+
+1. Go to **Cloudflare Dashboard** -> **Zero Trust** -> **Networks** -> **Tunnels**
+2. Click your tunnel -> **Configure**
+3. Add a public hostname:
+   - **Subdomain:** `openclaw` (or your choice)
+   - **Domain:** Select your domain (e.g., `example.com`)
+   - **Service Type:** `HTTP`
+   - **URL:** `localhost:18789`
+4. Save
+
+The domain is now accessible — protected by Cloudflare Access.
+
+### Verify Access Protection
 
 1. Open `https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/` in an incognito window
 2. You should see the Cloudflare Access login page
