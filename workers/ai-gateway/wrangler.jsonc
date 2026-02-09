@@ -1,7 +1,19 @@
 {
   "name": "openclaw-ai-gateway-proxy",
   "main": "src/index.ts",
+
   "compatibility_date": "2026-02-06",
+
+  // Workers Logs: enables console.log in the worker
+  "observability": {
+    "enabled": true
+  },
+
+  // Smart placement for reduced latency
+  "placement": {
+    "mode": "smart"
+  },
+
   "vars": {
     // Set CF_AI_GATEWAY_ID to your upstream Cloudflare AI Gateway ID
     // This is the AI Gateway the worker is proxying, see also CF_AI_GATEWAY_TOKEN
