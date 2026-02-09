@@ -8,6 +8,28 @@ the playbooks as designed.
 
 ---
 
+## Quick Start
+
+1. Clone this repo
+2. Create a **[new VPS](ovh_setup_guide.md)** and [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)
+3. Run claude in this repo dir - just say `start`
+
+   ```bash
+   claude
+   # Prompt: 'start'
+   ```
+
+   Claude will deploy and test the VPS (20+ minutes)
+
+Claude will guide you through whole process including openclaw device pairing.
+
+Claude will ask you for any missing config values during the deploy process
+and auto repair any issues it encounters.
+
+After deployment, claude can be used to make any changes or manage your VPS with the same prompt.
+
+---
+
 ## Key Features
 
 - **Fully automated deployment** — Claude Code runs modular playbooks to set up the entire VPS from scratch
@@ -31,29 +53,6 @@ the playbooks as designed.
 - **Docker localhost binding** — daemon configured to bind container ports to 127.0.0.1 only, preventing Docker's iptables rules from bypassing UFW
 - **Kernel hardening** — sysctl tuning and automatic security updates
 - **Security audit** — built-in `openclaw security audit` checks for misconfigurations; claude runs comprehensive verifications & security checks during deploy
-
-## Quick Start
-
-1. Clone this repo
-2. Create a new VPS - see **[ovh_setup_guide.md](ovh_setup_guide.md)** for recommendations
-3. Create a [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md) in the Cloudflare Dashboard - copy the tunnel token
-4. Set **VPS_IP** and **CF_TUNNEL_TOKEN** in `openclaw-config.env`
-5. Run claude in this repo dir - just say `start`
-
-   ```bash
-   claude
-   # Prompt: 'start'
-   ```
-
-   Claude will deploy and test the VPS (20+ minutes)
-
-   Then claude will guide you through openclaw device pairing.
-6. Start using OpenClaw: `https://openclaw.YOURDOMAIN.com/chat` or via messaging channel (Telegram, etc.)
-
-Claude will interview you for any missing config values during the deploy process.
-It will also auto fix any issues that it encounters.
-
-After deployment, claude can be used to make any changes or manage your VPS with the same prompt.
 
 ---
 
