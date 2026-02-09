@@ -326,7 +326,7 @@ Runs as root inside container (Sysbox isolation). Performs pre-start tasks in or
    - `openclaw-sandbox` — Base sandbox (from `/app/sandbox/Dockerfile`)
    - `openclaw-sandbox-common:bookworm-slim` — Node.js, git, dev tools
    - `openclaw-sandbox-browser:bookworm-slim` — Chromium + noVNC
-   - `openclaw-sandbox-claude:bookworm-slim` — Common + Claude Code CLI (layered image)
+   - `openclaw-sandbox-claude:bookworm-slim` — Common + ffmpeg + imagemagick + Claude Code CLI (layered image)
 6. **Privilege drop** — `exec gosu node "$@"` drops from root to node (uid 1000). `gosu` doesn't spawn a subshell (preserves PID 1 signal handling). Full gateway command passed as arguments from compose override.
 
 ### 3.6 Build Process (`scripts/build-openclaw.sh`)
@@ -339,14 +339,9 @@ Patches upstream Dockerfile in-place before `docker build`, then `git checkout` 
 
 | # | Target | Issue | Fix |
 |---|--------|-------|-----|
-| 1 | Dockerfile | Claude Code CLI needed in gateway image | `RUN npm install -g @anthropic-ai/claude-code` before `USER node` |
-| 2 | Dockerfile | Docker + gosu needed for nested Docker (sandbox isolation) | `RUN apt-get install docker.io gosu && usermod -aG docker node` before `USER node` |
+| 1 | Dockerfile | Docker + gosu needed for nested Docker (sandbox isolation) | `RUN apt-get install docker.io gosu && usermod -aG docker node` before `USER node` |
 
-**Critical constraint:** Both patches MUST be inserted before `USER node` in the Dockerfile. After `USER node`, npm and apt can't write to system directories (EACCES).
-
-**Build args:**
-
-- `OPENCLAW_DOCKER_APT_PACKAGES` — Extra apt packages for gateway image (e.g., `"ffmpeg build-essential imagemagick"`)
+**Critical constraint:** The patch MUST be inserted before `USER node` in the Dockerfile. After `USER node`, apt can't write to system directories (EACCES).
 
 **Cleanup step:**
 
@@ -453,12 +448,12 @@ Four images built during first boot by the entrypoint script:
 | `openclaw-sandbox` | Upstream Dockerfile | Minimal sandbox (base) | ~150MB |
 | `openclaw-sandbox-common:bookworm-slim` | Custom script | Node.js, git, dev tools | ~500MB |
 | `openclaw-sandbox-browser:bookworm-slim` | Custom script | Chromium + noVNC | ~800MB |
-| `openclaw-sandbox-claude:bookworm-slim` | Layered on common | Common + Claude Code CLI | ~600MB |
+| `openclaw-sandbox-claude:bookworm-slim` | Layered on common | Common + ffmpeg + imagemagick + Claude Code CLI | ~700MB |
 
 **Claude sandbox build command:**
 
 ```bash
-printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
+printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends ffmpeg imagemagick && rm -rf /var/lib/apt/lists/*\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
 ```
 
 **Critical constraints:**
@@ -652,7 +647,6 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
 | `OPENCLAW_GATEWAY_BIND` | `lan` |
 | `LOG_WORKER_URL` | Full URL to Log Receiver Worker (must include `/logs` path) |
 | `LOG_WORKER_TOKEN` | Bearer token for Log Receiver Worker authentication |
-| `OPENCLAW_DOCKER_APT_PACKAGES` | Extra apt packages for gateway image build |
 
 **Gotcha:** `.env` values with spaces MUST be quoted (e.g., `VAR="a b c"`). Unquoted values cause bash `source .env` to treat words as separate commands.
 
@@ -785,7 +779,7 @@ curl https://<worker-name>.<account>.workers.dev/health
 - **Failed builds leave patches in place** — `git checkout` cleanup only runs on success. Manually restore before retry: `git checkout -- Dockerfile`
 - **`.env` values with spaces must be quoted** — `VAR=a b c` breaks `source .env`
 - **`sed /i` with backslash continuations breaks Dockerfiles** — Use single-line RUN commands
-- **Only 2 patches remain** — Claude Code CLI (#1) and Docker+gosu (#2). OTEL patches no longer needed.
+- **Only 1 patch remains** — Docker+gosu (#1). Claude Code CLI and OTEL patches no longer needed. Agent tools (ffmpeg, imagemagick, Claude Code CLI) are in the claude sandbox image, not the gateway.
 
 ### UID & Ownership
 

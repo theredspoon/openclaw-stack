@@ -24,7 +24,7 @@ Optional features are enhancements that:
 
 | Feature | Playbook | Description |
 |---------|----------|-------------|
-| Sandbox & Browser | [`sandbox-and-browser.md`](sandbox-and-browser.md) | Rich sandbox (Node.js, git, dev tools), browser (Chromium + noVNC), gateway apt packages (ffmpeg, imagemagick), Claude Code CLI |
+| Sandbox & Browser | [`sandbox-and-browser.md`](sandbox-and-browser.md) | Rich sandbox (Node.js, git, dev tools, ffmpeg, imagemagick, Claude Code CLI), browser (Chromium + noVNC) |
 
 ## Adding Optional Features
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Start a Claude Code session inside the OpenClaw gateway.
+# Start a Claude Code session in a sandbox container on the VPS.
 #
-# Claude Code's sandbox mode handles container isolation automatically,
-# and ~/.claude is shared across all sandbox containers.
+# Runs a fresh claude sandbox container inside the gateway's nested Docker,
+# mounting .claude-sandbox credentials so auth persists across sessions.
 #
-# Chain: local -> VPS (SSH) -> gateway (docker exec) -> claude (sandbox)
+# Chain: local -> VPS (SSH) -> gateway (docker exec) -> sandbox (docker run) -> claude
 #
 # Usage:
-#   ./claude-session.sh
+#   ./claude-sandbox.sh
 
 set -euo pipefail
 
@@ -32,4 +32,9 @@ fi
 
 printf '\033[32mConnecting to remote sandbox...\033[0m\n'
 ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -t "${SSH_USER}@${VPS1_IP}" \
-  "sudo docker exec -it $GATEWAY claude"
+  "sudo docker exec -it $GATEWAY docker run --rm -it \
+    -v /home/node/.claude-sandbox:/home/linuxbrew/.claude \
+    --tmpfs /home/linuxbrew:uid=1000,gid=1000 \
+    --tmpfs /tmp \
+    -u 1000:1000 \
+    openclaw-sandbox-claude:bookworm-slim claude"

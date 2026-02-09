@@ -2,24 +2,14 @@
 # Build OpenClaw with auto-patching for upstream issues.
 #
 # Patches applied (each auto-skips when upstream fixes the issue):
-#   1. Dockerfile: install Claude Code CLI globally (@anthropic-ai/claude-code)
-#   2. Dockerfile: install Docker + gosu for nested Docker (sandbox isolation via Sysbox)
+#   1. Dockerfile: install Docker + gosu for nested Docker (sandbox isolation via Sysbox)
 #
 # Usage: sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 set -euo pipefail
 
 cd /home/openclaw/openclaw
 
-# ── 1. Patch Dockerfile to install Claude Code CLI ────────────────────
-if ! grep -q "@anthropic-ai/claude-code" Dockerfile; then
-  echo "[build] Patching Dockerfile to install Claude Code CLI..."
-  # Insert before USER (not CMD) so npm install runs as root
-  sed -i '/^USER /i RUN npm install -g @anthropic-ai/claude-code' Dockerfile
-else
-  echo "[build] Claude Code CLI already in Dockerfile (already patched)"
-fi
-
-# ── 2. Patch Dockerfile to install Docker + gosu (nested Docker for sandboxes) ──
+# ── 1. Patch Dockerfile to install Docker + gosu (nested Docker for sandboxes) ──
 # docker.io includes: docker CLI, dockerd, containerd, runc
 # gosu: drop-in replacement for su/sudo that doesn't spawn subshell (proper PID 1 signal handling)
 # usermod: add node user to docker group for socket access after privilege drop
@@ -32,13 +22,11 @@ else
   echo "[build] Docker already in Dockerfile (already patched)"
 fi
 
-# ── 3. Build image ───────────────────────────────────────────────────
+# ── 2. Build image ───────────────────────────────────────────────────
 echo "[build] Building openclaw:local..."
-docker build \
-  ${OPENCLAW_DOCKER_APT_PACKAGES:+--build-arg OPENCLAW_DOCKER_APT_PACKAGES="$OPENCLAW_DOCKER_APT_PACKAGES"} \
-  -t openclaw:local .
+docker build -t openclaw:local .
 
-# ── 4. Restore patched files (keep git working tree clean) ───────────
+# ── 3. Restore patched files (keep git working tree clean) ───────────
 git checkout -- Dockerfile 2>/dev/null || true
 
 echo "[build] Done. Run: docker compose up -d openclaw-gateway"

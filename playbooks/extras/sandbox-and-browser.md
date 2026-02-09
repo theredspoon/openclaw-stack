@@ -1,6 +1,6 @@
 # Sandbox & Browser Extras
 
-Add rich sandbox (Node.js, git, dev tools), browser support (Chromium + noVNC), gateway apt packages (ffmpeg, imagemagick, build-essential), and Claude Code CLI to the OpenClaw gateway.
+Add rich sandbox (Node.js, git, dev tools, ffmpeg, imagemagick, Claude Code CLI), browser support (Chromium + noVNC), and sandbox/browser config to the OpenClaw gateway.
 
 ## Overview
 
@@ -8,15 +8,14 @@ This playbook configures:
 
 - **Common sandbox image** — Pre-built `openclaw-sandbox-common:bookworm-slim` with Node.js, git, and dev tools (replaces minimal default for agent tasks)
 - **Browser sandbox image** — `openclaw-sandbox-browser:bookworm-slim` with Chromium and noVNC for web browsing tasks, viewable through the Control UI
-- **Gateway apt packages** — `ffmpeg`, `build-essential`, and `imagemagick` baked into the gateway Docker image at build time
-- **Claude Code CLI** — `@anthropic-ai/claude-code` installed globally in the gateway image so agents can use it as a coding tool
+- **Claude sandbox image** — `openclaw-sandbox-claude:bookworm-slim` layered on common with ffmpeg, imagemagick, and Claude Code CLI (where agents actually run)
 - **Config permissions fix** — Ensures `chmod 600` on `openclaw.json` every startup via entrypoint
 
 ## Prerequisites
 
 - Base deployment complete (`02-07` playbooks)
 - OpenClaw gateway running on VPS-1
-- At least **2GB free disk space** on VPS-1 (sandbox images ~1.3GB + gateway extras ~450MB)
+- At least **2GB free disk space** on VPS-1 (sandbox images ~2GB inside nested Docker)
 
 ## Disk Space Check
 
@@ -27,41 +26,16 @@ df -h /home/openclaw
 # Expect at least 2GB free
 # Common sandbox: ~500MB (inside nested Docker)
 # Browser sandbox: ~800MB (inside nested Docker)
-# Gateway apt packages: ~350MB (in gateway image layer)
-# Claude Code CLI: ~100MB (npm global install)
+# Claude sandbox: ~700MB (common + ffmpeg + imagemagick + Claude Code CLI)
 ```
 
 ---
 
-## E.1 Update Environment File
+## E.1 Deploy Updated Build Script and Rebuild Gateway Image
 
-Add the `OPENCLAW_DOCKER_APT_PACKAGES` variable to the gateway `.env` file. The upstream Dockerfile has a conditional `ARG` that installs these packages when provided.
+The build script applies one patch:
 
-```bash
-#!/bin/bash
-# Append to existing .env (idempotent — skips if already present)
-ENV_FILE="/home/openclaw/openclaw/.env"
-if ! sudo -u openclaw grep -q "OPENCLAW_DOCKER_APT_PACKAGES" "$ENV_FILE"; then
-  sudo -u openclaw tee -a "$ENV_FILE" << 'EOF'
-
-# Extra apt packages baked into gateway image at build time (space-separated)
-OPENCLAW_DOCKER_APT_PACKAGES="ffmpeg build-essential imagemagick"
-EOF
-  echo "Added OPENCLAW_DOCKER_APT_PACKAGES to .env"
-else
-  echo "OPENCLAW_DOCKER_APT_PACKAGES already in .env"
-fi
-```
-
----
-
-## E.2 Deploy Updated Build Script and Rebuild Gateway Image
-
-The build script adds three new features:
-
-- **Patch #4**: Installs Claude Code CLI (`@anthropic-ai/claude-code`) globally via `npm install -g`
-- **Patch #5**: Installs `docker.io` + `gosu` for nested Docker daemon (sandbox isolation via Sysbox). Adds node user to docker group for socket access after privilege drop.
-- **`--build-arg`**: Passes `OPENCLAW_DOCKER_APT_PACKAGES` to Docker build (upstream Dockerfile conditionally installs them)
+- **Patch #1**: Installs `docker.io` + `gosu` for nested Docker daemon (sandbox isolation via Sysbox). Adds node user to docker group for socket access after privilege drop.
 
 ```bash
 #!/bin/bash
@@ -75,23 +49,21 @@ sudo cp /tmp/build-openclaw.sh /home/openclaw/scripts/build-openclaw.sh
 sudo chown openclaw:openclaw /home/openclaw/scripts/build-openclaw.sh
 sudo chmod +x /home/openclaw/scripts/build-openclaw.sh
 
-# Source .env so OPENCLAW_DOCKER_APT_PACKAGES is available during build
-sudo -u openclaw bash -c 'source /home/openclaw/openclaw/.env && /home/openclaw/scripts/build-openclaw.sh'
+# Build the gateway image
+sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 ```
 
 The build will:
 
-1. Apply patches 1-5 (each auto-skips if already fixed upstream)
-2. Pass `--build-arg OPENCLAW_DOCKER_APT_PACKAGES="ffmpeg build-essential imagemagick"` to Docker
-3. Install Claude Code CLI globally in the image
-4. Install Docker + gosu for nested Docker (sandbox isolation)
-5. Restore patched files to keep git tree clean
+1. Apply patch #1 (auto-skips if already fixed upstream)
+2. Install Docker + gosu for nested Docker (sandbox isolation)
+3. Restore patched files to keep git tree clean
 
-Expect the build to take 5-10 minutes (apt packages, Docker, and npm install add time). The `docker.io` package adds ~150MB to the image.
+Expect the build to take 3-5 minutes. The `docker.io` package adds ~150MB to the image.
 
 ---
 
-## E.3 Deploy Updated Entrypoint Script
+## E.2 Deploy Updated Entrypoint Script
 
 The entrypoint now runs as root (`user: "0:0"` in compose) and handles:
 
@@ -102,7 +74,7 @@ The entrypoint now runs as root (`user: "0:0"` in compose) and handles:
 5. Default sandbox image bootstrap
 6. Common sandbox image bootstrap (`openclaw-sandbox-common:bookworm-slim`)
 7. Browser sandbox image bootstrap (`openclaw-sandbox-browser:bookworm-slim`)
-8. Claude sandbox image build (`openclaw-sandbox-claude:bookworm-slim` layered on common via `docker build`)
+8. Claude sandbox image build (`openclaw-sandbox-claude:bookworm-slim` — common + ffmpeg + imagemagick + Claude Code CLI)
 9. **NEW**: Privilege drop via `exec gosu node "$@"` — gateway runs as node (uid 1000)
 
 > **Important:** The compose override must also be updated to use `user: "0:0"` and add `/var/log` tmpfs. See section E.3a below.
@@ -227,12 +199,12 @@ if command -v dockerd > /dev/null 2>&1; then
         echo "[entrypoint] Browser sandbox image already exists"
       fi
 
-      # Build claude sandbox image if missing (layered on common with Claude Code CLI)
-      # This is a separate image so common stays clean — only claude sandbox has the CLI
+      # Build claude sandbox image if missing (layered on common with media tools + Claude Code CLI)
+      # Adds ffmpeg, imagemagick, and claude CLI — common sandbox stays clean
       if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
         if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
           echo "[entrypoint] Claude sandbox image not found, building..."
-          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
+          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends ffmpeg imagemagick && rm -rf /var/lib/apt/lists/*\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
           echo "[entrypoint] Claude sandbox image built successfully"
         fi
       else
@@ -256,7 +228,7 @@ sudo chmod +x /home/openclaw/openclaw/scripts/entrypoint-gateway.sh
 
 ---
 
-## E.3a Update Docker Compose Override
+## E.2a Update Docker Compose Override
 
 The container must run as root so the entrypoint can start `dockerd`. Sysbox maps uid 0 inside the container to an unprivileged user on the host. The entrypoint drops to node (uid 1000) via `gosu` before starting the gateway.
 
@@ -298,7 +270,7 @@ Key changes:
 
 ---
 
-## E.4 Update openclaw.json with Sandbox and Browser Config
+## E.3 Update openclaw.json with Sandbox and Browser Config
 
 Add `agents` and `tools` blocks to enable rich sandboxes and browser support. The config uses `openclaw-sandbox-claude:bookworm-slim` as the default sandbox image (layered on common, adds Claude Code CLI) and enables the browser tool with Chromium + noVNC.
 
@@ -347,7 +319,7 @@ Follow section 4.8 in `playbooks/04-vps1-openclaw.md` — it now includes the `a
 
 Key decisions:
 
-- `mode: "all"` — all agents (including main) run in sandboxes. Requires Docker installed inside the container (patch #5 in build script).
+- `mode: "all"` — all agents (including main) run in sandboxes. Requires Docker installed inside the container (patch #1 in build script).
 - `network: "bridge"` — required for browser CDP connectivity. `"none"` breaks browser tool (gateway can't resolve CDP port). Sandbox containers are already double-isolated inside Sysbox nested Docker.
 - `tmpfs: ["/home/linuxbrew:uid=1000,gid=1000"]` — makes sandbox home dir writable (for `~/.claude.json` etc.) while keeping root filesystem read-only. The `uid=1000,gid=1000` options ensure the linuxbrew user can write. The `.claude` bind mount sits on top of the tmpfs.
 - `binds: ["/home/node/.claude-sandbox:/home/linuxbrew/.claude"]` — sandbox credentials are isolated from gateway's own `.claude` dir. User authorizes Claude once in a sandbox and creds persist on host.
@@ -368,7 +340,7 @@ sudo chmod 600 /home/openclaw/.openclaw/openclaw.json
 
 ---
 
-## E.5 Update Docker Compose Start Period
+## E.4 Update Docker Compose Start Period
 
 The first boot now builds 3 sandbox images inside the nested Docker daemon, which takes significantly longer. Increase `start_period` from 120s to 300s.
 
@@ -382,7 +354,7 @@ echo "Updated start_period to 300s"
 
 ---
 
-## E.6 Restart Gateway and Monitor First Boot
+## E.5 Restart Gateway and Monitor First Boot
 
 ```bash
 #!/bin/bash
@@ -412,24 +384,20 @@ echo ""
 echo "=== Bootstrap Logs ==="
 sudo docker logs openclaw-gateway 2>&1 | grep -i '\[entrypoint\]'
 
-# 3. Verify gateway apt packages
+# 3. Verify claude sandbox has media tools + Claude Code CLI
 echo ""
-echo "=== Gateway Packages ==="
-sudo docker exec openclaw-gateway which ffmpeg && echo "ffmpeg: OK" || echo "ffmpeg: MISSING"
-sudo docker exec openclaw-gateway which convert && echo "imagemagick: OK" || echo "imagemagick: MISSING"
-sudo docker exec openclaw-gateway which gcc && echo "build-essential: OK" || echo "build-essential: MISSING"
-
-# 4. Verify Claude Code CLI is in claude sandbox only
-echo ""
-echo "=== Claude Code CLI ==="
-echo "gateway image:"
-sudo docker exec openclaw-gateway claude --version && echo "  claude in gateway: OK" || echo "  claude in gateway: MISSING"
-echo "claude sandbox:"
+echo "=== Claude Sandbox Tools ==="
+sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim ffmpeg -version 2>&1 | head -1 && echo "  ffmpeg in claude-sandbox: OK" || echo "  ffmpeg in claude-sandbox: MISSING"
+sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim convert --version 2>&1 | head -1 && echo "  imagemagick in claude-sandbox: OK" || echo "  imagemagick in claude-sandbox: MISSING"
 sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim claude --version && echo "  claude in claude-sandbox: OK" || echo "  claude in claude-sandbox: MISSING"
+
+# 4. Verify claude is NOT in gateway (stripped for minimal attack surface)
+echo ""
+echo "=== Gateway Minimality ==="
+sudo docker exec openclaw-gateway which claude > /dev/null 2>&1 && echo "  UNEXPECTED: claude found in gateway" || echo "  claude NOT in gateway: OK (expected)"
+sudo docker exec openclaw-gateway which ffmpeg > /dev/null 2>&1 && echo "  UNEXPECTED: ffmpeg found in gateway" || echo "  ffmpeg NOT in gateway: OK (expected)"
 echo "common sandbox (should NOT have claude):"
 sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-common:bookworm-slim which claude > /dev/null 2>&1 && echo "  UNEXPECTED: claude found in common" || echo "  claude NOT in common: OK"
-echo "browser sandbox (should NOT have claude):"
-sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-browser:bookworm-slim which claude > /dev/null 2>&1 && echo "  UNEXPECTED: claude found in browser" || echo "  claude NOT in browser: OK"
 
 # 5. Check openclaw.json permissions
 echo ""
@@ -478,20 +446,15 @@ openclaw-sandbox-common       bookworm-slim    ~500MB
 openclaw-sandbox-claude       bookworm-slim    ~600MB
 openclaw-sandbox-browser      bookworm-slim    ~800MB
 
-=== Gateway Packages ===
-ffmpeg: OK
-imagemagick: OK
-build-essential: OK
-
-=== Claude Code CLI ===
-gateway image:
-  claude in gateway: OK
-claude sandbox:
+=== Claude Sandbox Tools ===
+  ffmpeg in claude-sandbox: OK
+  imagemagick in claude-sandbox: OK
   claude in claude-sandbox: OK
-common sandbox (should NOT have claude):
+
+=== Gateway Minimality ===
+  claude NOT in gateway: OK (expected)
+  ffmpeg NOT in gateway: OK (expected)
   claude NOT in common: OK
-browser sandbox (should NOT have claude):
-  claude NOT in browser: OK
 
 === Config Permissions ===
 600
@@ -533,11 +496,12 @@ sudo -u openclaw docker image prune -f
 ### Claude Code CLI Not Found
 
 ```bash
-# Check if npm global bin is on PATH
-sudo docker exec openclaw-gateway npm list -g @anthropic-ai/claude-code
+# Check if Claude Code CLI is installed in the claude sandbox image
+sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim which claude
+sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim claude --version
 
-# Check PATH
-sudo docker exec openclaw-gateway bash -c 'echo $PATH'
+# Check if the claude sandbox image exists
+sudo docker exec openclaw-gateway docker images | grep claude
 ```
 
 ### Browser Not Working

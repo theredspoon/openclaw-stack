@@ -156,9 +156,6 @@ OPENCLAW_WORKSPACE_DIR=/home/openclaw/.openclaw/workspace
 OPENCLAW_GATEWAY_PORT=127.0.0.1:18789
 OPENCLAW_BRIDGE_PORT=127.0.0.1:18790
 OPENCLAW_GATEWAY_BIND=lan
-
-# Extra apt packages baked into gateway image at build time (space-separated)
-OPENCLAW_DOCKER_APT_PACKAGES="ffmpeg build-essential imagemagick"
 EOF
 
 sudo chmod 600 /home/openclaw/openclaw/.env
@@ -449,9 +446,8 @@ sudo chmod 600 /home/openclaw/.openclaw/openclaw.json
 
 Instead of maintaining a forked Dockerfile, we patch the upstream Dockerfile in-place before building. Each patch auto-skips when already applied.
 
-Two additions are patched:
+One patch is applied:
 
-- Claude Code CLI: installs `@anthropic-ai/claude-code` globally so agents can use it as a coding tool
 - Docker + gosu: installs `docker.io` and `gosu` for nested Docker (sandbox isolation via Sysbox)
 
 ```bash
@@ -464,25 +460,15 @@ sudo -u openclaw tee /home/openclaw/scripts/build-openclaw.sh << 'SCRIPTEOF'
 #!/bin/bash
 # Build OpenClaw with auto-patching.
 #
-# Patches applied (each auto-skips when already present):
-#   1. Dockerfile: install Claude Code CLI globally (@anthropic-ai/claude-code)
-#   2. Dockerfile: install Docker + gosu (nested Docker for sandboxes via Sysbox)
+# Patches applied (each auto-skips when upstream fixes the issue):
+#   1. Dockerfile: install Docker + gosu for nested Docker (sandbox isolation via Sysbox)
 #
 # Usage: sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 set -euo pipefail
 
 cd /home/openclaw/openclaw
 
-# ── 1. Patch Dockerfile to install Claude Code CLI ────────────────────
-if ! grep -q "@anthropic-ai/claude-code" Dockerfile; then
-  echo "[build] Patching Dockerfile to install Claude Code CLI..."
-  # Insert before USER (not CMD) so npm install runs as root
-  sed -i '/^USER /i RUN npm install -g @anthropic-ai/claude-code' Dockerfile
-else
-  echo "[build] Claude Code CLI already in Dockerfile (already patched)"
-fi
-
-# ── 2. Patch Dockerfile to install Docker + gosu (nested Docker for sandboxes) ──
+# ── 1. Patch Dockerfile to install Docker + gosu (nested Docker for sandboxes) ──
 # docker.io includes: docker CLI, dockerd, containerd, runc
 # gosu: drop-in replacement for su/sudo that doesn't spawn subshell (proper PID 1 signal handling)
 # usermod: add node user to docker group for socket access after privilege drop
@@ -495,13 +481,11 @@ else
   echo "[build] Docker already in Dockerfile (already patched)"
 fi
 
-# ── 3. Build image ───────────────────────────────────────────────────
+# ── 2. Build image ───────────────────────────────────────────────────
 echo "[build] Building openclaw:local..."
-docker build \
-  ${OPENCLAW_DOCKER_APT_PACKAGES:+--build-arg OPENCLAW_DOCKER_APT_PACKAGES="$OPENCLAW_DOCKER_APT_PACKAGES"} \
-  -t openclaw:local .
+docker build -t openclaw:local .
 
-# ── 4. Restore patched files (keep git working tree clean) ───────────
+# ── 3. Restore patched files (keep git working tree clean) ───────────
 git checkout -- Dockerfile 2>/dev/null || true
 
 echo "[build] Done. Run: docker compose up -d openclaw-gateway"
@@ -514,14 +498,11 @@ sudo chmod +x /home/openclaw/scripts/build-openclaw.sh
 
 ## 4.8b Build-Time Patches (Reference)
 
-The build script (4.8a) applies two patches inline using `sed`. Each auto-skips when already applied:
+The build script (4.8a) applies one patch inline using `sed`. It auto-skips when already applied:
 
-1. **Claude Code CLI**: Installs `@anthropic-ai/claude-code` globally via `npm install -g` so agents can invoke `claude` as a coding tool.
-2. **Docker + gosu**: Installs `docker.io` and `gosu` for nested Docker daemon (sandbox isolation via Sysbox). Adds node user to docker group for socket access after privilege drop.
+1. **Docker + gosu**: Installs `docker.io` and `gosu` for nested Docker daemon (sandbox isolation via Sysbox). Adds node user to docker group for socket access after privilege drop.
 
-The build step also passes `OPENCLAW_DOCKER_APT_PACKAGES` as a `--build-arg` when set (upstream Dockerfile has an `ARG` that conditionally installs them).
-
-No separate patch files needed — the build script contains the patches directly.
+No separate patch files needed — the build script contains the patch directly.
 
 ---
 
@@ -660,12 +641,12 @@ if command -v dockerd > /dev/null 2>&1; then
         echo "[entrypoint] Browser sandbox image already exists"
       fi
 
-      # Build claude sandbox image if missing (layered on common with Claude Code CLI)
-      # This is a separate image so common stays clean — only claude sandbox has the CLI
+      # Build claude sandbox image if missing (layered on common with media tools + Claude Code CLI)
+      # Adds ffmpeg, imagemagick, and claude CLI — common sandbox stays clean
       if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
         if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
           echo "[entrypoint] Claude sandbox image not found, building..."
-          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
+          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends ffmpeg imagemagick && rm -rf /var/lib/apt/lists/*\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
           echo "[entrypoint] Claude sandbox image built successfully"
         fi
       else
