@@ -5,6 +5,7 @@ This directory contains optional playbooks that enhance the deployment but are n
 ## What Are Optional Features?
 
 Optional features are enhancements that:
+
 - Add convenience or additional capabilities
 - Are not required for OpenClaw to function
 - Can be added after initial deployment

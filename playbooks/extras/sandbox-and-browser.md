@@ -182,56 +182,63 @@ if command -v dockerd > /dev/null 2>&1; then
   if docker info > /dev/null 2>&1; then
     echo "[entrypoint] Nested Docker daemon ready (took ${elapsed:-0}s)"
 
-    # Build default sandbox image if missing
-    if ! docker image inspect openclaw-sandbox > /dev/null 2>&1; then
-      echo "[entrypoint] Sandbox image not found, building..."
-      if [ -f /app/sandbox/Dockerfile ]; then
-        docker build -t openclaw-sandbox /app/sandbox/
-        echo "[entrypoint] Sandbox image built successfully"
-      else
-        echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
-      fi
-    else
-      echo "[entrypoint] Sandbox image already exists"
-    fi
+    # Sandbox builds are non-fatal — gateway starts even if builds fail.
+    # Failures are logged but don't prevent the gateway from running.
+    # Rebuild manually later: sudo docker exec openclaw-gateway /app/scripts/sandbox-common-setup.sh
+    (
+      set +e
 
-    # Build common sandbox image if missing (includes Node.js, git, common tools)
-    if ! docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
-      echo "[entrypoint] Common sandbox image not found, building..."
-      if [ -f /app/scripts/sandbox-common-setup.sh ]; then
-        /app/scripts/sandbox-common-setup.sh
-        echo "[entrypoint] Common sandbox image built successfully"
+      # Build default sandbox image if missing
+      if ! docker image inspect openclaw-sandbox > /dev/null 2>&1; then
+        echo "[entrypoint] Sandbox image not found, building..."
+        if [ -f /app/sandbox/Dockerfile ]; then
+          docker build -t openclaw-sandbox /app/sandbox/
+          echo "[entrypoint] Sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
+        fi
       else
-        echo "[entrypoint] WARNING: sandbox-common-setup.sh not found"
+        echo "[entrypoint] Sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Common sandbox image already exists"
-    fi
 
-    # Build browser sandbox image if missing (includes Chromium, noVNC)
-    if ! docker image inspect openclaw-sandbox-browser:bookworm-slim > /dev/null 2>&1; then
-      echo "[entrypoint] Browser sandbox image not found, building..."
-      if [ -f /app/scripts/sandbox-browser-setup.sh ]; then
-        /app/scripts/sandbox-browser-setup.sh
-        echo "[entrypoint] Browser sandbox image built successfully"
+      # Build common sandbox image if missing (includes Node.js, git, common tools)
+      if ! docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Common sandbox image not found, building..."
+        if [ -f /app/scripts/sandbox-common-setup.sh ]; then
+          /app/scripts/sandbox-common-setup.sh
+          echo "[entrypoint] Common sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: sandbox-common-setup.sh not found"
+        fi
       else
-        echo "[entrypoint] WARNING: sandbox-browser-setup.sh not found"
+        echo "[entrypoint] Common sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Browser sandbox image already exists"
-    fi
 
-    # Build claude sandbox image if missing (layered on common with Claude Code CLI)
-    # This is a separate image so common stays clean — only claude sandbox has the CLI
-    if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
-      if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
-        echo "[entrypoint] Claude sandbox image not found, building..."
-        printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
-        echo "[entrypoint] Claude sandbox image built successfully"
+      # Build browser sandbox image if missing (includes Chromium, noVNC)
+      if ! docker image inspect openclaw-sandbox-browser:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Browser sandbox image not found, building..."
+        if [ -f /app/scripts/sandbox-browser-setup.sh ]; then
+          /app/scripts/sandbox-browser-setup.sh
+          echo "[entrypoint] Browser sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: sandbox-browser-setup.sh not found"
+        fi
+      else
+        echo "[entrypoint] Browser sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Claude sandbox image already exists"
-    fi
+
+      # Build claude sandbox image if missing (layered on common with Claude Code CLI)
+      # This is a separate image so common stays clean — only claude sandbox has the CLI
+      if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
+        if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
+          echo "[entrypoint] Claude sandbox image not found, building..."
+          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
+          echo "[entrypoint] Claude sandbox image built successfully"
+        fi
+      else
+        echo "[entrypoint] Claude sandbox image already exists"
+      fi
+    )
   fi
 else
   echo "[entrypoint] Docker not installed, skipping sandbox bootstrap"

@@ -10,8 +10,7 @@ Secure OpenClaw behind Cloudflare Tunnel with zero exposed ports.
 This playbook configures:
 
 - cloudflared installation on VPS-1
-- Tunnel for OpenClaw gateway
-- DNS routing through Cloudflare
+- Token-based tunnel (remotely managed via Cloudflare Dashboard)
 - Port 443 removal from firewall
 - Optional: Cloudflare Access authentication
 
@@ -30,6 +29,7 @@ This playbook configures:
 - Cloudflare account with your domain added
 - Domain DNS managed by Cloudflare
 - SSH access as `adminclaw` on port 222
+- `CF_TUNNEL_TOKEN` set in `openclaw-config.env` (see "Create Tunnel in Dashboard" below)
 
 ## Variables
 
@@ -37,6 +37,7 @@ From `../openclaw-config.env`:
 
 - `OPENCLAW_DOMAIN` - Domain for OpenClaw (e.g., openclaw.example.com)
 - `OPENCLAW_DOMAIN_PATH` - URL subpath for OpenClaw (from openclaw-config.env)
+- `CF_TUNNEL_TOKEN` - Tunnel token from Cloudflare Dashboard
 
 ## Architecture
 
@@ -68,6 +69,34 @@ From `../openclaw-config.env`:
 
 ---
 
+## Create Tunnel in Cloudflare Dashboard
+
+Before running the VPS steps, create the tunnel in the Cloudflare Dashboard:
+
+1. Go to **Cloudflare Dashboard** -> **Zero Trust** -> **Networks** -> **Tunnels**
+2. Click **Create a tunnel** -> Choose **Cloudflared**
+3. Name it (e.g., `openclaw`)
+4. Copy the **tunnel token** (long base64 string starting with `ey...`)
+5. Configure the public hostname:
+   - **Subdomain:** `openclaw` (or your choice)
+   - **Domain:** `example.com` (select your domain)
+   - **Service:** `http://localhost:18789`
+6. Save the tunnel
+
+Add the token to `openclaw-config.env`:
+
+```bash
+CF_TUNNEL_TOKEN=eyJhIjoiYWJj...  # Paste the full token here
+```
+
+> **Why token-based?** The older `cloudflared tunnel login` + `tunnel create` flow requires
+> browser authentication on the VPS (a headless server), which means manually downloading
+> `cert.pem` and uploading it. Token-based tunnels are created entirely in the Dashboard —
+> no browser needed on the server. All tunnel config (hostname routing, origin settings)
+> lives in the Dashboard, not in local config files.
+
+---
+
 ## VPS-1 Setup (OpenClaw)
 
 ### Step 1: Install cloudflared
@@ -84,79 +113,13 @@ rm cloudflared.deb
 cloudflared --version
 ```
 
-### Step 2: Authenticate with Cloudflare
+### Step 2: Install as Service with Token
+
+The tunnel token contains all connection info — no cert.pem, credentials.json, or config.yml needed.
 
 ```bash
-# This opens a browser URL - copy/paste to authenticate
-cloudflared tunnel login
-```
-
-This creates `~/.cloudflared/cert.pem` with your Cloudflare credentials.
-
-### Step 3: Create the Tunnel
-
-```bash
-# Create a tunnel named "openclaw"
-cloudflared tunnel create openclaw
-
-# Note the tunnel ID (UUID) from the output
-# Example: Created tunnel openclaw with id a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-Save the tunnel ID for later steps.
-
-### Step 4: Configure the Tunnel
-
-```bash
-sudo mkdir -p /etc/cloudflared
-
-# Replace <OPENCLAW_DOMAIN> with your domain
-sudo tee /etc/cloudflared/config.yml << 'EOF'
-tunnel: openclaw
-credentials-file: /etc/cloudflared/credentials.json
-
-ingress:
-  # OpenClaw Gateway (web UI and API)
-  - hostname: <OPENCLAW_DOMAIN>
-    service: http://localhost:18789
-    originRequest:
-      noTLSVerify: true
-
-  # Catch-all rule (required)
-  - service: http_status:404
-EOF
-
-# Copy credentials to system location
-sudo cp ~/.cloudflared/<TUNNEL_ID>.json /etc/cloudflared/credentials.json
-sudo chmod 600 /etc/cloudflared/credentials.json
-```
-
-### Step 5: Configure DNS
-
-```bash
-# Route your domain through the tunnel
-cloudflared tunnel route dns openclaw <OPENCLAW_DOMAIN>
-```
-
-**Important:** This creates a CNAME record pointing to the tunnel. In Cloudflare Dashboard, you should see:
-
-- `<OPENCLAW_DOMAIN>` -> `CNAME` -> `<tunnel-id>.cfargotunnel.com` (Proxied)
-
-### Step 6: Test the Tunnel
-
-```bash
-# Run tunnel in foreground to test
-cloudflared tunnel run openclaw
-
-# In another terminal, verify it works
-curl -s https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ | head -5
-```
-
-### Step 7: Install as System Service
-
-```bash
-# Install cloudflared as a systemd service
-sudo cloudflared service install
+# Install cloudflared as a systemd service using the tunnel token
+sudo cloudflared service install ${CF_TUNNEL_TOKEN}
 
 # Enable and start the service
 sudo systemctl enable cloudflared
@@ -166,7 +129,7 @@ sudo systemctl start cloudflared
 sudo systemctl status cloudflared
 ```
 
-### Step 8: Remove Port 443 from Firewall
+### Step 3: Remove Port 443 from Firewall
 
 Once the tunnel is working, close port 443:
 
@@ -216,9 +179,6 @@ Add authentication via Cloudflare Access for additional security.
 # Check tunnel service
 sudo systemctl status cloudflared
 
-# Check tunnel connectivity
-cloudflared tunnel info openclaw
-
 # Verify port 443 is closed
 sudo ufw status | grep 443 || echo "Port 443 not in UFW (correct)"
 
@@ -239,11 +199,8 @@ curl -sk --connect-timeout 5 https://<VPS1_IP>/ || echo "Direct access blocked (
 # Check logs
 sudo journalctl -u cloudflared -f
 
-# Verify config
-cloudflared tunnel ingress validate
-
-# Test tunnel connection
-cloudflared tunnel info openclaw
+# Verify the token is valid (look for auth errors in logs)
+sudo journalctl -u cloudflared --no-pager | tail -30
 ```
 
 ### DNS Not Resolving
@@ -253,6 +210,7 @@ cloudflared tunnel info openclaw
 dig <OPENCLAW_DOMAIN>
 
 # Should show CNAME to <tunnel-id>.cfargotunnel.com
+# DNS is managed in the Dashboard — check the public hostname config
 ```
 
 ### 502 Bad Gateway
@@ -265,6 +223,15 @@ sudo -u openclaw docker compose ps
 
 # Check it's listening on localhost
 curl -s http://localhost:18789/
+```
+
+### Token Issues
+
+```bash
+# If the token was set incorrectly, reinstall the service:
+sudo cloudflared service uninstall
+sudo cloudflared service install ${CF_TUNNEL_TOKEN}
+sudo systemctl start cloudflared
 ```
 
 ---
@@ -283,22 +250,28 @@ sudo systemctl restart cloudflared
 
 Cloudflare Dashboard -> Zero Trust -> Networks -> Tunnels -> (your tunnel) -> Metrics
 
-### Rotating Tunnel Credentials
+### Changing Tunnel Configuration
 
-```bash
-# Delete and recreate the tunnel
-cloudflared tunnel delete openclaw
-cloudflared tunnel create openclaw
+All routing config lives in the Cloudflare Dashboard. To change hostnames, origins, or add new routes:
 
-# Update credentials file
-sudo cp ~/.cloudflared/<NEW_TUNNEL_ID>.json /etc/cloudflared/credentials.json
+1. Go to **Cloudflare Dashboard** -> **Zero Trust** -> **Networks** -> **Tunnels**
+2. Click your tunnel -> **Configure**
+3. Edit the public hostname settings
+4. Changes take effect within seconds — no service restart needed
 
-# Update config.yml with new tunnel name/ID if needed
-sudo systemctl restart cloudflared
+### Rotating Tunnel Token
 
-# Re-add DNS route
-cloudflared tunnel route dns openclaw <OPENCLAW_DOMAIN>
-```
+If the token is compromised:
+
+1. Go to the tunnel in Cloudflare Dashboard
+2. Regenerate the token
+3. On VPS:
+   ```bash
+   sudo cloudflared service uninstall
+   sudo cloudflared service install <NEW_TOKEN>
+   sudo systemctl start cloudflared
+   ```
+4. Update `CF_TUNNEL_TOKEN` in `openclaw-config.env`
 
 ---
 
@@ -318,12 +291,4 @@ After completing setup, verify:
 
 ## Related Files
 
-- `/etc/cloudflared/config.yml` - Tunnel configuration
-- `/etc/cloudflared/credentials.json` - Tunnel credentials
-- `~/.cloudflared/cert.pem` - Cloudflare account certificate
-
-## Dashboard Management
-
-Tunnels can be migrated to dashboard management for easier configuration:
-
-**Cloudflare Dashboard** -> **Zero Trust** -> **Networks** -> **Tunnels**
+- `/etc/systemd/system/cloudflared.service` - Systemd unit (created by `cloudflared service install`)

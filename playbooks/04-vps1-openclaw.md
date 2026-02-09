@@ -276,7 +276,7 @@ services:
     restart: always
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./vector.toml:/etc/vector/vector.toml:ro
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
       - ./data/vector:/var/lib/vector
     environment:
       - LOG_WORKER_URL=${LOG_WORKER_URL}
@@ -302,37 +302,41 @@ EOF
 
 Ships Docker container logs to the Cloudflare Log Receiver Worker.
 
+Vector Alpine image defaults to `vector.yaml`, so we use YAML format to avoid needing a `command` override in compose.
+
 ```bash
 #!/bin/bash
-sudo -u openclaw tee /home/openclaw/openclaw/vector.toml << 'EOF'
+sudo -u openclaw tee /home/openclaw/openclaw/vector.yaml << 'EOF'
 # Vector configuration — ships Docker container logs to Cloudflare Log Receiver Worker
 # https://vector.dev/docs/
 
-# Collect logs from all Docker containers
-[sources.docker_logs]
-type = "docker_logs"
+sources:
+  docker_logs:
+    type: docker_logs
 
-# Enrich with VPS identity (host field is already set by docker_logs source)
-[transforms.enrich]
-type = "remap"
-inputs = ["docker_logs"]
-source = '.vps_ip = "${VPS1_IP}"'
+transforms:
+  enrich:
+    type: remap
+    inputs:
+      - docker_logs
+    source: '.vps_ip = "${VPS1_IP}"'
 
-# Ship to Cloudflare Log Receiver Worker
-[sinks.cloudflare_worker]
-type = "http"
-inputs = ["enrich"]
-uri = "${LOG_WORKER_URL}"
-encoding.codec = "json"
-auth.strategy = "bearer"
-auth.token = "${LOG_WORKER_TOKEN}"
-
-[sinks.cloudflare_worker.batch]
-max_bytes = 262144    # 256KB per batch
-timeout_secs = 60     # Ship at least every 60s
-
-[sinks.cloudflare_worker.request]
-retry_max_duration_secs = 300   # Keep retrying for 5 min on failures
+sinks:
+  cloudflare_worker:
+    type: http
+    inputs:
+      - enrich
+    uri: "${LOG_WORKER_URL}"
+    encoding:
+      codec: json
+    auth:
+      strategy: bearer
+      token: "${LOG_WORKER_TOKEN}"
+    batch:
+      max_bytes: 262144    # 256KB per batch
+      timeout_secs: 60     # Ship at least every 60s
+    request:
+      retry_max_duration_secs: 300   # Keep retrying for 5 min on failures
 EOF
 
 # Create data directory for Vector state
@@ -611,56 +615,63 @@ if command -v dockerd > /dev/null 2>&1; then
   if docker info > /dev/null 2>&1; then
     echo "[entrypoint] Nested Docker daemon ready (took ${elapsed:-0}s)"
 
-    # Build default sandbox image if missing
-    if ! docker image inspect openclaw-sandbox > /dev/null 2>&1; then
-      echo "[entrypoint] Sandbox image not found, building..."
-      if [ -f /app/sandbox/Dockerfile ]; then
-        docker build -t openclaw-sandbox /app/sandbox/
-        echo "[entrypoint] Sandbox image built successfully"
-      else
-        echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
-      fi
-    else
-      echo "[entrypoint] Sandbox image already exists"
-    fi
+    # Sandbox builds are non-fatal — gateway starts even if builds fail.
+    # Failures are logged but don't prevent the gateway from running.
+    # Rebuild manually later: sudo docker exec openclaw-gateway /app/scripts/sandbox-common-setup.sh
+    (
+      set +e
 
-    # Build common sandbox image if missing (includes Node.js, git, common tools)
-    if ! docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
-      echo "[entrypoint] Common sandbox image not found, building..."
-      if [ -f /app/scripts/sandbox-common-setup.sh ]; then
-        /app/scripts/sandbox-common-setup.sh
-        echo "[entrypoint] Common sandbox image built successfully"
+      # Build default sandbox image if missing
+      if ! docker image inspect openclaw-sandbox > /dev/null 2>&1; then
+        echo "[entrypoint] Sandbox image not found, building..."
+        if [ -f /app/sandbox/Dockerfile ]; then
+          docker build -t openclaw-sandbox /app/sandbox/
+          echo "[entrypoint] Sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
+        fi
       else
-        echo "[entrypoint] WARNING: sandbox-common-setup.sh not found"
+        echo "[entrypoint] Sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Common sandbox image already exists"
-    fi
 
-    # Build browser sandbox image if missing (includes Chromium, noVNC)
-    if ! docker image inspect openclaw-sandbox-browser:bookworm-slim > /dev/null 2>&1; then
-      echo "[entrypoint] Browser sandbox image not found, building..."
-      if [ -f /app/scripts/sandbox-browser-setup.sh ]; then
-        /app/scripts/sandbox-browser-setup.sh
-        echo "[entrypoint] Browser sandbox image built successfully"
+      # Build common sandbox image if missing (includes Node.js, git, common tools)
+      if ! docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Common sandbox image not found, building..."
+        if [ -f /app/scripts/sandbox-common-setup.sh ]; then
+          /app/scripts/sandbox-common-setup.sh
+          echo "[entrypoint] Common sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: sandbox-common-setup.sh not found"
+        fi
       else
-        echo "[entrypoint] WARNING: sandbox-browser-setup.sh not found"
+        echo "[entrypoint] Common sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Browser sandbox image already exists"
-    fi
 
-    # Build claude sandbox image if missing (layered on common with Claude Code CLI)
-    # This is a separate image so common stays clean — only claude sandbox has the CLI
-    if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
-      if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
-        echo "[entrypoint] Claude sandbox image not found, building..."
-        printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
-        echo "[entrypoint] Claude sandbox image built successfully"
+      # Build browser sandbox image if missing (includes Chromium, noVNC)
+      if ! docker image inspect openclaw-sandbox-browser:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Browser sandbox image not found, building..."
+        if [ -f /app/scripts/sandbox-browser-setup.sh ]; then
+          /app/scripts/sandbox-browser-setup.sh
+          echo "[entrypoint] Browser sandbox image built successfully"
+        else
+          echo "[entrypoint] WARNING: sandbox-browser-setup.sh not found"
+        fi
+      else
+        echo "[entrypoint] Browser sandbox image already exists"
       fi
-    else
-      echo "[entrypoint] Claude sandbox image already exists"
-    fi
+
+      # Build claude sandbox image if missing (layered on common with Claude Code CLI)
+      # This is a separate image so common stays clean — only claude sandbox has the CLI
+      if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
+        if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
+          echo "[entrypoint] Claude sandbox image not found, building..."
+          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
+          echo "[entrypoint] Claude sandbox image built successfully"
+        fi
+      else
+        echo "[entrypoint] Claude sandbox image already exists"
+      fi
+    )
   fi
 else
   echo "[entrypoint] Docker not installed, skipping sandbox bootstrap"
@@ -829,6 +840,22 @@ df -h
 ```bash
 # Fix ownership - container runs as uid 1000
 sudo chown -R 1000:1000 /home/openclaw/.openclaw
+```
+
+### Vector Not Shipping Logs
+
+```bash
+# Check Vector logs for config errors
+sudo docker logs vector 2>&1 | head -20
+
+# Verify vector.yaml is mounted correctly
+sudo docker exec vector ls -la /etc/vector/
+
+# Test the Worker endpoint is reachable from within the container
+sudo docker exec vector wget -q -O- <LOG_WORKER_URL_WITHOUT_PATH>/health
+
+# Restart Vector after fixing
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
 ```
 
 ### Network Issues

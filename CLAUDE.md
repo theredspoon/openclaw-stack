@@ -67,6 +67,9 @@ AI_GATEWAY_AUTH_TOKEN=<worker-auth-token>
 LOG_WORKER_URL=https://log-receiver.<account>.workers.dev/logs
 LOG_WORKER_TOKEN=<generated-token>
 
+# Cloudflare Tunnel (token from CF Dashboard)
+CF_TUNNEL_TOKEN=
+
 # URL subpaths (no trailing slash; empty string "" to serve at root)
 OPENCLAW_DOMAIN_PATH=/_openclaw
 
@@ -120,6 +123,20 @@ Required fields to check in openclaw-config.env:
 - `LOG_WORKER_TOKEN` - Must be set (Log Receiver auth token)
 
 If any required field is missing, report all missing fields and ask user to update the file.
+
+**Then check `CF_TUNNEL_TOKEN`:** If empty or missing, prompt the user with instructions to create a tunnel in the Cloudflare Dashboard:
+
+> "`CF_TUNNEL_TOKEN` is not set. You need to create a tunnel in the Cloudflare Dashboard:
+>
+> 1. Go to **CF Dashboard** -> **Zero Trust** -> **Networks** -> **Tunnels**
+> 2. Click **Create a tunnel** -> Choose **Cloudflared**
+> 3. Name it (e.g., `openclaw`)
+> 4. Copy the **tunnel token** (long base64 string starting with `ey...`)
+> 5. Configure the public hostname:
+>    - Subdomain + Domain: `<OPENCLAW_DOMAIN>`
+>    - Service: `http://localhost:18789`
+> 6. Save the tunnel
+> 7. Paste the token into `openclaw-config.env` as `CF_TUNNEL_TOKEN=ey...`"
 
 **If all required fields are present:** Check for placeholder values in `AI_GATEWAY_WORKER_URL`, `AI_GATEWAY_AUTH_TOKEN`, `LOG_WORKER_URL`, and `LOG_WORKER_TOKEN`. Scan for angle-bracket placeholders (e.g., `<account>`, `<worker-auth-token>`, `<generated-token>`).
 
