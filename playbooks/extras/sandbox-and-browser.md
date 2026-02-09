@@ -123,6 +123,19 @@ if [ -d "$claude_dir" ]; then
   fi
 fi
 
+# ── 1d. Fix .openclaw dir ownership (Sysbox uid remapping) ──────────
+# Gateway config/state dir: bind mount arrives with host uid which Sysbox remaps.
+# Some files (identity/, memory/) may be created by root before gosu drops privs.
+# Chown to node (1000) so gateway process can read/write after privilege drop.
+openclaw_dir="/home/node/.openclaw"
+if [ -d "$openclaw_dir" ]; then
+  root_files=$(find "$openclaw_dir" -not -user 1000 2>/dev/null | head -1)
+  if [ -n "$root_files" ]; then
+    chown -R 1000:1000 "$openclaw_dir"
+    echo "[entrypoint] Fixed .openclaw ownership to node (1000)"
+  fi
+fi
+
 # ── 2. Start nested Docker daemon (Sysbox provides isolation) ───────
 # Sysbox auto-provisions /var/lib/docker and /var/lib/containerd as
 # writable mounts. We just need to start dockerd.

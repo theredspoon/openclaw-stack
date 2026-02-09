@@ -321,13 +321,14 @@ Runs as root inside container (Sysbox isolation). Performs pre-start tasks in or
 1. **Lock file cleanup** — Removes stale `gateway.*.lock` files from unclean shutdowns
 2. **Config permissions** — Enforces `chmod 600` on `openclaw.json` (gateway may rewrite with looser perms)
 3. **Sandbox credentials ownership** — `chown -R 1000:1000 /home/node/.claude-sandbox` (Sysbox uid remapping: host uid 1000 appears as uid 1002 inside container)
-4. **Start nested Docker daemon** — `dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 --log-level=warn`, waits up to 30 seconds for `docker info` to succeed
-5. **Build sandbox images** (only if dockerd is ready):
+4. **Config/state dir ownership** — `chown -R 1000:1000 /home/node/.openclaw` if any files are not owned by node (fixes identity/, memory/ dirs created by root before gosu drops privileges)
+5. **Start nested Docker daemon** — `dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 --log-level=warn`, waits up to 30 seconds for `docker info` to succeed
+6. **Build sandbox images** (only if dockerd is ready):
    - `openclaw-sandbox` — Base sandbox (from `/app/sandbox/Dockerfile`)
    - `openclaw-sandbox-common:bookworm-slim` — Node.js, git, dev tools
    - `openclaw-sandbox-browser:bookworm-slim` — Chromium + noVNC
    - `openclaw-sandbox-claude:bookworm-slim` — Common + ffmpeg + imagemagick + Claude Code CLI (layered image)
-6. **Privilege drop** — `exec gosu node "$@"` drops from root to node (uid 1000). `gosu` doesn't spawn a subshell (preserves PID 1 signal handling). Full gateway command passed as arguments from compose override.
+7. **Privilege drop** — `exec gosu node "$@"` drops from root to node (uid 1000). `gosu` doesn't spawn a subshell (preserves PID 1 signal handling). Full gateway command passed as arguments from compose override.
 
 ### 3.6 Build Process (`scripts/build-openclaw.sh`)
 
@@ -642,8 +643,8 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
 | `DISCORD_BOT_TOKEN` | Optional: Discord integration |
 | `OPENCLAW_CONFIG_DIR` | `/home/openclaw/.openclaw` |
 | `OPENCLAW_WORKSPACE_DIR` | `/home/openclaw/.openclaw/workspace` |
-| `OPENCLAW_GATEWAY_PORT` | `127.0.0.1:18789` — Localhost only; cloudflared connects from host |
-| `OPENCLAW_BRIDGE_PORT` | `127.0.0.1:18790` — Localhost only |
+| `OPENCLAW_GATEWAY_PORT` | `18789` — Port number only (DO NOT use IP:port format; CLI misparses it) |
+| `OPENCLAW_BRIDGE_PORT` | `18790` — Port number only |
 | `OPENCLAW_GATEWAY_BIND` | `lan` |
 | `LOG_WORKER_URL` | Full URL to Log Receiver Worker (must include `/logs` path) |
 | `LOG_WORKER_TOKEN` | Bearer token for Log Receiver Worker authentication |
@@ -778,6 +779,7 @@ curl https://<worker-name>.<account>.workers.dev/health
 - **Patches must go before `USER node`** in Dockerfile — npm/apt can't write to system dirs after user change
 - **Failed builds leave patches in place** — `git checkout` cleanup only runs on success. Manually restore before retry: `git checkout -- Dockerfile`
 - **`.env` values with spaces must be quoted** — `VAR=a b c` breaks `source .env`
+- **`OPENCLAW_GATEWAY_PORT` must be port only, not IP:port** — `127.0.0.1:18789` causes CLI to misparse `127` as the port. Use just `18789`. The `.env` is baked into the Docker image at `/app/.env` and read by the gateway at runtime
 - **`sed /i` with backslash continuations breaks Dockerfiles** — Use single-line RUN commands
 - **Only 1 patch remains** — Docker+gosu (#1). Claude Code CLI and OTEL patches no longer needed. Agent tools (ffmpeg, imagemagick, Claude Code CLI) are in the claude sandbox image, not the gateway.
 

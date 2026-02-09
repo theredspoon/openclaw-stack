@@ -151,10 +151,10 @@ VPS1_IP=${VPS1_IP}
 # Docker compose variables (required by repo's docker-compose.yml)
 OPENCLAW_CONFIG_DIR=/home/openclaw/.openclaw
 OPENCLAW_WORKSPACE_DIR=/home/openclaw/.openclaw/workspace
-# Bind to localhost — cloudflared runs on the host and connects to localhost:18789
-# UFW blocks external access anyway, but localhost binding adds defense-in-depth
-OPENCLAW_GATEWAY_PORT=127.0.0.1:18789
-OPENCLAW_BRIDGE_PORT=127.0.0.1:18790
+# Port numbers only — DO NOT use IP:port format (e.g. 127.0.0.1:18789)
+# OpenClaw CLI reads this env var and misparses IP:port as port number
+OPENCLAW_GATEWAY_PORT=18789
+OPENCLAW_BRIDGE_PORT=18790
 OPENCLAW_GATEWAY_BIND=lan
 EOF
 
@@ -562,6 +562,19 @@ if [ -d "$claude_dir" ]; then
   if [ "$dir_owner" != "1000" ]; then
     chown -R 1000:1000 "$claude_dir"
     echo "[entrypoint] Fixed .claude-sandbox ownership: ${dir_owner} -> 1000"
+  fi
+fi
+
+# ── 1d. Fix .openclaw dir ownership (Sysbox uid remapping) ──────────
+# Gateway config/state dir: bind mount arrives with host uid which Sysbox remaps.
+# Some files (identity/, memory/) may be created by root before gosu drops privs.
+# Chown to node (1000) so gateway process can read/write after privilege drop.
+openclaw_dir="/home/node/.openclaw"
+if [ -d "$openclaw_dir" ]; then
+  root_files=$(find "$openclaw_dir" -not -user 1000 2>/dev/null | head -1)
+  if [ -n "$root_files" ]; then
+    chown -R 1000:1000 "$openclaw_dir"
+    echo "[entrypoint] Fixed .openclaw ownership to node (1000)"
   fi
 fi
 
