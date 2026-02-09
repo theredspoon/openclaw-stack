@@ -625,8 +625,8 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
 4. Admin approves via CLI:
 
    ```bash
-   sudo docker exec openclaw-gateway node dist/index.js devices list
-   sudo docker exec openclaw-gateway node dist/index.js devices approve <requestId>
+   sudo docker exec --user node openclaw-gateway node dist/index.js devices list
+   sudo docker exec --user node openclaw-gateway node dist/index.js devices approve <requestId>
    ```
 
 5. Browser auto-retries -> connects successfully
@@ -780,7 +780,7 @@ curl https://<worker-name>.<account>.workers.dev/health
 - **`read_only: false` is required** for gateway container — Sysbox auto-mounts inherit this flag, and dockerd needs writable `/var/lib/docker`
 - **`user: "0:0"` is required** — Sysbox maps uid 0 to unprivileged host uid. Entrypoint drops to node via gosu.
 - **Container name is `openclaw-gateway`** (explicit `container_name`), not `openclaw-openclaw-gateway-1`
-- **No `openclaw` binary on PATH** — Use `node dist/index.js` instead. Full: `sudo docker exec openclaw-gateway node dist/index.js <subcommand>`
+- **No `openclaw` binary on PATH** — Use `node dist/index.js` instead. Full: `sudo docker exec --user node openclaw-gateway node dist/index.js <subcommand>` — always use `--user node` to match the gateway's runtime user (gosu drops from root to node).
 
 ### Build & Patching
 

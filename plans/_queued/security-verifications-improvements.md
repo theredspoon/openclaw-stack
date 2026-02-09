@@ -36,7 +36,7 @@ This catches any unexpected services that might have been installed or misconfig
 Run OpenClaw's built-in security scanner. Does NOT need device pairing — it performs local HTTP probes inside the container.
 
 ```bash
-sudo docker exec openclaw-gateway node dist/index.js security audit --deep
+sudo docker exec --user node openclaw-gateway node dist/index.js security audit --deep
 ```
 
 Expected: 0 critical, 0 warnings. (1 info is normal.)
@@ -53,4 +53,4 @@ After implementing, deploy to VPS and run the checks:
 
 1. `nc -zv -w 5 15.204.238.118 18789` from local — should timeout
 2. `ssh ... "sudo ss -tlnp"` — only 222 on 0.0.0.0
-3. `ssh ... "sudo docker exec openclaw-gateway node dist/index.js security audit --deep"` — 0 critical, 0 warn
+3. `ssh ... "sudo docker exec --user node openclaw-gateway node dist/index.js security audit --deep"` — 0 critical, 0 warn

@@ -143,5 +143,5 @@ ssh ... "sudo ss -tlnp | grep 18789"
 1. **`ss -tlnp | grep 18789`** shows `127.0.0.1:18789` (not `0.0.0.0:18789`)
 2. **`ss -tlnp | grep 18790`** shows `127.0.0.1:18790` (bridge port too)
 3. **Cloudflare Tunnel** still connects (cloudflared → localhost:18789)
-4. **OpenClaw CLI** still works: `sudo docker exec openclaw-gateway node dist/index.js security audit --deep`
+4. **OpenClaw CLI** still works: `sudo docker exec --user node openclaw-gateway node dist/index.js security audit --deep`
 5. **External port scan** from another machine: `nc -zv <VPS_IP> 18789` should fail/timeout

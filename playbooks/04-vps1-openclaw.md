@@ -349,7 +349,7 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 # IMPORTANT: OpenClaw rejects unknown config keys - only use documented keys
 
 # Validate commands.restart is accepted before applying:
-# sudo docker exec openclaw-gateway node dist/index.js gateway --help 2>&1 | grep -i restart
+# sudo docker exec --user node openclaw-gateway node dist/index.js gateway --help 2>&1 | grep -i restart
 # If OpenClaw rejects the key, remove the "commands" block below.
 
 # trustedProxies: cloudflared connects via Docker bridge (172.30.0.1). Without this,
@@ -362,8 +362,8 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 #
 #   1. User opens https://<DOMAIN>/chat?token=<TOKEN> → gets "pairing required"
 #   2. Admin approves via SSH:
-#        sudo docker exec openclaw-gateway node dist/index.js devices list
-#        sudo docker exec openclaw-gateway node dist/index.js devices approve <requestId>
+#        sudo docker exec --user node openclaw-gateway node dist/index.js devices list
+#        sudo docker exec --user node openclaw-gateway node dist/index.js devices approve <requestId>
 #   3. User's browser auto-retries → connected
 #
 #   Once one device is paired, subsequent devices can be approved from the Control UI.
@@ -883,7 +883,7 @@ sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
 # 4. Verify new version
-sudo docker exec openclaw-gateway node dist/index.js --version
+sudo docker exec --user node openclaw-gateway node dist/index.js --version
 ```
 
 > **Note:** Step 3 automatically stops the old container and starts a new one from the rebuilt image. Expect a brief gateway downtime during the restart.

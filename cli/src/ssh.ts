@@ -128,14 +128,14 @@ export async function dockerComposeStream(
  * Execute a command inside the openclaw-gateway container on VPS-1.
  */
 export async function gatewayExec(cfg: Config, cmd: string): Promise<string> {
-  return ssh(cfg, 'vps1', `sudo docker exec openclaw-gateway ${cmd}`);
+  return ssh(cfg, 'vps1', `sudo docker exec --user node openclaw-gateway ${cmd}`);
 }
 
 /**
  * Safe version of gatewayExec (never throws).
  */
 export async function gatewayExecSafe(cfg: Config, cmd: string): Promise<SshResult> {
-  return sshSafe(cfg, 'vps1', `sudo docker exec openclaw-gateway ${cmd}`);
+  return sshSafe(cfg, 'vps1', `sudo docker exec --user node openclaw-gateway ${cmd}`);
 }
 
 // The openclaw CLI in the container is invoked via node, not a bin symlink
@@ -156,5 +156,5 @@ export async function openclawCmdSafe(cfg: Config, args: string): Promise<SshRes
 }
 
 /** The command prefix for openclaw inside the gateway container */
-export const OPENCLAW_EXEC = `sudo docker exec openclaw-gateway ${OPENCLAW_BIN}`;
-export const OPENCLAW_EXEC_IT = `sudo docker exec -it openclaw-gateway ${OPENCLAW_BIN}`;
+export const OPENCLAW_EXEC = `sudo docker exec --user node openclaw-gateway ${OPENCLAW_BIN}`;
+export const OPENCLAW_EXEC_IT = `sudo docker exec --user node -it openclaw-gateway ${OPENCLAW_BIN}`;

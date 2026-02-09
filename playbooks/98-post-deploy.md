@@ -111,11 +111,11 @@ Once at least one device is paired, the CLI works normally:
 ```bash
 # List pending/approved devices
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec openclaw-gateway node dist/index.js devices list"
+  "sudo docker exec --user node openclaw-gateway node dist/index.js devices list"
 
 # Approve a pending device
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec openclaw-gateway node dist/index.js devices approve <requestId>"
+  "sudo docker exec --user node openclaw-gateway node dist/index.js devices approve <requestId>"
 ```
 
 ### If no pending requests appear
@@ -141,7 +141,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 # Re-list devices to confirm approval went through
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec openclaw-gateway node dist/index.js devices list"
+  "sudo docker exec --user node openclaw-gateway node dist/index.js devices list"
 ```
 
 If the device shows as approved but the browser still can't connect, ask the user to hard-refresh the page (Ctrl+Shift+R / Cmd+Shift+R) and try again.
@@ -161,12 +161,12 @@ Present this reference block for the user to save:
 ║  ─────────────────────                                       ║
 ║  # List pending/approved devices:                            ║
 ║  ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \ ║
-║    "sudo docker exec openclaw-gateway \                      ║
+║    "sudo docker exec --user node openclaw-gateway \           ║
 ║     node dist/index.js devices list"                         ║
 ║                                                              ║
 ║  # Approve a pending device:                                 ║
 ║  ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \ ║
-║    "sudo docker exec openclaw-gateway \                      ║
+║    "sudo docker exec --user node openclaw-gateway \           ║
 ║     node dist/index.js devices approve <requestId>"          ║
 ║                                                              ║
 ║  APPROVE FROM CONTROL UI                                     ║
