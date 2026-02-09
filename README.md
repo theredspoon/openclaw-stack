@@ -2,34 +2,57 @@
 
 This repository contains everything needed to deploy OpenClaw on a single VPS with Cloudflare Workers for observability.
 
-**This project is an experiment** for using `claude code` for devops. A reasonable effort was made to ensure OpenClaw
-is running as securely as possible. However, there's no guarantee claude will always follow the playbooks as designed.
-
-Networking uses Cloudflare Tunnel for zero exposed ports and hidden origin IP.
-
-Cloudflare Tunnel requires manual device pairing after initial setup. Claude should run the post deploy playbook
-and guide you through the process. It requires visiting the openclaw UI with a token, then approving the request
-via the openclaw CLI running on the VPS.
+**This project is an experiment** for using `claude code` for devops. A significant effort was made to ensure OpenClaw
+is running as securely as possible without limiting capabilities. However, there's no guarantee claude will always follow
+the playbooks as designed.
 
 ---
+
+## Key Features
+
+- **Fully automated deployment** — Claude Code runs modular playbooks to set up the entire VPS from scratch
+- **Single VPS** — gateway, sandboxes, and log shipping all run on one server
+- **Cloudflare Tunnel** — zero exposed ports, hidden origin IP, no SSL certificates to manage
+- **AI Gateway Worker** — all LLM requests proxy through a worker for observability & API key management; real API keys never touch the VPS
+- **Log shipping** — Vector ships container logs to a Cloudflare Log Receiver Worker
+- **Host monitoring** — cron-based alerts for disk, memory, and CPU via Telegram
+- **Automated backups** — scheduled backup scripts with cron
+- **Ongoing management** — use Claude Code for day-to-day VPS operations after deploy
+
+### Security
+
+- **Sysbox sandboxing** — agent code executes in isolated Docker-in-Docker containers
+- **API key isolation** — LLM provider keys stored as Cloudflare Worker secrets, not on the VPS
+- **Cloudflare Access** — optional authentication layer in front of the tunnel
+- **No exposed ports** — Cloudflare Tunnel uses outbound-only connections; SSH is the only public port
+- **SSH hardened** — non-standard port (222), key-only auth, restricted ciphers, fail2ban
+- **Two-user model** — `adminclaw` (SSH/sudo) and `openclaw` (app runtime, no SSH, no sudo)
+- **UFW firewall** — only SSH allowed; all other inbound ports closed
+- **Docker localhost binding** — daemon configured to bind container ports to 127.0.0.1 only, preventing Docker's iptables rules from bypassing UFW
+- **Kernel hardening** — sysctl tuning and automatic security updates
+- **Security audit** — built-in `openclaw security audit` checks for misconfigurations; claude runs comprehensive verifications & security checks during deploy
 
 ## Quick Start
 
 1. Clone this repo
-2. Create a new VPS - see **[ovh_setup_guide.md](./ovh_setup_guide.md)** for recommendations
-3. Set values in openclaw-config.env
-4. Run claude in this project dir and just say `start`
+2. Create a new VPS - see **[ovh_setup_guide.md](ovh_setup_guide.md)** for recommendations
+3. Create a [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md) in the Cloudflare Dashboard - copy the tunnel token
+4. Set **VPS_IP** and **CF_TUNNEL_TOKEN** in `openclaw-config.env`
+5. Run claude in this repo dir - just say `start`
 
    ```bash
    claude
    # Prompt: 'start'
    ```
 
-   Claude will deploy and test the VPS (10+ minutes)
-5. After deploy, claude will guide you through device pairing
+   Claude will deploy and test the VPS (20+ minutes)
+
+   Then claude will guide you through openclaw device pairing.
 6. Start using OpenClaw: `https://openclaw.YOURDOMAIN.com/chat` or via messaging channel (Telegram, etc.)
 
-Claude will interview you for any missing config values and then start the deploy process.
+Claude will interview you for any missing config values during the deploy process.
+It will also auto fix any issues that it encounters.
+
 After deployment, claude can be used to make any changes or manage your VPS with the same prompt.
 
 ---
@@ -44,9 +67,8 @@ After deployment, claude can be used to make any changes or manage your VPS with
     - Minimum: 5.12+ kernel
     - Recommended: Ubuntu 24.04+
   - Root SSH support - claude needs to be able to SSH into the server
-- **AI Gateway Worker** - proxies all LLM requests (real API keys live on the Worker, never on the VPS)
-- **Domain** - needed for Cloudflare Tunnel
-- **Cloudflare Account** - for Workers (log receiver, AI gateway) and Tunnel
+- **Cloudflare Account** - for observability workers & Cloudflare Tunnel
+- **Domain** - needed for Cloudflare Tunnel, can be a subdomain
 
 ---
 
@@ -60,8 +82,8 @@ After deployment, claude can be used to make any changes or manage your VPS with
    Tunnel           AI Gateway     Log Receiver
    (HTTPS)          Worker         Worker
         |           (LLM proxy)    (log capture)
-        |               |               ^
-        v               v               |
+        |               ^               ^
+        v               |               |
   +-------------------------------------+-------+
   |  VPS-1: OpenClaw                             |
   |                                              |
@@ -93,7 +115,7 @@ Any VPS provider can be used as long as they meet the minimum requirements.
 
 Follow the detailed instructions in **[ovh_setup_guide.md](./ovh_setup_guide.md)** to:
 
-1. Create an OVHCloud account
+1. Create an OVHCloud (or any VPS provider) account
 2. Generate a new SSH key
 3. Order a VPS - add your public SSH key during checkout
 4. Verify SSH access
@@ -113,7 +135,7 @@ Create your openclaw-config.env
 cp openclaw-config.env.example openclaw-config.env
 ```
 
-Then, add your VPS IP and other values to the config file.
+Add your VPS IP and other values to the config file.
 
 ### Step 2.1: Configure AI Gateway & Keys
 
@@ -135,7 +157,25 @@ Update `openclaw-config.env` with your domain:
 OPENCLAW_DOMAIN=openclaw.example.com
 ```
 
-Cloudflare Tunnel is used for networking — no certificates needed. Claude will set up the tunnel during deployment.
+### Step 2.3: Create Cloudflare Tunnel Token
+
+Cloudflare Tunnel is used for networking — no certificates needed, no ports exposed.
+
+1. Go to [Cloudflare Dashboard](https://one.dash.cloudflare.com/) → **Zero Trust** → **Networks** → **Tunnels**
+2. Click **Create a tunnel** → Choose **Cloudflared**
+3. Name it (e.g., `openclaw`)
+4. Copy the **tunnel token** (long base64 string starting with `ey...`)
+5. Configure the public hostname:
+   - **Subdomain + Domain:** your `OPENCLAW_DOMAIN` value (e.g., `openclaw.example.com`)
+   - **Service:** `HTTP` → `localhost:18789`
+6. Save the tunnel
+7. Add the token to `openclaw-config.env`:
+
+   ```bash
+   CF_TUNNEL_TOKEN=eyJhIjoiYWJj...
+   ```
+
+See [docs/CLOUDFLARE-TUNNEL.md](docs/CLOUDFLARE-TUNNEL.md) for detailed instructions.
 
 ### Step 3: Deploy with Claude Code
 

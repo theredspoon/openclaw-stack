@@ -46,24 +46,63 @@ This document describes how to secure OpenClaw behind Cloudflare Tunnel, elimina
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Installation Steps
+## Creating the Tunnel Token
 
-Claude performs the setup of the tunnel in the [05-cloudflare-tunnel.md](../playbooks/05-cloudflare-tunnel.md) playbook.
+The tunnel uses a **token-based** approach — all configuration lives in the Cloudflare Dashboard. No `cert.pem`, `credentials.json`, or `config.yml` files are needed on the server.
 
-1. Claude creates a tunnel for VPS-1
-2. Claude prompts user to authorize the tunnel with a link during setup
+### Step 1: Create the Tunnel
 
-After deployment, user needs to configure Cloudflare Access (see below).
+1. Go to [Cloudflare Dashboard](https://one.dash.cloudflare.com/) → **Zero Trust** → **Networks** → **Tunnels**
+2. Click **Create a tunnel** → Choose **Cloudflared**
+3. Name it (e.g., `openclaw`)
+
+### Step 2: Copy the Token
+
+On the tunnel install page, Cloudflare shows the install command containing the token:
+
+```
+sudo cloudflared service install eyJhIjoiYWJj...
+```
+
+Copy just the **token** part — the long base64 string starting with `ey...`.
+
+### Step 3: Configure the Public Hostname
+
+Still in the tunnel creation flow, add a public hostname:
+
+| Field | Value |
+|-------|-------|
+| **Subdomain** | `openclaw` (or your choice) |
+| **Domain** | Select your domain (e.g., `example.com`) |
+| **Service Type** | `HTTP` |
+| **URL** | `localhost:18789` |
+
+Save the tunnel.
+
+### Step 4: Add the Token to Config
+
+Paste the token into `openclaw-config.env`:
+
+```bash
+CF_TUNNEL_TOKEN=eyJhIjoiYWJj...  # Paste the full token here
+```
+
+> **Why token-based?** The older `cloudflared tunnel login` + `tunnel create` flow requires
+> browser authentication on the VPS (a headless server), which means manually downloading
+> `cert.pem` and uploading it. Token-based tunnels are created entirely in the Dashboard —
+> no browser needed on the server.
+
+### What Happens During Deployment
+
+Claude installs `cloudflared` on the VPS and registers it as a systemd service using your token. No further tunnel configuration is needed on the server — hostname routing, origin settings, and access policies are all managed in the Cloudflare Dashboard.
 
 ---
 
 ## Cloudflare Access Configuration
 
-These steps need to be completed by the user to authorize Cloudflare Access users to access the services through the tunnel.
+After the tunnel is working, add authentication via Cloudflare Access to control who can reach OpenClaw.
 
-After the tunnel is working, add authentication via Cloudflare Access:
-
-**In Cloudflare Dashboard:** [cloudflare.com](https://one.dash.cloudflare.com/)...
+**In Cloudflare Dashboard:** [one.dash.cloudflare.com](https://one.dash.cloudflare.com/)
 
 ### Step 1: Create an Access Application
 
@@ -132,7 +171,7 @@ Access needs at least one IdP to authenticate users. If you haven't set one up:
 
 The **One-time PIN** option is great for getting started quickly — it requires zero external configuration.
 
-#### Step 4: Verify the Your Tunnel Config
+### Step 4: Verify Your Tunnel Config
 
 Claude should have already setup the published application routes if domains were added to
 openclaw-config.env before deploying.
@@ -147,7 +186,7 @@ If asked to `Migrate` the tunnel to the Dashboard, accept. No need to modify any
 Migrating to the Dashboard simply makes it easier to manage routes from the Cloudflare Dashboard
 instead of via the server config.
 
-#### Step 5: Test Access Protection
+### Step 5: Test Access Protection
 
 1. Open `https://openclaw.yourdomain.com<OPENCLAW_DOMAIN_PATH>/` in an incognito window
 2. You should see the Cloudflare Access login page
