@@ -17,14 +17,16 @@ the playbooks as designed.
    ```bash
    claude
    # Prompt: 'start'
+
+   # Claude will deploy and test the VPS (15+ minutes)
    ```
 
-   Claude will deploy and test the VPS (20+ minutes)
+Claude guides you through whole process:
 
-Claude will guide you through whole process including openclaw device pairing.
-
-Claude will ask you for any missing config values during the deploy process
-and auto repair any issues it encounters.
+1. Asks you for any missing config values and optional extras
+2. Auto repairs any issues encountered with your setup
+3. Walks you through openclaw device pairing
+4. Runs comprehensive verification and security tests
 
 After deployment, claude can be used to make any changes or manage your VPS with the same prompt.
 
