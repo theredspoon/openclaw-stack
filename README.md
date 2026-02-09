@@ -312,6 +312,10 @@ openclaw-vps/
 - <https://www.knostic.ai/blog/why-we-built-openclaw-shield-securing-ai-agents-from-themselves>
 - <https://gist.github.com/simple10/7a91c7471fb543bf0a75341cb2367622>
 
+## Guides & Videos
+
+- <https://www.youtube.com/watch?v=3GrG-dOmrLU> - good ideas on how to use Telegram groups for topics
+
 ## Related Apps & Tools
 
 - <https://www.easyclaw.app/docs/privacy>
