@@ -373,6 +373,12 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 #   - Without remote.token, `openclaw doctor`, `openclaw devices list`, and `openclaw security audit --deep`
 #     all fail with "gateway token mismatch".
 # See REQUIREMENTS.md § 3.7 for full rationale.
+#
+# Tiered sandbox architecture:
+#   defaults → base sandbox (openclaw-sandbox:bookworm-slim), no network — lightweight for main agent
+#   "code" agent → claude sandbox (openclaw-sandbox-claude:bookworm-slim), bridge network, Claude Code CLI
+#   Main agent can spawn code agent via sessions_spawn for coding tasks.
+#   Shims for claude/codex/opencode/pi on the gateway satisfy the coding-agent skill check (see 4.8c §1g).
 
 # Read the gateway token generated in section 4.5
 GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
@@ -403,22 +409,19 @@ sudo tee /home/openclaw/.openclaw/openclaw.json << JSONEOF
         "mode": "all",
         "scope": "agent",
         "docker": {
-          "image": "openclaw-sandbox-claude:bookworm-slim",
+          "image": "openclaw-sandbox:bookworm-slim",
           "containerPrefix": "openclaw-sbx-",
           "workdir": "/workspace",
           "readOnlyRoot": true,
-          "tmpfs": ["/tmp", "/var/tmp", "/run", "/home/linuxbrew:uid=1000,gid=1000"],
-          "network": "bridge",
+          "tmpfs": ["/tmp", "/var/tmp", "/run"],
+          "network": "none",
           "user": "1000:1000",
           "capDrop": ["ALL"],
           "env": { "LANG": "C.UTF-8" },
           "pidsLimit": 256,
           "memory": "1g",
           "memorySwap": "2g",
-          "cpus": 1,
-          "binds": [
-            "/home/node/.claude-sandbox:/home/linuxbrew/.claude"
-          ]
+          "cpus": 1
         },
         "browser": {
           "enabled": true,
@@ -437,7 +440,33 @@ sudo tee /home/openclaw/.openclaw/openclaw.json << JSONEOF
           "maxAgeDays": 60
         }
       }
-    }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "subagents": {
+          "allowAgents": ["code"]
+        }
+      },
+      {
+        "id": "code",
+        "name": "Code Agent",
+        "sandbox": {
+          "docker": {
+            "image": "openclaw-sandbox-claude:bookworm-slim",
+            "tmpfs": ["/tmp", "/var/tmp", "/run", "/home/linuxbrew:uid=1000,gid=1000"],
+            "network": "bridge",
+            "memory": "2g",
+            "memorySwap": "4g",
+            "cpus": 2,
+            "binds": [
+              "/home/node/.claude-sandbox:/home/linuxbrew/.claude"
+            ]
+          }
+        }
+      }
+    ]
   },
   "tools": {
     "sandbox": {
@@ -484,6 +513,28 @@ JSONEOF
 
 sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main
 sudo chmod 600 /home/openclaw/.openclaw/agents/main/agent/models.json
+```
+
+Create the same model configuration for the code agent:
+
+```bash
+#!/bin/bash
+sudo mkdir -p /home/openclaw/.openclaw/agents/code/agent
+sudo tee /home/openclaw/.openclaw/agents/code/agent/models.json << 'JSONEOF'
+{
+  "providers": {
+    "anthropic": {
+      "baseUrl": "<AI_GATEWAY_WORKER_URL>"
+    },
+    "openai": {
+      "baseUrl": "<AI_GATEWAY_WORKER_URL>/v1"
+    }
+  }
+}
+JSONEOF
+
+sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/code
+sudo chmod 600 /home/openclaw/.openclaw/agents/code/agent/models.json
 ```
 
 ---
@@ -621,6 +672,19 @@ echo "prefix=$npm_global" >> /home/node/.npmrc
 # Add to PATH so globally installed binaries are found
 export PATH="$npm_global/bin:$PATH"
 echo "[entrypoint] npm global prefix set to $npm_global"
+
+# ── 1g. Create coding CLI shims for skill eligibility ────────────
+# The coding-agent skill requires anyBins: ["claude", "codex", "opencode", "pi"].
+# These CLIs live in sandbox containers, not the gateway. Shims satisfy the
+# preflight check — actual execution happens inside the sandbox.
+for cli in claude codex opencode pi; do
+  if [ ! -f "/usr/local/bin/$cli" ]; then
+    printf '#!/bin/sh\necho "ERROR: $0 is a shim — run inside sandbox" >&2\nexit 1\n' \
+      > "/usr/local/bin/$cli"
+    chmod +x "/usr/local/bin/$cli"
+  fi
+done
+echo "[entrypoint] Coding CLI shims created"
 
 # ── 2. Start nested Docker daemon (Sysbox provides isolation) ───────
 # /var/lib/docker is a persistent bind mount from host (./data/docker),
