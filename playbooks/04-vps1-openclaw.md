@@ -231,9 +231,11 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 #
 # Tiered sandbox architecture:
 #   defaults → base sandbox (openclaw-sandbox:bookworm-slim), no network — lightweight for main agent
+#   "skills" agent → common sandbox (openclaw-sandbox-common:bookworm-slim), bridge network — runs skill binaries (gifgrep, etc.)
 #   "code" agent → claude sandbox (openclaw-sandbox-claude:bookworm-slim), bridge network, Claude Code CLI
-#   Main agent can spawn code agent via sessions_spawn for coding tasks.
-#   Shims for claude/codex/opencode/pi on the gateway satisfy the coding-agent skill check (see 4.8c §1g).
+#   Main agent delegates to skills agent for skills needing network (gifgrep, weather, etc.)
+#   Main agent delegates to code agent via sessions_spawn for coding tasks.
+#   /opt/skill-bins is bind-mounted read-only into all sandboxes (see entrypoint §1g).
 
 # Read the gateway token generated in section 4.5
 GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
@@ -288,6 +290,22 @@ JSONEOF
 
 sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/code
 sudo chmod 600 /home/openclaw/.openclaw/agents/code/agent/models.json
+```
+
+Create the same model configuration for the skills agent:
+
+```bash
+#!/bin/bash
+sudo mkdir -p /home/openclaw/.openclaw/agents/skills/agent
+
+# SOURCE: deploy/models.json (template) → /home/openclaw/.openclaw/agents/skills/agent/models.json
+# VARS: AI_GATEWAY_WORKER_URL (from openclaw-config.env)
+sudo tee /home/openclaw/.openclaw/agents/skills/agent/models.json << 'JSONEOF'
+# <<< deploy/models.json (template) >>>
+JSONEOF
+
+sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/skills
+sudo chmod 600 /home/openclaw/.openclaw/agents/skills/agent/models.json
 ```
 
 ---

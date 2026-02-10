@@ -67,18 +67,36 @@ echo "prefix=$npm_global" >> /home/node/.npmrc
 export PATH="$npm_global/bin:$PATH"
 echo "[entrypoint] npm global prefix set to $npm_global"
 
-# ── 1g. Create coding CLI shims for skill eligibility ────────────
-# The coding-agent skill requires anyBins: ["claude", "codex", "opencode", "pi"].
-# These CLIs live in sandbox containers, not the gateway. Shims satisfy the
-# preflight check — actual execution happens inside the sandbox.
+# ── 1g. Install skill binaries for sandbox availability ──────────
+# Skills check bins on the gateway (load-time) AND inside the sandbox (runtime).
+# /opt/skill-bins is bind-mounted read-only into all sandboxes, making
+# gateway-installed binaries available without network or image rebuilds.
+mkdir -p /opt/skill-bins
+
+# gifgrep — GIF search skill
+if [ ! -f /opt/skill-bins/gifgrep ]; then
+  echo "[entrypoint] Installing gifgrep..."
+  curl -sfL https://github.com/steipete/gifgrep/releases/download/v0.2.1/gifgrep_0.2.1_linux_amd64.tar.gz \
+    | tar xz -C /opt/skill-bins gifgrep 2>/dev/null \
+    && echo "[entrypoint] gifgrep installed" \
+    || echo "[entrypoint] WARNING: gifgrep install failed (non-fatal)"
+fi
+
+# Coding CLI shims — coding-agent skill requires anyBins: ["claude","codex","opencode","pi"].
+# Real CLIs live in the claude sandbox image. Shims satisfy the gateway preflight check.
 for cli in claude codex opencode pi; do
-  if [ ! -f "/usr/local/bin/$cli" ]; then
+  if [ ! -f "/opt/skill-bins/$cli" ]; then
     printf '#!/bin/sh\necho "ERROR: $0 is a shim — run inside sandbox" >&2\nexit 1\n' \
-      > "/usr/local/bin/$cli"
-    chmod +x "/usr/local/bin/$cli"
+      > "/opt/skill-bins/$cli"
+    chmod +x "/opt/skill-bins/$cli"
   fi
 done
-echo "[entrypoint] Coding CLI shims created"
+
+# Add to gateway PATH for load-time skill checks
+if ! echo "$PATH" | grep -q '/opt/skill-bins'; then
+  export PATH="/opt/skill-bins:$PATH"
+fi
+echo "[entrypoint] Skill binaries ready ($(ls /opt/skill-bins | wc -l) items)"
 
 # ── 2. Start nested Docker daemon (Sysbox provides isolation) ───────
 # /var/lib/docker is a persistent bind mount from host (./data/docker),
