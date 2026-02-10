@@ -351,6 +351,11 @@ openclaw-vps/
 
 ---
 
+## OpenClaw Config Docs
+
+- [Agents Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.agents.ts)
+- [Models Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.models.ts)
+
 ## Resources
 
 - <https://github.com/VoltAgent/awesome-openclaw-skills>
