@@ -97,6 +97,7 @@ sudo -u openclaw bash << 'EOF'
 OPENCLAW_HOME="/home/openclaw"
 
 mkdir -p "${OPENCLAW_HOME}/openclaw"
+mkdir -p "${OPENCLAW_HOME}/openclaw/data/docker"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/workspace"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/credentials"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/logs"
@@ -222,6 +223,8 @@ services:
       - ./scripts/entrypoint-gateway.sh:/app/scripts/entrypoint-gateway.sh:ro
       # Claude Code sandbox credentials (isolated from gateway creds, shared with sandboxes via openclaw.json binds)
       - /home/openclaw/.claude-sandbox:/home/node/.claude-sandbox
+      # Persist nested Docker images across restarts (Sysbox auto-provisions ephemeral storage by default)
+      - ./data/docker:/var/lib/docker
     # Entrypoint handles pre-start tasks before exec-ing the command
     entrypoint: ["/app/scripts/entrypoint-gateway.sh"]
     # Full gateway command (entrypoint passes it through via exec "$@")
@@ -558,8 +561,10 @@ if [ ! -L /usr/local/bin/openclaw ]; then
 fi
 
 # ── 2. Start nested Docker daemon (Sysbox provides isolation) ───────
-# Sysbox auto-provisions /var/lib/docker and /var/lib/containerd as
-# writable mounts. We just need to start dockerd.
+# /var/lib/docker is a persistent bind mount from host (./data/docker),
+# so sandbox images survive container restarts (no ~5min rebuild).
+# TODO: verify sandbox image checksums on startup and rebuild if tampered,
+# to mitigate poisoned-image persistence risk.
 if command -v dockerd > /dev/null 2>&1; then
   if ! docker info > /dev/null 2>&1; then
     echo "[entrypoint] Starting nested Docker daemon..."
@@ -857,7 +862,7 @@ sudo docker logs --tail 10 vector
 
 ### Sandbox Image Verification
 
-Run after gateway startup to verify all sandbox images were built correctly. The entrypoint builds these on every fresh start (Sysbox `/var/lib/docker` is lost on container recreation), so wait for logs to show build completion before checking.
+Run after gateway startup to verify all sandbox images were built correctly. With the persistent `/var/lib/docker` bind mount, images survive restarts — the entrypoint only rebuilds missing images. On first boot, wait for logs to show build completion before checking.
 
 ```bash
 #!/bin/bash

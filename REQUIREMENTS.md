@@ -229,8 +229,9 @@ Key parameters:
 
 **Key behaviors:**
 
-- Auto-provisions writable mounts at `/var/lib/sysbox/docker/<container-id>/` for `/var/lib/docker` and `/var/lib/containerd`
+- Auto-provisions writable mounts at `/var/lib/sysbox/docker/<container-id>/` for `/var/lib/docker` and `/var/lib/containerd` (when no bind mount is provided)
 - These auto-mounts inherit the container's `read_only` flag (important — see 3.4)
+- When a host bind mount is provided for `/var/lib/docker`, Sysbox uses it instead of ephemeral storage — this persists nested Docker images across restarts
 - Provides equivalent security to `read_only: true` via user namespace isolation
 
 **Verification:** `sudo docker info | grep -i sysbox`
@@ -256,6 +257,7 @@ Key parameters:
 │   ├── .env                     # Environment variables
 │   ├── vector.yaml              # Vector log shipper configuration
 │   ├── data/
+│   │   ├── docker/              # Persistent nested Docker storage (sandbox images)
 │   │   └── vector/              # Vector checkpoint/position data
 │   └── scripts/
 │       └── entrypoint-gateway.sh  # Custom entrypoint
@@ -287,6 +289,7 @@ Key parameters:
 |---------|-------|-----------|
 | `user` | `"0:0"` | Root inside container — Sysbox maps to unprivileged uid on host. Required for starting `dockerd` |
 | `read_only` | `false` | **Required.** Sysbox auto-mounts for `/var/lib/docker` inherit this flag. With `true`, dockerd gets `chmod /var/lib/docker: read-only file system` |
+| `/var/lib/docker` bind mount | `./data/docker:/var/lib/docker` | Persists nested Docker images across container restarts. Without this, Sysbox auto-provisions ephemeral storage that is destroyed on `docker compose down`, forcing a full sandbox rebuild (~5 min) on every restart. Host dir must be on ext4 or btrfs. |
 | `no-new-privileges` | `true` | Prevent escalation. gosu drops privileges (doesn't gain) |
 | `start_period` | `300s` | First boot builds 4 sandbox images (3-5 minutes) |
 | `cpus` | `4` (limit), `1` (reservation) | Resource bounds |
