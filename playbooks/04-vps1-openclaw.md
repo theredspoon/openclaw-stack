@@ -96,8 +96,7 @@ docker network create \
 sudo -u openclaw bash << 'EOF'
 OPENCLAW_HOME="/home/openclaw"
 
-mkdir -p "${OPENCLAW_HOME}/openclaw"
-mkdir -p "${OPENCLAW_HOME}/openclaw/data/docker"
+# NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in section 4.4
 mkdir -p "${OPENCLAW_HOME}/.openclaw/workspace"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/credentials"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/logs"
@@ -122,6 +121,10 @@ sudo chown -R 1000:1000 /home/openclaw/.openclaw
 sudo -u openclaw bash << 'EOF'
 cd /home/openclaw
 git clone https://github.com/openclaw/openclaw.git openclaw
+
+# Create data directories for bind mounts (not tracked by git)
+mkdir -p /home/openclaw/openclaw/data/docker
+mkdir -p /home/openclaw/openclaw/data/vector
 EOF
 ```
 
@@ -600,17 +603,17 @@ if command -v dockerd > /dev/null 2>&1; then
       set +e
 
       # Build default sandbox image if missing
-      if ! docker image inspect openclaw-sandbox > /dev/null 2>&1; then
-        echo "[entrypoint] Sandbox image not found, building..."
-        if [ -f /app/sandbox/Dockerfile ]; then
-          docker build -t openclaw-sandbox /app/sandbox/
-          if docker image inspect openclaw-sandbox > /dev/null 2>&1; then
+      if ! docker image inspect openclaw-sandbox:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Base sandbox image not found, building..."
+        if [ -f /app/Dockerfile.sandbox ]; then
+          cd /app && scripts/sandbox-setup.sh
+          if docker image inspect openclaw-sandbox:bookworm-slim > /dev/null 2>&1; then
             echo "[entrypoint] Sandbox image built successfully"
           else
             echo "[entrypoint] ERROR: Sandbox image build failed"
           fi
         else
-          echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
+          echo "[entrypoint] WARNING: /app/Dockerfile.sandbox not found"
         fi
       else
         echo "[entrypoint] Sandbox image already exists"

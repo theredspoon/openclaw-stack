@@ -98,10 +98,10 @@ sudo chown 1000:1000 /home/openclaw/.openclaw/logs
 sudo /home/openclaw/scripts/backup.sh
 
 # Verify backup was created
-ls -la /home/openclaw/.openclaw/backups/
+sudo ls -la /home/openclaw/.openclaw/backups/
 
 # Verify backup contents
-tar -tzf /home/openclaw/.openclaw/backups/openclaw_backup_*.tar.gz
+sudo tar -tzf /home/openclaw/.openclaw/backups/openclaw_backup_*.tar.gz
 ```
 
 ---

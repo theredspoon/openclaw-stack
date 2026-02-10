@@ -108,10 +108,11 @@ Ask the user to confirm they can see the page (even with the pairing error) befo
 
 After the user confirms they opened the URL, approve their device.
 
-### First device pairing (file-based)
+### First device pairing
 
-The CLI command `devices list` connects to the gateway via WebSocket, which itself requires
-a paired device — a circular dependency on first deployment. Use the file-based approach instead:
+The host CLI wrapper (`openclaw devices list`) connects to the gateway via WebSocket, which
+itself requires a paired device — a circular dependency on first deployment. Break the cycle
+by running the CLI directly inside the container via `docker exec` (bypasses the host wrapper).
 
 ```bash
 # 1. Read pending requests directly from the filesystem
@@ -119,34 +120,38 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo docker exec openclaw-gateway cat /home/node/.openclaw/devices/pending.json"
 ```
 
-Find the `requestId` from the output, then approve it:
+Find the `requestId` for the `openclaw-control-ui` client from the output, then approve it:
 
 ```bash
-# 2. Approve the most recent pending request
+# 2. Try CLI approval inside the container (bypasses host wrapper's pairing requirement)
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  'sudo docker exec openclaw-gateway python3 << "PYEOF"
-import json, os, time
-pending_file = "/home/node/.openclaw/devices/pending.json"
-paired_file = "/home/node/.openclaw/devices/paired.json"
-with open(pending_file) as f:
-    pending = json.load(f)
-if not pending:
-    print("No pending requests found. Ask the user to refresh the browser page.")
-    exit(1)
-paired = []
-if os.path.exists(paired_file):
-    with open(paired_file) as f:
-        paired = json.load(f)
-device = pending[-1]
-device["approvedAt"] = int(time.time() * 1000)
-paired.append(device)
-with open(paired_file, "w") as f:
-    json.dump(paired, f, indent=2)
-print(f"Approved device: {device.get('"'"'name'"'"', device.get('"'"'requestId'"'"', '"'"'unknown'"'"'))}")
-PYEOF'
+  "sudo docker exec --user node openclaw-gateway openclaw devices approve <requestId>"
 ```
 
 Tell the user to wait approximately 15 seconds — the browser will automatically retry the connection and should connect successfully once the device is approved.
+
+#### If CLI approval fails (circular dependency)
+
+If the `devices approve` subcommand also requires a paired device, fall back to `jq` file manipulation.
+The `paired.json` file is a JSON **dict keyed by deviceId** (not an array).
+
+```bash
+# Fallback: approve via jq file manipulation
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  'sudo docker exec openclaw-gateway bash -c '"'"'
+    REQUEST_ID="<requestId>"
+    NOW_MS=$(date +%s)000
+    DEVICE=$(jq --arg rid "$REQUEST_ID" --arg now "$NOW_MS" \
+      ".[\$rid] + {approvedAt: (\$now | tonumber)}" \
+      /home/node/.openclaw/devices/pending.json)
+    DEVICE_ID=$(echo "$DEVICE" | jq -r ".deviceId")
+    jq --argjson dev "$DEVICE" \
+      ". + {(\$dev.deviceId): \$dev}" \
+      /home/node/.openclaw/devices/paired.json > /tmp/paired.json \
+      && mv /tmp/paired.json /home/node/.openclaw/devices/paired.json
+    echo "Approved device: $DEVICE_ID"
+  '"'"''
+```
 
 > **Note:** After the first device is paired, subsequent devices can be approved from the
 > Control UI or via the CLI `devices approve` command (see below).
@@ -168,7 +173,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 ### If no pending requests appear
 
 - Pending requests have a **5-minute TTL**. If the user waited too long, the request may have expired. Ask them to refresh the page and re-read `pending.json`.
-- Each browser retry creates a new pending request, so there may be multiple. The Python script approves the most recent one.
+- Each browser retry creates a new pending request, so there may be multiple. Use the most recent `requestId` for the `openclaw-control-ui` client.
 
 ---
 
