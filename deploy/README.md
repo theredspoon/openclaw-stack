@@ -21,4 +21,5 @@ to the target path on the VPS. The heredoc body contains a sentinel
 |--------|-----------|-------|------|
 | `vector.yaml` | `/home/openclaw/openclaw/vector.yaml` | openclaw | 644 |
 | `build-openclaw.sh` | `/home/openclaw/scripts/build-openclaw.sh` | openclaw | 755 |
+| `entrypoint-gateway.sh` | `/home/openclaw/openclaw/scripts/entrypoint-gateway.sh` | openclaw | 755 |
 | `host-alert.sh` | `/home/openclaw/scripts/host-alert.sh` | root | 755 |
