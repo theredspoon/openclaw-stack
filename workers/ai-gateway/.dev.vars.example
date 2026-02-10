@@ -2,3 +2,8 @@
 AUTH_TOKEN=your-shared-auth-token
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+
+# Your Cloudflare Account ID used for AI Gateway - use `wrangler whoami` to get account ID
+ACCOUNT_ID=
+# Cloudflare AI Gateway auth token
+CF_AI_GATEWAY_TOKEN=
