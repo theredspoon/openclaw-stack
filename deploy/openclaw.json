@@ -17,6 +17,10 @@
       "basePath": "{{OPENCLAW_DOMAIN_PATH}}"
     }
   },
+  "logging": {
+    "consoleStyle": "json",
+    "redactSensitive": "tools"
+  },
   "agents": {
     "defaults": {
       "sandbox": {
@@ -31,7 +35,10 @@
           "network": "none",
           "user": "1000:1000",
           "capDrop": ["ALL"],
-          "env": { "LANG": "C.UTF-8", "PATH": "/opt/skill-bins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+          "env": {
+            "LANG": "C.UTF-8",
+            "PATH": "/opt/skill-bins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          },
           "pidsLimit": 256,
           "memory": "1g",
           "memorySwap": "2g",
@@ -72,7 +79,12 @@
         "sandbox": {
           "docker": {
             "image": "openclaw-sandbox-claude:bookworm-slim",
-            "tmpfs": ["/tmp", "/var/tmp", "/run", "/home/linuxbrew:uid=1000,gid=1000"],
+            "tmpfs": [
+              "/tmp",
+              "/var/tmp",
+              "/run",
+              "/home/linuxbrew:uid=1000,gid=1000"
+            ],
             "network": "bridge",
             "memory": "2g",
             "memorySwap": "4g",
@@ -102,7 +114,20 @@
   "tools": {
     "sandbox": {
       "tools": {
-        "allow": ["exec", "process", "read", "write", "edit", "apply_patch", "browser", "sessions_list", "sessions_history", "sessions_send", "sessions_spawn", "session_status"],
+        "allow": [
+          "exec",
+          "process",
+          "read",
+          "write",
+          "edit",
+          "apply_patch",
+          "browser",
+          "sessions_list",
+          "sessions_history",
+          "sessions_send",
+          "sessions_spawn",
+          "session_status"
+        ],
         "deny": ["canvas", "nodes", "cron", "discord", "gateway"]
       }
     }
