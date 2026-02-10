@@ -151,17 +151,36 @@ So to answer your original question: **the upstream script doesn't work anywhere
 
 ---
 
-## 🔧 Sandbox fix
+## Chosen fix: BASE_IMAGE override
 
-> Now that you understand the full picture: **how should we handle the sandbox-common build bug in the canonical entrypoint (04)?**
+**Approach:** The upstream script exposes `BASE_IMAGE` as an overridable env var. We build a rooted intermediate image (`FROM openclaw-sandbox:bookworm-slim` + `USER root`), pass it via `BASE_IMAGE`, then fix `USER 1000` on the output image.
 
-1. **Add fallback to 04 (Recommended)**
-   Merge the extras entrypoint's fallback into 04 as the single canonical version. Try upstream script, verify image exists. If not rebuild with USER root injected, if not rebuild with USER root injected, using a minimal package list (omits golang, rust, cargo, bun, homebrew) but fragile if script format changes.
+**Why this approach:**
 
-2. **Patch upstream script**
-   sed-inject USER root into `/app/scripts/sandbox-common-setup.sh` before calling it. Gets all upstream tools (golang, rust, bun, homebrew) but fragile if script format changes.
+| Option | Gets all packages | Fragile | Maintenance |
+|--------|:-:|:-:|:-:|
+| **A: BASE_IMAGE override (chosen)** | Yes | No | Low |
+| B: Sed-patch script | Yes | Yes (depends on heredoc format) | Medium |
+| C: Skip upstream entirely | Partial (must replicate bun/brew setup) | No | High |
+| D: Fallback only (old approach) | No (omits golang, rust, bun, brew) | No | Low |
 
-3. **Skip upstream entirely**
-   Don't call sandbox-common-setup.sh at all. Build common sandbox ourselves with our own Dockerfile. Fully deterministic, but we lose any future upstream improvements.
+**Build sequence** (in entrypoint `set +e` subshell):
 
-4. **Type something.**
+1. Build rooted intermediate: `FROM openclaw-sandbox:bookworm-slim` + `USER root` → tag `openclaw-sandbox-base-root:bookworm-slim`
+2. Run upstream: `BASE_IMAGE=openclaw-sandbox-base-root:bookworm-slim PACKAGES="...+ffmpeg+imagemagick" /app/scripts/sandbox-common-setup.sh`
+3. Fix security: `FROM openclaw-sandbox-common:bookworm-slim` + `USER 1000` → re-tag
+4. Cleanup: `docker rmi openclaw-sandbox-base-root:bookworm-slim`
+5. If any step fails → log ERROR, no fallback (surfaces during deployment verification)
+
+**Package layering (corrected):**
+
+| Image | Adds | Inherits from |
+|-------|------|---------------|
+| `openclaw-sandbox` | bash, curl, git, jq, python3, ripgrep | debian:bookworm-slim |
+| `openclaw-sandbox-common` | node, npm, pnpm, bun, go, rust, build-essential, **ffmpeg, imagemagick**, brew | openclaw-sandbox |
+| `openclaw-sandbox-claude` | Claude Code CLI only | openclaw-sandbox-common |
+| `openclaw-sandbox-browser` | chromium, xvfb, novnc | debian:bookworm-slim |
+
+**Self-healing:** If upstream ever fixes the bug, the intermediate image becomes harmless — the script succeeds with or without it, and `USER 1000` at the end is a no-op if already set.
+
+**Implemented in:** `playbooks/04-vps1-openclaw.md` section 4.8c (entrypoint) + sandbox verification section.

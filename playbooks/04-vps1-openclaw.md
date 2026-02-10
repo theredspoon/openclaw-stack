@@ -590,7 +590,7 @@ if command -v dockerd > /dev/null 2>&1; then
 
     # Sandbox builds are non-fatal — gateway starts even if builds fail.
     # Failures are logged but don't prevent the gateway from running.
-    # Rebuild manually later: sudo docker exec openclaw-gateway /app/scripts/sandbox-common-setup.sh
+    # Missing images will surface during deployment verification or when agents run.
     (
       set +e
 
@@ -599,7 +599,11 @@ if command -v dockerd > /dev/null 2>&1; then
         echo "[entrypoint] Sandbox image not found, building..."
         if [ -f /app/sandbox/Dockerfile ]; then
           docker build -t openclaw-sandbox /app/sandbox/
-          echo "[entrypoint] Sandbox image built successfully"
+          if docker image inspect openclaw-sandbox > /dev/null 2>&1; then
+            echo "[entrypoint] Sandbox image built successfully"
+          else
+            echo "[entrypoint] ERROR: Sandbox image build failed"
+          fi
         else
           echo "[entrypoint] WARNING: /app/sandbox/Dockerfile not found"
         fi
@@ -608,14 +612,35 @@ if command -v dockerd > /dev/null 2>&1; then
       fi
 
       # Build common sandbox image if missing (includes Node.js, git, common tools)
-      # Known issue: upstream sandbox-common-setup.sh doesn't add USER root before
-      # apt-get. The base image sets USER sandbox, so this build may fail silently.
-      # See Troubleshooting section below for the manual fallback.
+      # Upstream sandbox-common-setup.sh has a bug: the generated Dockerfile inherits
+      # USER sandbox from the base image and runs apt-get without switching to root.
+      # Fix: build a rooted intermediate image and pass it via BASE_IMAGE env var.
       if ! docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
         echo "[entrypoint] Common sandbox image not found, building..."
         if [ -f /app/scripts/sandbox-common-setup.sh ]; then
-          /app/scripts/sandbox-common-setup.sh
-          echo "[entrypoint] Common sandbox image built successfully"
+          # Step 1: Build rooted intermediate from base image
+          printf 'FROM openclaw-sandbox:bookworm-slim\nUSER root\n' \
+            | docker build -t openclaw-sandbox-base-root:bookworm-slim -
+          if ! docker image inspect openclaw-sandbox-base-root:bookworm-slim > /dev/null 2>&1; then
+            echo "[entrypoint] ERROR: Failed to build rooted intermediate image"
+          else
+            # Step 2: Run upstream script with BASE_IMAGE override + extra packages
+            BASE_IMAGE=openclaw-sandbox-base-root:bookworm-slim \
+            PACKAGES="curl wget jq coreutils grep nodejs npm python3 git ca-certificates golang-go rustc cargo unzip pkg-config libasound2-dev build-essential file ffmpeg imagemagick" \
+            /app/scripts/sandbox-common-setup.sh || true
+
+            # Step 3: Verify and fix USER to 1000 for security
+            if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
+              printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER 1000\n' \
+                | docker build -t openclaw-sandbox-common:bookworm-slim -
+              echo "[entrypoint] Common sandbox image built successfully"
+            else
+              echo "[entrypoint] ERROR: Common sandbox image build failed — upstream script did not produce image"
+            fi
+
+            # Step 4: Cleanup intermediate image
+            docker rmi openclaw-sandbox-base-root:bookworm-slim > /dev/null 2>&1 || true
+          fi
         else
           echo "[entrypoint] WARNING: sandbox-common-setup.sh not found"
         fi
@@ -628,7 +653,11 @@ if command -v dockerd > /dev/null 2>&1; then
         echo "[entrypoint] Browser sandbox image not found, building..."
         if [ -f /app/scripts/sandbox-browser-setup.sh ]; then
           /app/scripts/sandbox-browser-setup.sh
-          echo "[entrypoint] Browser sandbox image built successfully"
+          if docker image inspect openclaw-sandbox-browser:bookworm-slim > /dev/null 2>&1; then
+            echo "[entrypoint] Browser sandbox image built successfully"
+          else
+            echo "[entrypoint] ERROR: Browser sandbox image build failed"
+          fi
         else
           echo "[entrypoint] WARNING: sandbox-browser-setup.sh not found"
         fi
@@ -636,13 +665,20 @@ if command -v dockerd > /dev/null 2>&1; then
         echo "[entrypoint] Browser sandbox image already exists"
       fi
 
-      # Build claude sandbox image if missing (layered on common with media tools + Claude Code CLI)
-      # Adds ffmpeg, imagemagick, and claude CLI — common sandbox stays clean
+      # Build claude sandbox image if missing (layered on common with Claude Code CLI)
+      # ffmpeg + imagemagick are already in common via PACKAGES override above
       if ! docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
         if docker image inspect openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1; then
           echo "[entrypoint] Claude sandbox image not found, building..."
-          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends ffmpeg imagemagick && rm -rf /var/lib/apt/lists/*\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' | docker build -t openclaw-sandbox-claude:bookworm-slim -
-          echo "[entrypoint] Claude sandbox image built successfully"
+          printf 'FROM openclaw-sandbox-common:bookworm-slim\nUSER root\nRUN npm install -g @anthropic-ai/claude-code\nUSER 1000\n' \
+            | docker build -t openclaw-sandbox-claude:bookworm-slim -
+          if docker image inspect openclaw-sandbox-claude:bookworm-slim > /dev/null 2>&1; then
+            echo "[entrypoint] Claude sandbox image built successfully"
+          else
+            echo "[entrypoint] ERROR: Claude sandbox image build failed"
+          fi
+        else
+          echo "[entrypoint] WARNING: Skipping claude sandbox — common image not available"
         fi
       else
         echo "[entrypoint] Claude sandbox image already exists"
@@ -818,6 +854,77 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps vector
 # Check Vector logs
 sudo docker logs --tail 10 vector
 ```
+
+### Sandbox Image Verification
+
+Run after gateway startup to verify all sandbox images were built correctly. The entrypoint builds these on every fresh start (Sysbox `/var/lib/docker` is lost on container recreation), so wait for logs to show build completion before checking.
+
+```bash
+#!/bin/bash
+# Wait for entrypoint to finish sandbox builds (look for privilege drop message)
+echo "Waiting for entrypoint to finish..."
+timeout 600 bash -c 'until sudo docker logs openclaw-gateway 2>&1 | grep -q "Executing as node"; do sleep 5; done'
+
+echo "=== Checking sandbox images ==="
+FAILED=0
+
+# 1. Check all 4 images exist
+for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-common:bookworm-slim \
+           openclaw-sandbox-browser:bookworm-slim openclaw-sandbox-claude:bookworm-slim; do
+  if sudo docker exec openclaw-gateway docker image inspect "$img" > /dev/null 2>&1; then
+    echo "  $img: EXISTS"
+  else
+    echo "  $img: MISSING"
+    FAILED=1
+  fi
+done
+
+# 2. Security check: verify USER is 1000 (not root) on common and claude images
+for img in openclaw-sandbox-common:bookworm-slim openclaw-sandbox-claude:bookworm-slim; do
+  USER=$(sudo docker exec openclaw-gateway docker image inspect "$img" 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['Config']['User'])" 2>/dev/null)
+  if [ "$USER" = "1000" ]; then
+    echo "  $img USER: 1000 (OK)"
+  else
+    echo "  $img USER: $USER (EXPECTED 1000)"
+    FAILED=1
+  fi
+done
+
+# 3. Test key binaries in common sandbox
+# ffmpeg + imagemagick are in common (via PACKAGES override), not claude
+for bin in go rustc bun brew node npm pnpm git curl wget jq ffmpeg convert; do
+  if sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-common:bookworm-slim which "$bin" > /dev/null 2>&1; then
+    echo "  common/$bin: OK"
+  else
+    echo "  common/$bin: MISSING"
+    FAILED=1
+  fi
+done
+
+# 4. Test claude sandbox (should inherit common tools + add Claude Code CLI)
+for bin in claude ffmpeg node; do
+  if sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-claude:bookworm-slim which "$bin" > /dev/null 2>&1; then
+    echo "  claude/$bin: OK"
+  else
+    echo "  claude/$bin: MISSING"
+    FAILED=1
+  fi
+done
+
+# 5. Check no intermediate images left
+if sudo docker exec openclaw-gateway docker images | grep -q base-root; then
+  echo "  WARNING: intermediate base-root image not cleaned up"
+fi
+
+if [ "$FAILED" -eq 1 ]; then
+  echo ""
+  echo "SANDBOX VERIFICATION FAILED — check entrypoint logs:"
+  echo "  sudo docker logs openclaw-gateway 2>&1 | grep '\\[entrypoint\\]'"
+fi
+```
+
+**Expected:** All images exist, USER is 1000, all binaries present. If verification fails, check entrypoint logs for ERROR messages.
 
 ---
 
