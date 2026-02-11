@@ -80,11 +80,25 @@ TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
 if [ -f "$TOOLKIT_CONFIG" ] && [ -f "$TOOLKIT_PARSER" ]; then
   TOOLKIT_JSON=$(node "$TOOLKIT_PARSER" "$TOOLKIT_CONFIG")
 
-  # Generate a shim for each declared binary
+  # Generate a shim for each declared binary.
+  # Shims are pass-through: if the real binary exists elsewhere in PATH (i.e. inside
+  # a sandbox where tools are installed), the shim execs it. On the gateway (where only
+  # shims exist), they print an error. This prevents shims from shadowing real binaries
+  # when /opt/skill-bins is bind-mounted into sandboxes.
   for bin in $(echo "$TOOLKIT_JSON" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).allBins.join(' ')))"); do
     if [ ! -f "/opt/skill-bins/$bin" ]; then
-      printf '#!/bin/sh\necho "ERROR: $0 is a shim — run inside sandbox" >&2\nexit 1\n' \
-        > "/opt/skill-bins/$bin"
+      cat > "/opt/skill-bins/$bin" << 'SHIM'
+#!/bin/sh
+# Auto-generated shim — pass through to real binary if available
+SELF_DIR=$(dirname "$(readlink -f "$0")")
+ORIG_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$SELF_DIR" | tr '\n' ':' | sed 's/:$//')
+REAL=$(PATH="$ORIG_PATH" command -v "$(basename "$0")" 2>/dev/null)
+if [ -n "$REAL" ]; then
+  exec "$REAL" "$@"
+fi
+echo "ERROR: $(basename "$0") is a shim — run inside sandbox" >&2
+exit 1
+SHIM
       chmod +x "/opt/skill-bins/$bin"
     fi
   done
