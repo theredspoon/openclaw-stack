@@ -60,13 +60,9 @@ get_image_label() {
   docker image inspect "$image" --format "{{index .Config.Labels \"$label\"}}" 2>/dev/null || true
 }
 
-# Escape config for Docker label storage (newlines -> literal \n, quotes escaped).
-# Must match the escaping used in build_common() for label embedding.
-escape_config() {
-  echo "$1" | node -e "
-    let d=''; process.stdin.on('data',c=>d+=c);
-    process.stdin.on('end',()=>process.stdout.write(d.replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"').replace(/\\n/g,'\\\\n')));
-  "
+# Hash config for Docker label storage and comparison.
+hash_config() {
+  printf '%s' "$1" | sha256sum | cut -d' ' -f1
 }
 
 # Check if config has changed since last build.
@@ -81,9 +77,9 @@ config_changed() {
   if [ -z "$stored_config" ]; then
     return 0  # no label (pre-label image), treat as changed
   fi
-  local escaped_current
-  escaped_current=$(escape_config "$current_config")
-  [ "$escaped_current" != "$stored_config" ]
+  local current_hash
+  current_hash=$(hash_config "$current_config")
+  [ "$current_hash" != "$stored_config" ]
 }
 
 # ── Integrity verification ─────────────────────────────────────────────
@@ -300,15 +296,11 @@ build_common() {
   fi
 
   # Add metadata labels for config change detection and staleness tracking.
-  # Escape the config for use in a Docker label (newlines -> \n, quotes escaped).
-  local escaped_config
-  escaped_config=$(echo "$current_config" | node -e "
-    let d=''; process.stdin.on('data',c=>d+=c);
-    process.stdin.on('end',()=>process.stdout.write(d.replace(/\\\\/g,'\\\\\\\\').replace(/\"/g,'\\\\\"').replace(/\\n/g,'\\\\n')));
-  ")
+  local config_hash
+  config_hash=$(hash_config "$current_config")
   local build_date
   build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  tool_dockerfile="${tool_dockerfile}LABEL openclaw.toolkit-config=\"${escaped_config}\"\n"
+  tool_dockerfile="${tool_dockerfile}LABEL openclaw.toolkit-config=\"${config_hash}\"\n"
   tool_dockerfile="${tool_dockerfile}LABEL openclaw.build-date=\"${build_date}\"\n"
   tool_dockerfile="${tool_dockerfile}USER 1000\n"
 

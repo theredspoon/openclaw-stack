@@ -18,7 +18,6 @@ packages:
   - python3
   - nodejs
   - npm
-  - golang-go
   - rustc
   - cargo
   - ffmpeg
@@ -38,6 +37,13 @@ packages:
 # Tools without install are "capability declarations" — their bins come from apt
 # but need explicit names for gateway shimming (e.g. imagemagick -> convert).
 tools:
+  golang:
+    install: >-
+      GO_VER=$(curl -sL https://go.dev/VERSION?m=text | head -1) &&
+      curl -sfL https://go.dev/dl/$GO_VER.linux-amd64.tar.gz | tar xz -C /usr/local &&
+      ln -sf /usr/local/go/bin/go /usr/local/go/bin/gofmt ${BIN_DIR}/
+    bins: [go, gofmt]
+
   gifgrep:
     version: "0.2.1"
     install: >-
