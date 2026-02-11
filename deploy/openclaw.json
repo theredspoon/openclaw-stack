@@ -54,7 +54,8 @@
           "memorySwap": "6g",
           "cpus": 2,
           "binds": [
-            "/opt/skill-bins:/opt/skill-bins:ro"
+            "/opt/skill-bins:/opt/skill-bins:ro",
+            "/app/docs:/app/docs:ro"
           ]
         },
         "browser": {
