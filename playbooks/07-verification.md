@@ -144,6 +144,24 @@ cat /etc/cron.d/openclaw-alerts
 
 ---
 
+## 7.5a Verify Log Rotation
+
+```bash
+# Check config is installed
+ls -la /etc/logrotate.d/openclaw
+
+# Dry-run test — should show "rotating pattern" for each log file with no errors
+sudo logrotate -d /etc/logrotate.d/openclaw
+
+# Optional: force a rotation cycle to confirm .1 files appear
+sudo logrotate -f /etc/logrotate.d/openclaw
+ls -la /home/openclaw/.openclaw/logs/
+```
+
+**Expected:** Config file exists with mode 644. Dry run shows no errors. After forced rotation, `.1` files appear alongside the originals. Log writers (`debug.log`, `commands.log`) continue appending to the truncated files.
+
+---
+
 ## 7.6 Security Checklist
 
 ### VPS-1

@@ -458,6 +458,25 @@ No new files needed — just update the config and restart the gateway.
 
 ---
 
+## 4.8g Configure Log Rotation
+
+The hook-generated JSONL logs (`debug.log`, `commands.log`) and the backup cron log (`backup.log`) in `~/.openclaw/logs/` grow unbounded. Docker container logs are already rotated via the `json-file` driver in `docker-compose.override.yml`, but these application-level files need logrotate.
+
+```bash
+#!/bin/bash
+# SOURCE: deploy/logrotate-openclaw → /etc/logrotate.d/openclaw
+sudo tee /etc/logrotate.d/openclaw << 'EOF'
+# <<< deploy/logrotate-openclaw >>>
+EOF
+
+sudo chmod 644 /etc/logrotate.d/openclaw
+
+# Dry-run test — should show "rotating pattern" for each log file with no errors
+sudo logrotate -d /etc/logrotate.d/openclaw
+```
+
+---
+
 ## 4.9 Build and Start OpenClaw
 
 ```bash

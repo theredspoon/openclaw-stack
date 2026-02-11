@@ -1,0 +1,25 @@
+# OpenClaw application log rotation
+# Rotates hook-generated JSONL logs and backup cron log.
+# Docker container logs are rotated separately via json-file driver (docker-compose.override.yml).
+#
+# copytruncate: safe for append-only writers (fs.appendFile, >>)
+#   — truncates the original file in-place after copying, so the writing
+#   process never loses its file handle. Tiny window of log loss is acceptable.
+# delaycompress: keeps most recent rotated file (.1) uncompressed for easy inspection.
+# su: required to suppress logrotate's "insecure permissions" check — the logs/
+#   directory is owned by uid 1000 (group-writable). Using root:root so logrotate
+#   can traverse /home/openclaw (owned by openclaw user, mode 700).
+
+/home/openclaw/.openclaw/logs/debug.log
+/home/openclaw/.openclaw/logs/commands.log
+/home/openclaw/.openclaw/logs/backup.log
+{
+    su root root
+    weekly
+    rotate 4
+    missingok
+    notifempty
+    copytruncate
+    delaycompress
+    compress
+}
