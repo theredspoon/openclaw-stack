@@ -88,6 +88,11 @@ services:
         max-file: "5"
 
   openclaw-cli:
+    # Set a profile to effectively disable the CLI container from starting during
+    # normal `docker compose up`. CLI is not needed in this setup.
+    # CLI commands are instead executed in openclaw-gateway.
+    profiles:
+      - openclaw-cli
     # Same image as gateway, built by scripts/build-openclaw.sh
     image: openclaw:local
     runtime: sysbox-runc
