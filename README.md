@@ -356,6 +356,10 @@ openclaw-vps/
 - [Agents Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.agents.ts)
 - [Models Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.models.ts)
 
+## Skills, Plugins & Tools
+
+- <https://github.com/lekt9/unbrowse-openclaw> - autogenerates API skills from browser sessions
+
 ## Resources
 
 - <https://deepwiki.com/openclaw/openclaw>
