@@ -241,7 +241,8 @@ build_common() {
   # Step 1: Build rooted intermediate from base image
   # Upstream sandbox-common-setup.sh has a bug: generated Dockerfile inherits
   # USER sandbox from base and runs apt-get without root. Fix: rooted intermediate.
-  printf 'FROM openclaw-sandbox:bookworm-slim\nUSER root\n' \
+  # Add NodeSource 24.x repo so upstream's apt-get install nodejs gets Node 24 (not Debian's Node 18)
+  printf 'FROM openclaw-sandbox:bookworm-slim\nUSER root\nRUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash -\n' \
     | docker build -t openclaw-sandbox-base-root:bookworm-slim -
   if ! image_exists "openclaw-sandbox-base-root:bookworm-slim"; then
     log "ERROR: Failed to build rooted intermediate image"

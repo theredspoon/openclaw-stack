@@ -17,7 +17,6 @@ packages:
   - ca-certificates
   - python3
   - nodejs
-  - npm
   - rustc
   - cargo
   - unzip
@@ -110,6 +109,7 @@ tools:
     install: >-
       su -s /bin/bash linuxbrew -c 'HOMEBREW_NO_AUTO_UPDATE=1 /home/linuxbrew/.linuxbrew/bin/brew install steipete/tap/summarize'
       && ln -sf /home/linuxbrew/.linuxbrew/bin/summarize ${BIN_DIR}/
+      || echo "WARN: summarize install failed (arm64-only formula on amd64?), skipping"
 
   gemini-cli:
     install: >-
