@@ -40,19 +40,46 @@ From `../openclaw-config.env`:
 
 Sysbox enables running Docker-in-Docker securely for OpenClaw sandboxes.
 
+### Version check (fresh deployments only)
+
+Before installing, fetch the latest release from GitHub:
+
+```
+https://github.com/nestybox/sysbox/releases
+```
+
+Compare the latest release tag against `SYSBOX_VERSION` below.
+
+- **If a newer version exists:**
+  1. Fetch the release page and summarize the changelog for the user.
+  2. Ask the user whether to use the new version or keep the pinned one.
+  3. If they choose the new version, update `SYSBOX_VERSION` and `SYSBOX_SHA256` below
+     **and save this playbook file** before proceeding to the install script.
+- **If the pinned version is already the latest:** proceed directly.
+
+<!-- Pinned version — update both values together -->
+`SYSBOX_VERSION=0.6.4`
+`SYSBOX_SHA256=d034ddd364ee1f226b8b1ce7456ea8a12abc2eb661bdf42d3e603ed2dc741827`
+
+### Install
+
 ```bash
 #!/bin/bash
-# Download Sysbox (check https://github.com/nestybox/sysbox/releases for latest version)
-wget https://downloads.nestybox.com/sysbox/releases/v0.6.4/sysbox-ce_0.6.4-0.linux_amd64.deb
+SYSBOX_VERSION="0.6.4"
+SYSBOX_SHA256="d034ddd364ee1f226b8b1ce7456ea8a12abc2eb661bdf42d3e603ed2dc741827"
+SYSBOX_DEB="sysbox-ce_${SYSBOX_VERSION}-0.linux_amd64.deb"
 
-# Verify download integrity (hash from https://github.com/nestybox/sysbox/releases/tag/v0.6.4)
-echo "d034ddd364ee1f226b8b1ce7456ea8a12abc2eb661bdf42d3e603ed2dc741827  sysbox-ce_0.6.4-0.linux_amd64.deb" | sha256sum -c -
+# Download
+wget "https://downloads.nestybox.com/sysbox/releases/v${SYSBOX_VERSION}/${SYSBOX_DEB}"
+
+# Verify download integrity
+echo "${SYSBOX_SHA256}  ${SYSBOX_DEB}" | sha256sum -c -
 
 # Install dependencies
 sudo apt install -y jq fuse
 
 # Install Sysbox
-sudo dpkg -i sysbox-ce_0.6.4-0.linux_amd64.deb
+sudo dpkg -i "${SYSBOX_DEB}"
 
 # Verify installation
 sudo systemctl status sysbox
@@ -61,7 +88,7 @@ sudo systemctl status sysbox
 sudo docker info | grep -i "sysbox"
 
 # Cleanup
-rm sysbox-ce_0.6.4-0.linux_amd64.deb
+rm "${SYSBOX_DEB}"
 ```
 
 ---
