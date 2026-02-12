@@ -74,7 +74,7 @@ Two-user security model (see [REQUIREMENTS.md § 2.2](../REQUIREMENTS.md#22-two-
 | `adminclaw` | Key only | Passwordless | System administration, Claude automation |
 | `openclaw` | None | None | Runs application, owns app files |
 
-**IMPORTANT**: You will be prompted to set passwords. Remember these - you may need them for console access.
+Passwords are auto-generated and set non-interactively. **Save the output** — you may need these for VNC/console emergency access.
 
 ```bash
 #!/bin/bash
@@ -83,8 +83,9 @@ Two-user security model (see [REQUIREMENTS.md § 2.2](../REQUIREMENTS.md#22-two-
 # ============================================
 sudo useradd -m -s /bin/bash adminclaw
 
-# Set password interactively - REMEMBER THIS PASSWORD
-sudo passwd adminclaw
+# Generate and set random password (save this for console/emergency access)
+ADMINCLAW_PASS=$(openssl rand -base64 18)
+echo "adminclaw:${ADMINCLAW_PASS}" | sudo chpasswd
 
 # Grant passwordless sudo for automation (required for Claude Code to manage the server)
 echo "adminclaw ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/adminclaw
@@ -102,11 +103,22 @@ sudo chmod 600 /home/adminclaw/.ssh/authorized_keys
 # ============================================
 sudo useradd -m -s /bin/bash openclaw
 
-# Set password interactively - REMEMBER THIS PASSWORD (for console access only)
-sudo passwd openclaw
+# Generate and set random password (save this for console/emergency access)
+OPENCLAW_PASS=$(openssl rand -base64 18)
+echo "openclaw:${OPENCLAW_PASS}" | sudo chpasswd
 
 # NOTE: No sudo configuration for openclaw - this is intentional for security
 # NOTE: No SSH keys for openclaw - access via: sudo su - openclaw
+
+# ============================================
+# Display generated passwords — save these!
+# ============================================
+echo ""
+echo "========================================="
+echo "  Generated Passwords (save these):"
+echo "  adminclaw: ${ADMINCLAW_PASS}"
+echo "  openclaw:  ${OPENCLAW_PASS}"
+echo "========================================="
 ```
 
 **Workflow after setup:**
