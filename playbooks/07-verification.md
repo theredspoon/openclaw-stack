@@ -242,9 +242,11 @@ sudo docker inspect openclaw-gateway --format '{{.HostConfig.PidsLimit}}'
 
 ## 7.7 End-to-End Test
 
-1. **Access OpenClaw** via configured domain
-2. **Send a test message** via webchat
-3. **Verify LLM response** comes back (confirms AI Gateway Worker routing)
+> **Note:** Steps 1-3 below require authenticating through Cloudflare Access, which Claude cannot do via curl. These are user-driven steps. For automated browser E2E testing, see [`docs/TESTING.md`](../docs/TESTING.md) (Phase 2) where the user authenticates via Chrome DevTools.
+
+1. **User: Access OpenClaw** via configured domain (authenticate through Cloudflare Access)
+2. **User: Send a test message** via webchat
+3. **User: Verify LLM response** comes back (confirms AI Gateway Worker routing)
 4. **Check Cloudflare AI Gateway dashboard** for the request (Workers & Pages -> AI Gateway)
 5. **Check Cloudflare Workers logs** for container log entries (Workers & Pages -> log-receiver -> Logs)
 
@@ -372,13 +374,14 @@ sudo journalctl -u <service> -f
 Deployment is complete when:
 
 1. VPS-1 accessible via SSH on port 222
-2. OpenClaw gateway responding on VPS-1
+2. OpenClaw gateway responding on localhost (internal health check)
 3. Vector running and shipping logs
 4. Cloudflare Workers responding to health checks
 5. Container logs appearing in Cloudflare Workers dashboard
-6. External access working via configured networking option
+6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
 8. Host alerter cron job configured on VPS-1
-9. LLM requests visible in Cloudflare AI Gateway analytics
-10. Gateway ports (18789, 18790) not reachable from external network
-11. Security audit passes with no critical or warning findings
+9. Gateway ports (18789, 18790) not reachable from external network
+10. Security audit passes with no critical or warning findings
+
+> **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages, verifying LLM routing) is covered in `08-post-deploy.md` (user-driven) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).

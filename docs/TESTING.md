@@ -55,15 +55,35 @@ Both connections should fail. If either succeeds, Docker daemon.json localhost b
 
 These tests verify the actual user experience through browser automation. They require the Chrome DevTools MCP server.
 
-### 2.1 Test OpenClaw Interface
+**Important: Cloudflare Access gate.** All domain URLs are protected by Cloudflare Access. When navigating to a protected URL for the first time, the browser will show the Cloudflare Access login page. You must:
 
-Services use obscured paths to avoid bot scanners.
+1. Navigate to the URL
+2. Take a snapshot — if it shows a Cloudflare Access login page, **ask the user to authenticate** in the browser
+3. Wait for the user to confirm they've logged in
+4. Then proceed with the test
+
+Do NOT retry or assume the page failed if you see a Cloudflare Access login page. This is expected behavior.
+
+### 2.1 Authenticate Through Cloudflare Access
 
 ```
-# Navigate to OpenClaw page
+# Navigate to OpenClaw — will hit Cloudflare Access login first
 mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/")
+mcp__chrome-devtools__take_snapshot()
+```
 
-# Take a snapshot to verify the page loaded
+If the snapshot shows a Cloudflare Access login page, tell the user:
+
+> "The browser is showing the Cloudflare Access login page. Please authenticate in the browser, then let me know when you're through."
+
+Wait for user confirmation, then take another snapshot to verify they've reached the OpenClaw page.
+
+### 2.2 Test OpenClaw Interface
+
+After authenticating through Cloudflare Access:
+
+```
+# Verify the page loaded
 mcp__chrome-devtools__take_snapshot()
 ```
 
@@ -73,7 +93,7 @@ mcp__chrome-devtools__take_snapshot()
 - Shows OpenClaw interface or token/pairing prompt
 - No console errors related to connection failures
 
-### 2.2 Verify SSL and HTTPS-Only Access
+### 2.3 Verify SSL and HTTPS-Only Access
 
 ```
 # Check for SSL/TLS errors in console
@@ -82,15 +102,32 @@ mcp__chrome-devtools__list_console_messages(types=["error"])
 
 **Success criteria**: No SSL certificate errors.
 
-### 2.3 Verify 404 on Unknown Paths
+### 2.4 Verify 404 on Unknown Paths
 
 ```
-# Try random path - should return 404
+# Try random path - should return 404 (or Access login if path isn't covered by the same Access app)
 mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_DOMAIN>/random-path")
 mcp__chrome-devtools__take_snapshot()
 ```
 
-**Success criteria**: Random paths return 404 (not proxied to backend).
+**Success criteria**: Random paths return 404 (not proxied to backend) or Cloudflare Access login (if the path isn't under the same Access application scope).
+
+### 2.5 Test Browser VNC Access (Optional)
+
+If `OPENCLAW_BROWSER_PUBLIC_URL` is configured:
+
+```
+# Navigate to browser VNC — may hit Cloudflare Access login
+mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_BROWSER_PUBLIC_URL>/")
+mcp__chrome-devtools__take_snapshot()
+```
+
+If Cloudflare Access login appears, ask the user to authenticate (may be automatic if same Access app and already authenticated).
+
+**Success criteria**:
+
+- Page shows the noVNC proxy index page ("OpenClaw Browser Sessions")
+- Links include the correct base path (if subpath URL is used)
 
 ---
 
@@ -105,7 +142,7 @@ After running all tests, compile results:
 | | Fail2ban running | 7.6 | |
 | **Services** | Docker containers running | 7.1 | |
 | | Cloudflare Tunnel active | 7.4 | |
-| | Gateway health endpoint | 7.1 | |
+| | Gateway health endpoint (localhost) | 7.1 | |
 | | Sysbox runtime available | 7.6 | |
 | **Logging** | Vector running and shipping | 7.2 | |
 | **Workers** | AI Gateway healthy | 7.3 | |
@@ -117,9 +154,11 @@ After running all tests, compile results:
 | | Security audit passes | 7.8 | |
 | **End-to-End** | LLM request via AI Gateway | 7.7 | |
 | | Logs in Cloudflare dashboard | 7.7 | |
-| **Browser UI** | OpenClaw loads | Phase 2.1 | |
-| | Valid SSL | Phase 2.2 | |
-| | 404 on unknown paths | Phase 2.3 | |
+| **Browser UI** | Cloudflare Access gate works | Phase 2.1 | |
+| | OpenClaw loads (after auth) | Phase 2.2 | |
+| | Valid SSL | Phase 2.3 | |
+| | 404 on unknown paths | Phase 2.4 | |
+| | Browser VNC index page | Phase 2.5 | |
 
 ---
 

@@ -37,14 +37,14 @@ Read `OPENCLAW_DOMAIN` from `openclaw-config.env`. If it still contains `<exampl
 
 Wait for the user to provide the domain. Update `OPENCLAW_DOMAIN` in `openclaw-config.env`, then continue.
 
-### Verify domain connectivity
+### Verify domain is protected by Cloudflare Access
 
 ```bash
-# Test if the domain resolves and responds
+# Test if the domain resolves — should get a 302/403 redirect to the Access login page
 curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | head -10
 ```
 
-**If the domain is not reachable (connection refused, timeout, or DNS error):**
+**If connection refused, timeout, or DNS error:**
 
 The user needs to configure Cloudflare Access and add the published hostname route. Present:
 
@@ -60,16 +60,9 @@ The user needs to configure Cloudflare Access and add the published hostname rou
 
 Wait for the user to confirm before proceeding.
 
-**If the domain is reachable:** Check for Cloudflare Access headers:
+**If the response is a 302/403 redirect** (to a URL containing `cloudflareaccess.com` or `access.` in the `Location` header): Cloudflare Access is protecting the domain. Proceed to section 8.0b.
 
-```bash
-# Check for CF-Access headers (indicates Access is configured)
-curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | grep -i 'cf-access\|cf-authorization'
-```
-
-If Access headers are present (or the response is a 302/403 redirect to the Access login page), Access is configured — proceed to section 8.0b.
-
-If no Access headers and the response is 200 (domain accessible without auth), warn:
+**If the response is 200** (domain accessible without auth), warn:
 
 > "Your domain is accessible without Cloudflare Access authentication. This means anyone with the URL can reach OpenClaw.
 >
@@ -78,6 +71,8 @@ If no Access headers and the response is 200 (domain accessible without auth), w
 > Let me know when done."
 
 Wait for the user to confirm before proceeding.
+
+> **Note:** Do NOT attempt to verify that the gateway is reachable through the tunnel from here. Cloudflare Access blocks unauthenticated requests. The gateway was already verified internally (localhost) in `07-verification.md`. End-to-end browser verification happens in [`docs/TESTING.md`](../docs/TESTING.md) where the user authenticates through Cloudflare Access via Chrome DevTools.
 
 ---
 
@@ -118,22 +113,36 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'"
 ```
 
-### Verify browser VNC access
+### Verify browser VNC route is protected
 
 ```bash
-# Test browser VNC URL
+# Test browser VNC URL — should get 302/403 redirect to Cloudflare Access login
 curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_PUBLIC_URL>/ 2>&1 | head -10
 ```
 
-**Expected:** A 302/403 response (Cloudflare Access login page) or 200 if already authenticated.
+**Expected:** A 302 or 403 response redirecting to the Cloudflare Access login page. This confirms the tunnel route exists and is protected. Do NOT expect a 200 — Cloudflare Access blocks unauthenticated requests.
+
+If you get a connection error or timeout, the tunnel route hasn't been configured yet. Ask the user to add it in the Cloudflare Dashboard.
+
+### Verify novnc-proxy internally (via SSH)
 
 ```bash
-# Internal check: verify novnc-proxy is running with the correct base path
+# Check novnc-proxy is running with the correct base path
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo docker logs openclaw-gateway 2>&1 | grep 'novnc-proxy'"
 ```
 
 **Expected:** Log line showing `[novnc-proxy] Listening on port 6090, base path: /browser` (or similar, matching the configured path).
+
+```bash
+# Internal check: verify the proxy responds on localhost (inside the VPS, bypasses Cloudflare Access)
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "curl -sI http://localhost:6090/<NOVNC_BASE_PATH_WITHOUT_LEADING_SLASH>/ 2>&1 | head -5"
+```
+
+**Expected:** 200 response with `text/html` content type (the index page).
+
+> **Note:** Full end-to-end browser verification (authenticating through Cloudflare Access and viewing VNC sessions) is covered in [`docs/TESTING.md`](../docs/TESTING.md).
 
 ---
 
