@@ -130,6 +130,7 @@
   },
   "plugins": {
     "enabled": true,
+    "allow": ["skill-router"],
     "entries": {
       "skill-router": {
         "enabled": true,

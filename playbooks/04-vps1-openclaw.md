@@ -563,15 +563,12 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
 sudo docker logs --tail 20 openclaw-gateway
 ```
 
-### Auto-pair the CLI via loopback
+### Auto-pair the CLI
 
 The CLI needs a paired device identity to run gateway commands like `devices approve`.
-But pairing itself requires the CLI — a circular dependency on first deployment.
-
-**Fix:** Force a loopback connection (`--url ws://localhost:18789`) which the gateway
-auto-approves (`isLocalClient` → `silent: true`). Once paired, the device identity
-persists in `.openclaw/` via bind mount and all subsequent connections work regardless
-of source IP.
+On a fresh deployment with no paired devices, the gateway auto-approves the first device
+that connects. Once paired, the device identity persists in `.openclaw/identity/` and
+the pairing record in `.openclaw/devices/paired.json` — both survive gateway restarts.
 
 Wait for the gateway to be healthy before pairing:
 
@@ -581,17 +578,20 @@ Wait for the gateway to be healthy before pairing:
 echo "Waiting for gateway to be healthy..."
 timeout 120 bash -c 'until curl -sf http://localhost:18789/health > /dev/null 2>&1; do sleep 3; done'
 
-# Auto-pair the CLI via loopback
-GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
-sudo docker exec --user node openclaw-gateway \
-  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
+# Auto-pair: on first deployment, the first CLI connection is auto-approved
+sudo docker exec --user node openclaw-gateway openclaw devices list
 
-# Verify: CLI should now work without --url override
-openclaw devices list
+# Verify: CLI should work from the host wrapper too
+sudo openclaw devices list
 ```
 
-**Expected:** Both commands succeed. The first command triggers auto-pairing via loopback;
-the second confirms the CLI's device identity is stored and works from the host wrapper.
+**Expected:** Both commands succeed. The first triggers auto-pairing (first device on fresh
+gateway). The second confirms the host wrapper works.
+
+> **Re-pairing after identity loss:** If the CLI identity is deleted while other devices
+> are already paired, auto-pair won't work — the gateway only auto-approves the first
+> device. To re-pair: run a CLI command (it creates a pending request), then approve it
+> via the Control UI or see Troubleshooting below.
 
 ---
 
@@ -746,6 +746,52 @@ sudo docker exec vector wget -q -O- <LOG_WORKER_URL_WITHOUT_PATH>/health
 # Restart Vector after fixing
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
 ```
+
+### CLI Pairing Lost
+
+If the CLI device identity is deleted or corrupted while other devices are already paired,
+the gateway won't auto-approve a new CLI device. To re-pair:
+
+1. **Trigger a pending request** — run any CLI command (it will fail but register a pending pairing):
+   ```bash
+   sudo docker exec --user node openclaw-gateway openclaw devices list 2>&1 || true
+   ```
+
+2. **Approve via Control UI** — log into the Control UI and approve the pending device.
+
+3. **Or approve via file manipulation** (if no UI access):
+   ```bash
+   sudo python3 -c "
+   import json, time
+   with open('/home/openclaw/.openclaw/devices/pending.json') as f:
+       pending = json.load(f)
+   with open('/home/openclaw/.openclaw/devices/paired.json') as f:
+       paired = json.load(f)
+   for req_id, req in list(pending.items()):
+       if req.get('clientId') == 'cli':
+           now = int(time.time() * 1000)
+           paired[req['deviceId']] = {
+               'deviceId': req['deviceId'], 'publicKey': req['publicKey'],
+               'platform': req['platform'], 'clientId': req['clientId'],
+               'clientMode': req['clientMode'], 'role': req['role'],
+               'roles': req['roles'], 'scopes': req['scopes'],
+               'remoteIp': req['remoteIp'],
+               'createdAtMs': now, 'approvedAtMs': now,
+           }
+           del pending[req_id]
+           break
+   with open('/home/openclaw/.openclaw/devices/paired.json', 'w') as f:
+       json.dump(paired, f, indent=2)
+   with open('/home/openclaw/.openclaw/devices/pending.json', 'w') as f:
+       json.dump(pending, f, indent=2)
+   print('CLI device approved')
+   "
+   ```
+
+4. **Verify** — the CLI should work immediately (gateway reads files on each connection):
+   ```bash
+   sudo openclaw devices list
+   ```
 
 ### Network Issues
 
