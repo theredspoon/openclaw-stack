@@ -89,7 +89,7 @@ to provide missing config values in the chat or in openclaw-config.env before co
 When values are provided in chat, update the appropriate var in `openclaw-config.env` then rerun
 these configuration checks in order, starting with #1.
 
-1. Check `openclaw-config.env` exists. If missing, tell user to `cp openclaw-config.example.env openclaw-config.env` and fill in values. Give the user the option to copy the example env for them.
+1. Check `openclaw-config.env` exists. If missing, tell user to `cp openclaw-config.env.example openclaw-config.env` and fill in values. Give the user the option to copy the example env for them.
 
 2. Validate required fields: `VPS1_IP`, `SSH_KEY_PATH` (must exist on local system), `SSH_USER`, `OPENCLAW_DOMAIN`, `AI_GATEWAY_WORKER_URL`, `AI_GATEWAY_AUTH_TOKEN`, `LOG_WORKER_URL`, `LOG_WORKER_TOKEN`. Report all missing fields.
 
