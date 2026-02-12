@@ -4,6 +4,7 @@
 # Patches applied (each auto-skips when upstream fixes the issue):
 #   1. Dockerfile: install Docker + gosu for nested Docker (sandbox isolation via Sysbox)
 #   2. attempt.ts: enable systemPrompt in before_agent_start hook (for skill-router plugin)
+#   3. docker.ts: apply sandbox env vars (docker.env) to container creation
 #
 # Usage: sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 set -euo pipefail
@@ -34,11 +35,22 @@ else
   echo "[build] attempt.ts already supports systemPrompt (already patched or upstream fix)"
 fi
 
-# ── 3. Build image ───────────────────────────────────────────────────
+# ── 3. Patch docker.ts to apply env vars from sandbox config ──
+# The config resolver (config.ts) computes merged env but docker.ts never
+# passes -e flags to docker create. This adds the missing loop.
+DOCKER_FILE="src/agents/sandbox/docker.ts"
+if [ -f "$DOCKER_FILE" ] && ! grep -q 'params.cfg.env' "$DOCKER_FILE"; then
+  echo "[build] Patching docker.ts to apply sandbox env vars..."
+  sed -i '/^  return args;$/i\  if (params.cfg.env) {\n    for (const [key, value] of Object.entries(params.cfg.env)) {\n      if (key && value !== undefined) {\n        args.push("-e", `${key}=${value}`);\n      }\n    }\n  }' "$DOCKER_FILE"
+else
+  echo "[build] docker.ts already applies env vars (already patched or upstream fix)"
+fi
+
+# ── Build image ──────────────────────────────────────────────────────
 echo "[build] Building openclaw:local..."
 docker build -t openclaw:local .
 
-# ── 4. Restore patched files (keep git working tree clean) ───────────
-git checkout -- Dockerfile "$ATTEMPT_FILE" 2>/dev/null || true
+# ── 5. Restore patched files (keep git working tree clean) ───────────
+git checkout -- Dockerfile "$ATTEMPT_FILE" "$DOCKER_FILE" 2>/dev/null || true
 
 echo "[build] Done. Run: docker compose up -d openclaw-gateway"

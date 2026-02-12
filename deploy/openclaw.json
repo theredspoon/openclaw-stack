@@ -41,11 +41,17 @@
           "containerPrefix": "openclaw-sbx-",
           "workdir": "/workspace",
           "readOnlyRoot": true,
-          "tmpfs": ["/tmp", "/var/tmp", "/run"],
+          "tmpfs": [
+            "/tmp",
+            "/var/tmp",
+            "/run",
+            "/home/linuxbrew:uid=1000,gid=1000"
+          ],
           "network": "none",
           "user": "1000:1000",
           "capDrop": ["ALL"],
           "env": {
+            "HOME": "/home/linuxbrew",
             "LANG": "C.UTF-8",
             "PATH": "/opt/skill-bins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           },
@@ -96,20 +102,12 @@
         "sandbox": {
           "docker": {
             "image": "openclaw-sandbox-common:bookworm-slim",
-            "tmpfs": [
-              "/tmp",
-              "/var/tmp",
-              "/run",
-              "/home/linuxbrew:uid=1000,gid=1000"
-            ],
             "network": "bridge",
-            "pidsLimit": 512,
             "memory": "3g",
             "memorySwap": "5g",
             "cpus": 2,
             "binds": [
-              "/home/node/.claude-sandbox:/home/linuxbrew/.claude",
-              "/opt/skill-bins:/opt/skill-bins:ro"
+              "/home/node/.claude-sandbox:/home/linuxbrew/.claude"
             ]
           }
         }
