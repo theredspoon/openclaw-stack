@@ -112,11 +112,11 @@ sudo tar -tzf /home/openclaw/.openclaw/backups/openclaw_backup_*.tar.gz
 # Check cron job is installed
 cat /etc/cron.d/openclaw-backup
 
-# Check backup directory exists
-ls -la /home/openclaw/.openclaw/backups/
+# Check backup directory exists (sudo required — .openclaw is owned by uid 1000)
+sudo ls -la /home/openclaw/.openclaw/backups/
 
 # Check backup log (after first run)
-cat /home/openclaw/.openclaw/logs/backup.log
+sudo cat /home/openclaw/.openclaw/logs/backup.log
 ```
 
 ---
@@ -137,8 +137,8 @@ cat /home/openclaw/.openclaw/logs/backup.log
 ## Restore Procedure
 
 ```bash
-# List available backups
-ls -la /home/openclaw/.openclaw/backups/
+# List available backups (sudo required — .openclaw is owned by uid 1000)
+sudo ls -la /home/openclaw/.openclaw/backups/
 
 # Stop OpenClaw
 cd /home/openclaw/openclaw
@@ -165,8 +165,8 @@ sudo -u openclaw docker compose up -d
 # Symptom: Backup cron job fails with permission denied
 # Cause: .openclaw owned by uid 1000, but openclaw user is uid 1002
 
-# Check ownership
-ls -la /home/openclaw/.openclaw/
+# Check ownership (sudo required — .openclaw is owned by uid 1000)
+sudo ls -la /home/openclaw/.openclaw/
 # Shows: drwx------ 1000 1000 ... (container's node user, NOT host's openclaw)
 
 # Solution: Backup runs as root via /etc/cron.d (not user crontab)
