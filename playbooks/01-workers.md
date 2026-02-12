@@ -64,6 +64,8 @@ npx wrangler whoami
 echo "<account-id>" | npx wrangler secret put ACCOUNT_ID
 ```
 
+> **Multiple Cloudflare accounts:** If `wrangler whoami` lists more than one account, wrangler commands will fail with _"More than one account available but unable to select one in non-interactive mode."_ Fix by adding `"account_id": "<id>"` to `wrangler.jsonc`, or by setting `export CLOUDFLARE_ACCOUNT_ID=<id>` before running wrangler commands. Use the account ID that matches your Workers subscription.
+
 #### 2. AUTH_TOKEN
 
 If `AI_GATEWAY_AUTH_TOKEN` in `openclaw-config.env` still contains a placeholder (angle brackets), auto-generate a random token:
