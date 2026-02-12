@@ -19,8 +19,8 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 
 ## Completed (this branch)
 
+- [x] Serve html instead of not found for media server when no files are present
 - [x] Add docs/ to sandbox agents, system prompt references docs/ to assist users with openclaw: <https://docs.openclaw.ai/concepts/system-prompt>
-
 - [x] Set OPENAI_BASE_URL and ANTHROPIC_BASE_URL in sandbox env so sdk's pick up the urls
 - [x] Modify log worker to use console.log/warn/error to highlight the logs in cloudflare dashboard
 - [x] Make sure CLI pairing happens during deploy - cli requires device pairing or openclaw commands will fail
@@ -28,7 +28,6 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 - [x] Update Cloudflare Tunnel doc
   - See existing claude UI chat about "Cloudflare Tunnel"
 - [x] Add log rotation: <https://github.com/openclaw/openclaw/blob/main/src/hooks/bundled/command-logger/HOOK.md>
-
 - [x] Create branch otel-v1 and push to github — saves a snapshot of the OTEL work
 - [x] Create Log Receiver Worker (workers/log-receiver/)
 - [x] Create Vector config (vector.toml)
