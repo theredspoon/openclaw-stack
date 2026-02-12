@@ -91,6 +91,15 @@ tools:
   mcporter:
     install: npm install -g mcporter
 
+  codex:
+    install: npm install -g @openai/codex
+
+  opencode:
+    install: npm install -g opencode-ai
+
+  amp:
+    install: npm install -g @sourcegraph/amp
+
   # --- Skills: brew tools ---
   # Brew refuses to run as root. Install via su to linuxbrew user,
   # then symlink binaries to BIN_DIR for gateway shim + PATH availability.
