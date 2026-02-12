@@ -202,6 +202,16 @@ function handleMediaRequest(req, res, path) {
   try {
     stat = lstatSync(resolved);
   } catch {
+    // If the media root itself doesn't exist, show a friendly empty page
+    if (resolved === MEDIA_ROOT || resolved.startsWith(MEDIA_ROOT + '/')) {
+      const html = htmlPage('Media Files',
+        `<h1>Media Files</h1>
+         <p><a href="${BP}/">&larr; Back to sessions</a></p>
+         <p class="empty">No media files yet. Media files appear here when agents capture screenshots or download files.</p>`);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+      return;
+    }
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
     return;
