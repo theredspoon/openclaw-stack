@@ -1,21 +1,35 @@
 #!/usr/bin/env node
 
-// noVNC reverse proxy — routes browser sandbox noVNC UIs on a fixed port.
+// noVNC reverse proxy + media file server — routes browser sandbox noVNC UIs
+// and serves agent-generated media files on a fixed port.
 // Reads browsers.json on each request to discover sandbox containers and
 // their dynamically-mapped noVNC ports. Zero dependencies (built-in http only).
 //
 // URL routing:
 //   GET /                     → index page listing active sessions
+//   GET /media/               → directory listing of media files
+//   GET /media/<path>         → serve static file from ~/.openclaw/media/
 //   GET /<agent-id>/          → redirect to noVNC client
 //   GET /<agent-id>/*         → proxy to browser container's noVNC
 //   WS  /<agent-id>/websockify → WebSocket proxy for VNC stream
 
 import { createServer, request as httpRequest } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, createReadStream, readdirSync, lstatSync } from 'node:fs';
 import { connect } from 'node:net';
+import { resolve, extname, join } from 'node:path';
 
 const PORT = 6090;
 const BROWSERS_JSON = '/home/node/.openclaw/sandbox/browsers.json';
+const MEDIA_ROOT = '/home/node/.openclaw/media';
+
+const MIME_TYPES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+};
 
 function readBrowsers() {
   try {
@@ -74,10 +88,12 @@ function htmlPage(title, body) {
 
 async function indexPage() {
   const entries = readBrowsers();
+  const mediaLink = '<p style="margin-top: 16px;"><a href="/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>';
   if (entries.length === 0) {
     return htmlPage('OpenClaw Browser Sessions',
       `<h1>OpenClaw Browser Sessions</h1>
-       <p class="empty">No active browser sessions. Browser containers are created on-demand when agents use the browser tool.</p>`);
+       <p class="empty">No active browser sessions. Browser containers are created on-demand when agents use the browser tool.</p>
+       ${mediaLink}`);
   }
 
   const rows = await Promise.all(entries.map(async (e) => {
@@ -100,7 +116,8 @@ async function indexPage() {
        <thead><tr><th>Agent</th><th>Container</th><th>Status</th></tr></thead>
        <tbody>${rows.join('\n')}</tbody>
      </table>
-     <p class="note">Page auto-refreshes every 10 seconds.</p>`);
+     <p class="note">Page auto-refreshes every 10 seconds.</p>
+     ${mediaLink}`);
 }
 
 function containerDownPage(agentId) {
@@ -112,6 +129,102 @@ function containerDownPage(agentId) {
      <p style="margin-top: 24px;"><a href="/">&larr; Back to sessions</a></p>`);
 }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mediaDirectoryPage(dirPath, urlPath) {
+  let entries;
+  try {
+    entries = readdirSync(dirPath).map(name => {
+      try {
+        const stat = lstatSync(join(dirPath, name));
+        if (stat.isSymbolicLink()) return null;
+        return { name, isDir: stat.isDirectory(), size: stat.size, mtimeMs: stat.mtimeMs };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+  } catch {
+    return null;
+  }
+
+  // Directories first, then files — both sorted newest-first
+  const dirs = entries.filter(e => e.isDir).sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const files = entries.filter(e => !e.isDir).sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  const prefix = urlPath.endsWith('/') ? urlPath : urlPath + '/';
+  const rows = [
+    ...dirs.map(e => `<tr><td>&#128193; <a href="${prefix}${e.name}/">${e.name}/</a></td><td>&mdash;</td></tr>`),
+    ...files.map(e => `<tr><td>&#128196; <a href="${prefix}${e.name}">${e.name}</a></td><td>${formatSize(e.size)}</td></tr>`),
+  ];
+
+  const parentLink = urlPath === '/media' ? '/' : urlPath.replace(/\/[^/]+\/?$/, '/');
+  const body = `<h1>Media Files &mdash; ${urlPath.replace('/media', '') || '/'}</h1>
+     <p><a href="${parentLink}">&larr; Back</a></p>
+     ${rows.length === 0
+       ? '<p class="empty">No files yet. Media files appear here when agents capture screenshots or download files.</p>'
+       : `<table>
+       <thead><tr><th>Name</th><th>Size</th></tr></thead>
+       <tbody>${rows.join('\n')}</tbody>
+     </table>`}`;
+
+  return htmlPage('Media Files', body);
+}
+
+function handleMediaRequest(req, res, path) {
+  // Strip /media prefix to get relative path
+  const relPath = decodeURIComponent(path.slice('/media'.length)) || '/';
+  const resolved = resolve(MEDIA_ROOT, relPath.startsWith('/') ? relPath.slice(1) : relPath);
+
+  // Path traversal protection
+  if (!resolved.startsWith(MEDIA_ROOT)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden');
+    return;
+  }
+
+  let stat;
+  try {
+    stat = lstatSync(resolved);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not found');
+    return;
+  }
+
+  // Reject symlinks
+  if (stat.isSymbolicLink()) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden');
+    return;
+  }
+
+  // Directory listing
+  if (stat.isDirectory()) {
+    const html = mediaDirectoryPage(resolved, path.replace(/\/+$/, ''));
+    if (!html) {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Error reading directory');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+    return;
+  }
+
+  // Serve file
+  const mime = MIME_TYPES[extname(resolved).toLowerCase()] || 'application/octet-stream';
+  res.writeHead(200, {
+    'Content-Type': mime,
+    'Content-Length': stat.size,
+    'X-Content-Type-Options': 'nosniff',
+  });
+  createReadStream(resolved).pipe(res);
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const path = url.pathname;
@@ -120,6 +233,12 @@ const server = createServer(async (req, res) => {
   if (path === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(await indexPage());
+    return;
+  }
+
+  // Media file serving
+  if (path === '/media' || path.startsWith('/media/')) {
+    handleMediaRequest(req, res, path === '/media' ? '/media/' : path);
     return;
   }
 
