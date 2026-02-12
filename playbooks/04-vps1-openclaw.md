@@ -503,7 +503,7 @@ To add a new hook: create `deploy/hooks/<name>/` with HOOK.md + handler.js, add 
 
 ---
 
-## 4.9 Build and Start OpenClaw
+## 4.9 Build, Start, and Auto-Pair CLI
 
 ```bash
 #!/bin/bash
@@ -517,6 +517,36 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
 sudo docker logs --tail 20 openclaw-gateway
 ```
+
+### Auto-pair the CLI via loopback
+
+The CLI needs a paired device identity to run gateway commands like `devices approve`.
+But pairing itself requires the CLI — a circular dependency on first deployment.
+
+**Fix:** Force a loopback connection (`--url ws://localhost:18789`) which the gateway
+auto-approves (`isLocalClient` → `silent: true`). Once paired, the device identity
+persists in `.openclaw/` via bind mount and all subsequent connections work regardless
+of source IP.
+
+Wait for the gateway to be healthy before pairing:
+
+```bash
+#!/bin/bash
+# Wait for gateway health endpoint to respond
+echo "Waiting for gateway to be healthy..."
+timeout 120 bash -c 'until curl -sf http://localhost:18789/health > /dev/null 2>&1; do sleep 3; done'
+
+# Auto-pair the CLI via loopback
+GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+sudo docker exec --user node openclaw-gateway \
+  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
+
+# Verify: CLI should now work without --url override
+openclaw devices list
+```
+
+**Expected:** Both commands succeed. The first command triggers auto-pairing via loopback;
+the second confirms the CLI's device identity is stored and works from the host wrapper.
 
 ---
 

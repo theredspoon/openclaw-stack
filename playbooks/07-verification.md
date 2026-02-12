@@ -155,10 +155,33 @@ sudo logrotate -d /etc/logrotate.d/openclaw
 
 # Optional: force a rotation cycle to confirm .1 files appear
 sudo logrotate -f /etc/logrotate.d/openclaw
-ls -la /home/openclaw/.openclaw/logs/
+sudo ls -la /home/openclaw/.openclaw/logs/
 ```
 
 **Expected:** Config file exists with mode 644. Dry run shows no errors. After forced rotation, `.1` files appear alongside the originals. Log writers (`debug.log`, `commands.log`) continue appending to the truncated files.
+
+---
+
+## 7.5b Verify CLI Pairing
+
+```bash
+# Verify CLI is paired and can communicate with the gateway
+openclaw devices list
+
+# Expected: command succeeds and shows at least one paired device (the CLI itself)
+```
+
+**Expected:** Command completes without "pairing required" errors. At least one device should be listed as paired.
+
+**If it fails with "pairing required":**
+
+Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.9:
+
+```bash
+GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+sudo docker exec --user node openclaw-gateway \
+  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
+```
 
 ---
 

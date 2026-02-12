@@ -106,74 +106,45 @@ Ask the user to confirm they can see the page (even with the pairing error) befo
 
 ## 8.3 Approve Device Pairing
 
-After the user confirms they opened the URL, approve their device.
+After the user opens the URL and sees the "pairing required" message, approve their webchat device.
 
-### First device pairing
-
-The host CLI wrapper (`openclaw devices list`) connects to the gateway via WebSocket, which
-itself requires a paired device — a circular dependency on first deployment. Break the cycle
-by running the CLI directly inside the container via `docker exec` (bypasses the host wrapper).
+The CLI was auto-paired during deployment (section 4.9 of `04-vps1-openclaw.md`),
+so `openclaw devices approve` works directly.
 
 ```bash
-# 1. Read pending requests directly from the filesystem
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec openclaw-gateway cat /home/node/.openclaw/devices/pending.json"
-```
-
-Find the `requestId` for the `openclaw-control-ui` client from the output, then approve it:
-
-```bash
-# 2. Try CLI approval inside the container (bypasses host wrapper's pairing requirement)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec --user node openclaw-gateway openclaw devices approve <requestId>"
-```
-
-Tell the user to wait approximately 15 seconds — the browser will automatically retry the connection and should connect successfully once the device is approved.
-
-#### If CLI approval fails (circular dependency)
-
-If the `devices approve` subcommand also requires a paired device, fall back to `jq` file manipulation.
-The `paired.json` file is a JSON **dict keyed by deviceId** (not an array).
-
-```bash
-# Fallback: approve via jq file manipulation
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  'sudo docker exec openclaw-gateway bash -c '"'"'
-    REQUEST_ID="<requestId>"
-    NOW_MS=$(date +%s)000
-    DEVICE=$(jq --arg rid "$REQUEST_ID" --arg now "$NOW_MS" \
-      ".[\$rid] + {approvedAt: (\$now | tonumber)}" \
-      /home/node/.openclaw/devices/pending.json)
-    DEVICE_ID=$(echo "$DEVICE" | jq -r ".deviceId")
-    jq --argjson dev "$DEVICE" \
-      ". + {(\$dev.deviceId): \$dev}" \
-      /home/node/.openclaw/devices/paired.json > /tmp/paired.json \
-      && mv /tmp/paired.json /home/node/.openclaw/devices/paired.json
-    echo "Approved device: $DEVICE_ID"
-  '"'"''
-```
-
-> **Note:** After the first device is paired, subsequent devices can be approved from the
-> Control UI or via the CLI `devices approve` command (see below).
-
-### Subsequent devices (CLI)
-
-Once at least one device is paired, the CLI works normally:
-
-```bash
-# List pending/approved devices
+# 1. List pending device requests
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "openclaw devices list"
+```
 
-# Approve a pending device
+Find the `requestId` for the `openclaw-control-ui` client, then approve:
+
+```bash
+# 2. Approve the webchat device
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "openclaw devices approve <requestId>"
 ```
 
+Tell the user to wait ~15 seconds — the browser auto-retries and should connect.
+
 ### If no pending requests appear
 
-- Pending requests have a **5-minute TTL**. If the user waited too long, the request may have expired. Ask them to refresh the page and re-read `pending.json`.
-- Each browser retry creates a new pending request, so there may be multiple. Use the most recent `requestId` for the `openclaw-control-ui` client.
+- Pending requests have a **5-minute TTL**. If the user waited too long, ask them to refresh.
+- Each browser retry creates a new pending request. Use the most recent `requestId`.
+
+### If CLI fails with "pairing required"
+
+The CLI device identity was lost or never created. Re-run auto-pairing:
+
+```bash
+GATEWAY_TOKEN=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2")
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo docker exec --user node openclaw-gateway \
+    openclaw devices list --url ws://localhost:18789 --token $GATEWAY_TOKEN"
+```
+
+Then retry the approval above.
 
 ---
 
@@ -211,6 +182,13 @@ openclaw devices approve <requestId>     # Approve a device
 **Control UI:** Once one device is paired, approve new devices from the Control UI.
 
 **Notes:** Pending requests expire after 5 minutes. The browser auto-retries, creating new requests. Refresh the page if a request expired.
+
+**Re-pairing the CLI** (if device identity is lost):
+```bash
+GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+sudo docker exec --user node openclaw-gateway \
+  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
+```
 
 ---
 
