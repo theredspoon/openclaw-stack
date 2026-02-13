@@ -197,6 +197,11 @@ VPS1_IP=${VPS1_IP}
 # Empty = proxy serves at root (e.g., browser on a separate subdomain)
 NOVNC_BASE_PATH=${NOVNC_BASE_PATH}
 
+# Gateway Control UI subpath — must match gateway.controlUi.basePath in openclaw.json.
+# Used by Docker healthcheck and playbook verification commands.
+# Empty = Control UI served at root (no subpath).
+OPENCLAW_DOMAIN_PATH=${OPENCLAW_DOMAIN_PATH:-}
+
 # Docker compose variables (required by repo's docker-compose.yml)
 OPENCLAW_CONFIG_DIR=/home/openclaw/.openclaw
 OPENCLAW_WORKSPACE_DIR=/home/openclaw/.openclaw/workspace
@@ -575,8 +580,9 @@ Wait for the gateway to be healthy before pairing:
 ```bash
 #!/bin/bash
 # Wait for gateway health endpoint to respond
+# OPENCLAW_DOMAIN_PATH from openclaw-config.env (e.g. "/openclaw"), empty if no subpath
 echo "Waiting for gateway to be healthy..."
-timeout 120 bash -c 'until curl -sf http://localhost:18789/health > /dev/null 2>&1; do sleep 3; done'
+timeout 120 bash -c 'until curl -sf http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ > /dev/null 2>&1; do sleep 3; done'
 
 # Auto-pair: on first deployment, the first CLI connection is auto-approved
 sudo docker exec --user node openclaw-gateway openclaw devices list
@@ -609,11 +615,8 @@ sudo -u openclaw docker compose ps
 # Check gateway logs
 sudo docker logs --tail 50 openclaw-gateway
 
-# Test internal endpoint
-curl -s http://localhost:18789/ | head -5
-
-# Test health endpoint
-curl -s http://localhost:18789/health
+# Test internal endpoint (must include basePath if controlUi.basePath is set)
+curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
 
 # Check Vector is running
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps vector'
@@ -837,7 +840,7 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
 # 5. Verify new version
 openclaw --version
-curl -s http://localhost:18789/health
+curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/
 
 # 6. Cleanup old rollback images (keep last 3)
 docker images --format '{{.Repository}}:{{.Tag}}' | grep 'openclaw:rollback-' | sort -r | tail -n +4 | xargs -r docker rmi
@@ -862,7 +865,7 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
 # 4. Verify
 openclaw --version
-curl -s http://localhost:18789/health
+curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/
 ```
 
 > If the rollback date tag doesn't match today, list available rollback images with:

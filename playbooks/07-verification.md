@@ -45,14 +45,11 @@ sudo -u openclaw docker compose ps
 # Check gateway logs for errors
 sudo docker logs --tail 50 openclaw-gateway
 
-# Test internal endpoint
-curl -s http://localhost:18789/ | head -5
-
-# Test health endpoint
-curl -s http://localhost:18789/health
+# Test internal endpoint (must include basePath if controlUi.basePath is set)
+curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
 ```
 
-**Expected:** All containers running, health endpoint returns OK.
+**Expected:** All containers running, endpoint returns the Control UI HTML.
 
 ---
 

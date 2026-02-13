@@ -74,6 +74,14 @@ Wait for the user to confirm before proceeding.
 
 > **Note:** Do NOT attempt to verify that the gateway is reachable through the tunnel from here. Cloudflare Access blocks unauthenticated requests. The gateway was already verified internally (localhost) in `07-verification.md`. End-to-end browser verification happens in [`docs/TESTING.md`](../docs/TESTING.md) where the user authenticates through Cloudflare Access via Chrome DevTools.
 
+> **Tunnel routing:** The gateway's WebSocket endpoint accepts connections at any URL path,
+> but the Control UI client connects to `wss://<host>/` (root path, not the basePath).
+> This means the reverse proxy/tunnel **must use catch-all routing** for the gateway hostname
+> — path-based routing (e.g., only forwarding `/openclaw/*`) will break WebSocket connections.
+> If both gateway and browser VNC share the same hostname, configure the browser path rule
+> (`/browser` → `localhost:6090`) **before** the catch-all gateway rule (`*` → `localhost:18789`).
+> There is no gateway config option for a WebSocket basePath.
+
 ---
 
 ## 8.0b Connect Browser VNC via Cloudflare Tunnel

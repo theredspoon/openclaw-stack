@@ -21,7 +21,7 @@ This document describes how to secure OpenClaw behind Cloudflare Tunnel, elimina
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────-┐
+┌──────────────────────────────────────────────────────────────┐
 │                         Internet                             │
 │                                                              │
 │    User ──► openclaw.yourdomain.com ──► Cloudflare Edge      │
@@ -38,8 +38,9 @@ This document describes how to secure OpenClaw behind Cloudflare Tunnel, elimina
 │                                              ▼               │
 │    cloudflared ◄─────────────────────────────┘               │
 │        │                                                     │
-│        ▼                                                     │
-│    localhost:18789 (OpenClaw Gateway)                        │
+│        ├── /browser/* ──► localhost:6090 (noVNC proxy)        │
+│        │                                                     │
+│        └── * (catch-all) ──► localhost:18789 (Gateway)        │
 │                                                              │
 │    Port 443: CLOSED                                          │
 │    Port 80:  CLOSED                                          │
@@ -164,26 +165,86 @@ The **One-time PIN** option is great for getting started quickly — it requires
 
 ### Step 4: Connect Your Domain
 
-Now that Access is configured, add the public hostname route to make the domain accessible (behind Access):
+Now that Access is configured, add the public hostname route(s) to make the domain accessible (behind Access).
+
+There are two approaches for routing the gateway and browser VNC:
+
+- **Same subdomain (recommended):** Both gateway and browser VNC share one subdomain with path-based rules. Simpler DNS and Access configuration.
+- **Separate subdomains:** Gateway and browser VNC each get their own subdomain. Requires separate DNS entries and Access applications.
+
+---
+
+#### Option A: Same Subdomain (Recommended)
+
+Both the gateway and browser VNC share a single subdomain. The tunnel uses path-based routing to send `/browser` traffic to the noVNC proxy and everything else to the gateway.
+
+**Important:** The gateway's WebSocket client connects to `wss://<host>/` (root path), so the gateway rule **must be a catch-all** (no path filter). The `/browser` path rule must be listed **before** the catch-all gateway rule — Cloudflare evaluates rules in order and uses the first match.
 
 1. Go to **Zero Trust Dashboard** → **Networks** → **Tunnels**
 2. Click your tunnel → **Configure**
-3. Add a public hostname:
+3. Add **two** public hostname rules in this order:
+
+**Rule 1 — Browser VNC** (must be first):
 
 | Field | Value |
 |-------|-------|
 | **Subdomain** | `openclaw` (or your choice) |
 | **Domain** | Select your domain (e.g., `example.com`) |
+| **Path** | `browser` |
+| **Service Type** | `HTTP` |
+| **URL** | `localhost:6090` |
+
+**Rule 2 — Gateway** (catch-all, must be after browser rule):
+
+| Field | Value |
+|-------|-------|
+| **Subdomain** | `openclaw` (same as above) |
+| **Domain** | Select your domain |
+| **Path** | *(leave empty)* |
 | **Service Type** | `HTTP` |
 | **URL** | `localhost:18789` |
 
-1. Save
+4. Save
 
-#### Browser VNC Access (Optional)
+Then set in `openclaw-config.env`:
 
-To view/control agent browser sessions remotely, add a route pointing to the noVNC proxy. Two options:
+```
+OPENCLAW_DOMAIN=openclaw.yourdomain.com
+OPENCLAW_BROWSER_PUBLIC_URL=openclaw.yourdomain.com/browser
+```
 
-**Option A: Separate subdomain**
+> **Why catch-all routing?** The OpenClaw Control UI opens a WebSocket connection to
+> `wss://<host>/` (the root path of the hostname). There is no gateway config option to
+> add a basePath to the WebSocket URL. If the gateway tunnel rule used a path filter
+> (e.g., `/openclaw`), WebSocket connections to the root would not be routed to the
+> gateway and the UI would fail to connect. Catch-all routing ensures both HTTP and
+> WebSocket traffic reach the gateway regardless of path.
+
+> **Rule order matters.** Cloudflare evaluates tunnel rules top-to-bottom and uses the
+> first match. If the catch-all gateway rule is listed before the `/browser` rule, all
+> traffic (including `/browser/*`) will be sent to the gateway instead of the noVNC proxy.
+> Always place more-specific path rules above less-specific ones.
+
+---
+
+#### Option B: Separate Subdomains
+
+Gateway and browser VNC each get their own subdomain. No rule ordering concerns since each subdomain is independent.
+
+1. Go to **Zero Trust Dashboard** → **Networks** → **Tunnels**
+2. Click your tunnel → **Configure**
+3. Add two public hostnames:
+
+**Gateway:**
+
+| Field | Value |
+|-------|-------|
+| **Subdomain** | `openclaw` (or your choice) |
+| **Domain** | Select your domain |
+| **Service Type** | `HTTP` |
+| **URL** | `localhost:18789` |
+
+**Browser VNC:**
 
 | Field | Value |
 |-------|-------|
@@ -192,21 +253,26 @@ To view/control agent browser sessions remotely, add a route pointing to the noV
 | **Service Type** | `HTTP` |
 | **URL** | `localhost:6090` |
 
-Then set `OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com` in `openclaw-config.env`.
+4. Save
 
-**Option B: Subpath on the same domain**
+Then set in `openclaw-config.env`:
 
-| Field | Value |
-|-------|-------|
-| **Subdomain** | `openclaw` (same as gateway) |
-| **Domain** | Select your domain |
-| **Path** | `/browser` |
-| **Service Type** | `HTTP` |
-| **URL** | `localhost:6090` |
+```
+OPENCLAW_DOMAIN=openclaw.yourdomain.com
+OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com
+```
 
-Then set `OPENCLAW_BROWSER_PUBLIC_URL=openclaw.yourdomain.com/browser` in `openclaw-config.env`.
+> With separate subdomains, you may want a second Cloudflare Access application
+> to protect the browser subdomain, or extend the existing application to cover both.
 
-The path component of `OPENCLAW_BROWSER_PUBLIC_URL` is automatically extracted and configured as `NOVNC_BASE_PATH` — the noVNC proxy uses this to strip/add the path prefix so URLs work correctly through the tunnel.
+---
+
+#### Config Notes
+
+The path component of `OPENCLAW_BROWSER_PUBLIC_URL` is automatically extracted during deployment and configured as `NOVNC_BASE_PATH` in the `.env` file. The noVNC proxy uses this to strip/add the path prefix so URLs work correctly through the tunnel.
+
+- `openclaw.yourdomain.com/browser` → `NOVNC_BASE_PATH=/browser`
+- `browser-openclaw.yourdomain.com` → `NOVNC_BASE_PATH=` (empty)
 
 See [BROWSER-VNC.md](BROWSER-VNC.md) for details on URL routing and base path behavior.
 
