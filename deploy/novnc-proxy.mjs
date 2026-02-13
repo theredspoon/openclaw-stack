@@ -3,7 +3,11 @@
 // noVNC reverse proxy + media file server — routes browser sandbox noVNC UIs
 // and serves agent-generated media files on a fixed port.
 // Reads browsers.json on each request to discover sandbox containers and
-// their dynamically-mapped noVNC ports. Zero dependencies (built-in http only).
+// their dynamically-mapped noVNC ports. Zero dependencies (Node.js built-ins only).
+//
+// Security: All requests must pass Cloudflare Access JWT verification.
+// The JWT signature is cryptographically verified against Cloudflare's
+// published public keys. Requests without a valid JWT are rejected with 403.
 //
 // URL routing (all paths below are relative to NOVNC_BASE_PATH if set):
 //   GET /                     → index page listing active sessions
@@ -17,6 +21,7 @@ import { createServer, request as httpRequest } from 'node:http';
 import { readFileSync, createReadStream, readdirSync, lstatSync } from 'node:fs';
 import { connect } from 'node:net';
 import { resolve, extname, join } from 'node:path';
+import { createPublicKey, verify as cryptoVerify } from 'node:crypto';
 
 const PORT = 6090;
 const BROWSERS_JSON = '/home/node/.openclaw/sandbox/browsers.json';
@@ -29,6 +34,123 @@ const RAW_BASE = process.env.NOVNC_BASE_PATH || '';
 const BASE_PATH = RAW_BASE === '/' ? '' : RAW_BASE.replace(/\/+$/, '');
 // Ensure it starts with / if non-empty
 const BP = BASE_PATH && !BASE_PATH.startsWith('/') ? `/${BASE_PATH}` : BASE_PATH;
+
+// ── Cloudflare Access JWT verification ──────────────────────────────
+// Every request (HTTP and WebSocket) must carry a valid Cf-Access-Jwt-Assertion
+// header. The JWT signature is verified against Cloudflare's published public
+// keys fetched from the issuer's /cdn-cgi/access/certs endpoint.
+// Set CF_ACCESS_AUD to also verify the audience claim matches your application.
+const CF_ACCESS_AUD = process.env.CF_ACCESS_AUD || '';
+let cfKeysCache = null;
+let cfKeysCacheExpiry = 0;
+
+function base64urlDecode(str) {
+  return Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
+function decodeJwt(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    return {
+      header: JSON.parse(base64urlDecode(parts[0])),
+      payload: JSON.parse(base64urlDecode(parts[1])),
+      signatureB64: parts[2],
+      signedPart: `${parts[0]}.${parts[1]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCfKeys(issuer) {
+  const now = Date.now();
+  if (cfKeysCache && now < cfKeysCacheExpiry) return cfKeysCache;
+  const url = `${issuer}/cdn-cgi/access/certs`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  cfKeysCache = data.public_certs || [];
+  cfKeysCacheExpiry = now + 3600000; // Cache for 1 hour
+  return cfKeysCache;
+}
+
+async function verifyCfAccess(req) {
+  const token = req.headers['cf-access-jwt-assertion'];
+  if (!token) return { valid: false, reason: 'Missing Cf-Access-Jwt-Assertion header' };
+
+  const decoded = decodeJwt(token);
+  if (!decoded) return { valid: false, reason: 'Malformed JWT' };
+
+  const { header, payload, signatureB64, signedPart } = decoded;
+
+  // Check expiration
+  const now = Math.floor(Date.now() / 1000);
+  if (!payload.exp || payload.exp < now) {
+    return { valid: false, reason: 'Token expired' };
+  }
+
+  // Verify issuer is Cloudflare Access
+  if (!payload.iss || !payload.iss.includes('.cloudflareaccess.com')) {
+    return { valid: false, reason: 'Invalid issuer' };
+  }
+
+  // Check audience if configured
+  if (CF_ACCESS_AUD) {
+    const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!aud.includes(CF_ACCESS_AUD)) {
+      return { valid: false, reason: 'Audience mismatch' };
+    }
+  }
+
+  // Verify signature against Cloudflare's published public keys
+  let certs;
+  try {
+    certs = await fetchCfKeys(payload.iss);
+  } catch (err) {
+    return { valid: false, reason: `Key fetch failed: ${err.message}` };
+  }
+
+  if (!certs || certs.length === 0) {
+    return { valid: false, reason: 'No public keys available' };
+  }
+
+  const sigBuf = base64urlDecode(signatureB64);
+  for (const cert of certs) {
+    try {
+      const pubKey = createPublicKey(cert.cert);
+      if (cryptoVerify('RSA-SHA256', Buffer.from(signedPart), pubKey, sigBuf)) {
+        return { valid: true, email: payload.email };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return { valid: false, reason: 'Signature verification failed' };
+}
+
+function accessDeniedPage() {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Access Denied</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 80px auto; padding: 0 20px; color: #e0e0e0; background: #1a1a2e; text-align: center; }
+    h1 { color: #f44336; font-size: 2em; margin-bottom: 10px; }
+    p { color: #aaa; line-height: 1.6; }
+    .lock { font-size: 4em; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="lock">&#128274;</div>
+  <h1>Access Denied</h1>
+  <p>This service requires authentication through Cloudflare Access.</p>
+  <p>If you should have access, ensure you are accessing this service<br>through the configured domain and have completed authentication.</p>
+</body>
+</html>`;
+}
 
 const MIME_TYPES = {
   '.png': 'image/png',
@@ -248,10 +370,21 @@ function handleMediaRequest(req, res, path) {
 }
 
 const server = createServer(async (req, res) => {
+  // ── Cloudflare Access gate ─────────────────────────────────────────
+  const auth = await verifyCfAccess(req);
+  if (!auth.valid) {
+    console.log(`[novnc-proxy] Access denied: ${auth.reason} (${req.socket.remoteAddress})`);
+    res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(accessDeniedPage());
+    return;
+  }
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   let path = url.pathname;
 
-  // Base path enforcement: if BP is set, all requests must start with it
+  // Base path handling: the proxy may receive requests with or without the BP
+  // prefix depending on how the upstream reverse proxy (e.g., Cloudflare Tunnel)
+  // is configured. Accept both forms and strip BP if present.
   if (BP) {
     if (path === BP) {
       // Redirect /browser → /browser/
@@ -259,13 +392,12 @@ const server = createServer(async (req, res) => {
       res.end();
       return;
     }
-    if (!path.startsWith(BP + '/')) {
-      res.writeHead(404);
-      res.end('Not found');
-      return;
+    if (path.startsWith(BP + '/')) {
+      // Upstream preserved the prefix — strip it for internal routing
+      path = path.slice(BP.length);
     }
-    // Strip the base path prefix for internal routing
-    path = path.slice(BP.length);
+    // If path doesn't start with BP, the upstream already stripped it.
+    // Route as-is — internal routing is the same either way.
   }
 
   // Index page
@@ -345,16 +477,20 @@ const server = createServer(async (req, res) => {
 });
 
 // WebSocket upgrade handler
-server.on('upgrade', (req, socket, head) => {
+server.on('upgrade', async (req, socket, head) => {
+  // ── Cloudflare Access gate ─────────────────────────────────────────
+  const auth = await verifyCfAccess(req);
+  if (!auth.valid) {
+    console.log(`[novnc-proxy] WS access denied: ${auth.reason} (${req.socket.remoteAddress})`);
+    socket.destroy();
+    return;
+  }
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   let wsPath = url.pathname;
 
-  // Strip base path prefix for WebSocket routing
-  if (BP) {
-    if (!wsPath.startsWith(BP + '/')) {
-      socket.destroy();
-      return;
-    }
+  // Strip base path prefix for WebSocket routing (accept with or without BP)
+  if (BP && wsPath.startsWith(BP + '/')) {
     wsPath = wsPath.slice(BP.length);
   }
 
