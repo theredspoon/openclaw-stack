@@ -9,7 +9,7 @@ the playbooks as designed.
 ## Quick Start
 
 1. Clone this repo
-2. Create a **[new VPS](ovh_setup_guide.md)** and [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)
+2. Create a **[new VPS](docs/VPS-SETUP-GUIDE.md)** and [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)
 3. Run `claude` in this repo dir, just say `start`
 
    ```bash
@@ -128,7 +128,7 @@ No ports are exposed to the public internet.
 
 Any VPS provider can be used as long as they meet the minimum requirements.
 
-Follow the detailed instructions in **[ovh_setup_guide.md](./ovh_setup_guide.md)** to:
+Follow the detailed instructions in **[VPS-SETUP-GUIDE.md](docs/VPS-SETUP-GUIDE.md)** to:
 
 1. Create an OVHCloud (or any VPS provider) account
 2. Generate a new SSH key
@@ -281,7 +281,6 @@ openclaw-vps/
 ├── README.md                 # This file (for users)
 ├── CLAUDE.md                 # Deployment orchestration (for Claude)
 ├── REQUIREMENTS.md           # Architecture reference
-├── ovh_setup_guide.md        # OVHCloud account setup instructions
 ├── openclaw-config.env       # Configuration (contains secrets)
 ├── vector.yaml               # Vector log shipper config (YAML; deployed to VPS)
 ├── build/
@@ -294,6 +293,7 @@ openclaw-vps/
 │   ├── BROWSER-VNC.md        # Browser VNC access via noVNC proxy
 │   ├── CLOUDFLARE-TUNNEL.md  # Cloudflare Tunnel reference
 │   └── TESTING.md            # Testing instructions
+│   └── VPS-SETUP-GUIDE.md    # VPS setup instructions
 └── playbooks/                # Deployment playbooks (for Claude)
     ├── 01-workers.md
     ├── 02-base-setup.md
