@@ -6,8 +6,8 @@ metadata:
     "openclaw":
       {
         "emoji": "\uD83D\uDC1B",
-        "events": ["command", "agent", "gateway"],
-        "install": [{ "id": "managed", "kind": "managed", "label": "Managed hook" }],
+        "events": ["command", "session", "agent", "gateway"],
+        "install": [{ "id": "managed", "kind": "managed", "label": "Debug logger" }],
       },
   }
 ---
