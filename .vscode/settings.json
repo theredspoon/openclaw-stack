@@ -2,5 +2,8 @@
   "cSpell.words": [
     "adminclaw",
     "openclaw"
-  ]
+  ],
+  "files.associations": {
+    "deploy/openclaw.json": "json5"
+  }
 }
