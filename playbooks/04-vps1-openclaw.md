@@ -572,41 +572,106 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
 sudo docker logs --tail 20 openclaw-gateway
 ```
 
-### Auto-pair the CLI
+### Wait for full startup
 
-The CLI needs a paired device identity to run gateway commands like `devices approve`.
-On a fresh deployment with no paired devices, the gateway auto-approves the first device
-that connects. Once paired, the device identity persists in `.openclaw/identity/` and
-the pairing record in `.openclaw/devices/paired.json` — both survive gateway restarts.
+On first boot, the entrypoint builds 3 sandbox images inside nested Docker (~5-10 min).
+The gateway HTTP endpoint responds during this time, but WebSocket connections (needed for
+CLI pairing) fail until the entrypoint finishes and drops to the node user.
 
-Wait for the gateway to be healthy before pairing:
+**Wait for the entrypoint to complete before attempting CLI pairing:**
 
 ```bash
 #!/bin/bash
-# Wait for gateway health endpoint to respond
-# OPENCLAW_DOMAIN_PATH from openclaw-config.env (e.g. "/openclaw"), empty if no subpath
-echo "Waiting for gateway to be healthy..."
+# Wait for entrypoint to finish sandbox builds — looks for privilege drop message
+echo "Waiting for entrypoint to finish (first boot builds sandbox images)..."
+timeout 600 bash -c 'until sudo docker logs openclaw-gateway 2>&1 | grep -q "Executing as node"; do sleep 10; done'
+echo "Entrypoint finished."
+
+# Then wait for gateway health endpoint
+echo "Waiting for gateway health..."
 timeout 120 bash -c 'until curl -sf http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ > /dev/null 2>&1; do sleep 3; done'
-
-# Auto-pair: on first deployment, the first CLI connection is auto-approved
-sudo docker exec --user node openclaw-gateway openclaw devices list
-
-# Verify: CLI should work from the host wrapper too
-sudo openclaw devices list
+echo "Gateway is healthy."
 ```
 
-**Expected:** Both commands succeed. The first triggers auto-pairing (first device on fresh
-gateway). The second confirms the host wrapper works.
+> **Why not just check health?** The health endpoint (`curl`) responds as soon as the
+> gateway HTTP server starts, which happens before sandbox builds finish. But the CLI
+> connects via WebSocket, which requires the gateway to be fully initialized. Checking
+> the "Executing as node" log line ensures the entrypoint has completed.
 
-> **If auto-pairing fails:** The gateway *should* auto-approve the first device, but this
-> doesn't always work reliably. If the commands above fail with "pairing required", see
-> the **CLI Pairing Lost** section in Troubleshooting below — the same file-manipulation
-> approach works for first-deploy failures too.
+### Pair the CLI
+
+The CLI needs a paired device identity to run gateway commands like `devices approve`.
+Once paired, the device identity persists in `.openclaw/identity/` and the pairing
+record in `.openclaw/devices/paired.json` — both survive gateway restarts.
+
+Auto-pairing (first device auto-approved on fresh gateway) is unreliable. Use the
+file-manipulation approach directly:
+
+```bash
+#!/bin/bash
+# Fix .openclaw ownership — the gateway creates identity/ and devices/ dirs during
+# startup as root (before gosu drops to node). The entrypoint's ownership fix (1d)
+# runs before these dirs exist, so they end up root-owned.
+sudo docker exec openclaw-gateway chown -R 1000:1000 /home/node/.openclaw
+
+# Step 1: Trigger a pending pairing request (will fail but registers the device)
+sudo docker exec --user node openclaw-gateway openclaw devices list 2>&1 || true
+
+# Step 2: Approve the pending CLI device via file manipulation
+sudo python3 -c "
+import json, time, os
+
+pending_file = '/home/openclaw/.openclaw/devices/pending.json'
+paired_file = '/home/openclaw/.openclaw/devices/paired.json'
+
+if not os.path.exists(pending_file):
+    print('No pending.json found — devices dir may not exist yet')
+    exit(1)
+
+with open(pending_file) as f:
+    pending = json.load(f)
+
+paired = {}
+if os.path.exists(paired_file):
+    with open(paired_file) as f:
+        paired = json.load(f)
+
+approved = False
+for req_id, req in list(pending.items()):
+    if req.get('clientId') == 'cli':
+        now = int(time.time() * 1000)
+        paired[req['deviceId']] = {
+            'deviceId': req['deviceId'], 'publicKey': req['publicKey'],
+            'platform': req['platform'], 'clientId': req['clientId'],
+            'clientMode': req['clientMode'], 'role': req['role'],
+            'roles': req['roles'], 'scopes': req['scopes'],
+            'remoteIp': req['remoteIp'],
+            'createdAtMs': now, 'approvedAtMs': now,
+            'tokens': {},
+        }
+        del pending[req_id]
+        approved = True
+        break
+
+if not approved:
+    print('No CLI pending request found')
+    exit(1)
+
+with open(paired_file, 'w') as f:
+    json.dump(paired, f, indent=2)
+with open(pending_file, 'w') as f:
+    json.dump(pending, f, indent=2)
+print('CLI device approved')
+"
+
+# Step 3: Verify — should work immediately (gateway reads files on each connection)
+sudo /usr/local/bin/openclaw devices list
+```
+
+**Expected:** The final command shows 1 paired device with role `operator`.
 
 > **Re-pairing after identity loss:** If the CLI identity is deleted while other devices
-> are already paired, auto-pair won't work — the gateway only auto-approves the first
-> device. To re-pair: run a CLI command (it creates a pending request), then approve it
-> via the Control UI or see Troubleshooting below.
+> are already paired, use the same 3-step approach above (trigger pending → approve → verify).
 
 ---
 
@@ -738,9 +803,16 @@ df -h
 
 ### Permission Denied on .openclaw
 
+The gateway creates subdirectories (`identity/`, `devices/`, `memory/`) during startup
+as root (before gosu drops to node). The entrypoint's ownership fix (1d) runs before
+these dirs exist, so they end up root-owned.
+
 ```bash
-# Fix ownership - container runs as uid 1000
+# Fix ownership on host
 sudo chown -R 1000:1000 /home/openclaw/.openclaw
+
+# Or fix inside the container
+sudo docker exec openclaw-gateway chown -R 1000:1000 /home/node/.openclaw
 ```
 
 ### Vector Not Shipping Logs
@@ -761,50 +833,11 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart v
 
 ### CLI Pairing Lost
 
-If the CLI device identity is deleted or corrupted, or if auto-pairing fails on first
-deploy, the gateway won't auto-approve a new CLI device. To pair manually:
+If the CLI device identity is deleted or corrupted, follow the same pairing procedure
+as section 4.9 (fix ownership → trigger pending → approve via file manipulation → verify).
 
-1. **Trigger a pending request** — run any CLI command (it will fail but register a pending pairing):
-   ```bash
-   sudo docker exec --user node openclaw-gateway openclaw devices list 2>&1 || true
-   ```
-
-2. **Approve via Control UI** — log into the Control UI and approve the pending device.
-
-3. **Or approve via file manipulation** (if no UI access):
-   ```bash
-   sudo python3 -c "
-   import json, time
-   with open('/home/openclaw/.openclaw/devices/pending.json') as f:
-       pending = json.load(f)
-   with open('/home/openclaw/.openclaw/devices/paired.json') as f:
-       paired = json.load(f)
-   for req_id, req in list(pending.items()):
-       if req.get('clientId') == 'cli':
-           now = int(time.time() * 1000)
-           paired[req['deviceId']] = {
-               'deviceId': req['deviceId'], 'publicKey': req['publicKey'],
-               'platform': req['platform'], 'clientId': req['clientId'],
-               'clientMode': req['clientMode'], 'role': req['role'],
-               'roles': req['roles'], 'scopes': req['scopes'],
-               'remoteIp': req['remoteIp'],
-               'createdAtMs': now, 'approvedAtMs': now,
-               'tokens': {},
-           }
-           del pending[req_id]
-           break
-   with open('/home/openclaw/.openclaw/devices/paired.json', 'w') as f:
-       json.dump(paired, f, indent=2)
-   with open('/home/openclaw/.openclaw/devices/pending.json', 'w') as f:
-       json.dump(pending, f, indent=2)
-   print('CLI device approved')
-   "
-   ```
-
-4. **Verify** — the CLI should work immediately (gateway reads files on each connection):
-   ```bash
-   sudo openclaw devices list
-   ```
+If the Control UI is accessible, you can also approve pending devices there instead of
+using file manipulation.
 
 ### Network Issues
 
