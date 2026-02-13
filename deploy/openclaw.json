@@ -12,7 +12,9 @@
     "remote": {
       "token": "{{GATEWAY_TOKEN}}"
     },
-    "trustedProxies": ["172.30.0.1"],
+    "trustedProxies": [
+      "172.30.0.1"
+    ],
     "controlUi": {
       "basePath": "{{OPENCLAW_DOMAIN_PATH}}"
     }
@@ -25,9 +27,15 @@
     "internal": {
       "enabled": true,
       "entries": {
-        "session-memory": { "enabled": true },
-        "command-logger": { "enabled": true },
-        "debug-logger": { "enabled": true }
+        "session-memory": {
+          "enabled": true
+        },
+        "command-logger": {
+          "enabled": true
+        },
+        "debug-logger": {
+          "enabled": true
+        }
       }
     }
   },
@@ -49,9 +57,10 @@
           ],
           "network": "none",
           "user": "1000:1000",
-          "capDrop": ["ALL"],
+          "capDrop": [
+            "ALL"
+          ],
           "env": {
-            "HOME": "/home/linuxbrew",
             "LANG": "C.UTF-8",
             "PATH": "/opt/skill-bins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           },
@@ -78,8 +87,8 @@
           "autoStartTimeoutMs": 12000
         },
         "prune": {
-          "idleHours": 168,
-          "maxAgeDays": 60
+          "idleHours": 24,
+          "maxAgeDays": 7
         }
       }
     },
@@ -93,7 +102,10 @@
           }
         },
         "subagents": {
-          "allowAgents": ["code", "skills"]
+          "allowAgents": [
+            "code",
+            "skills"
+          ]
         }
       },
       {
@@ -107,7 +119,7 @@
             "memorySwap": "5g",
             "cpus": 2,
             "binds": [
-              "/home/node/.claude-sandbox:/home/linuxbrew/.claude"
+              "/home/node/sandboxes-home/code:/home/sandbox"
             ]
           }
         }
@@ -130,7 +142,9 @@
   },
   "plugins": {
     "enabled": true,
-    "allow": ["skill-router"],
+    "allow": [
+      "skill-router"
+    ],
     "entries": {
       "skill-router": {
         "enabled": true,
@@ -139,7 +153,9 @@
             {
               "agent": "main",
               "delegateTo": "skills",
-              "skills": ["gifgrep"]
+              "skills": [
+                "gifgrep"
+              ]
             }
           ]
         }
@@ -163,7 +179,13 @@
           "sessions_spawn",
           "session_status"
         ],
-        "deny": ["canvas", "nodes", "cron", "discord", "gateway"]
+        "deny": [
+          "canvas",
+          "nodes",
+          "cron",
+          "discord",
+          "gateway"
+        ]
       }
     }
   }

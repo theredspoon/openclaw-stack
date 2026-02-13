@@ -131,13 +131,17 @@ mkdir -p "${OPENCLAW_HOME}/.openclaw/logs"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/backups"
 mkdir -p "${OPENCLAW_HOME}/scripts"
 
+# Persistent sandbox home directories — agents opt in via openclaw.json binds
+mkdir -p "${OPENCLAW_HOME}/sandboxes-home"
+
 chmod 700 "${OPENCLAW_HOME}/.openclaw"
 chmod 700 "${OPENCLAW_HOME}/.openclaw/credentials"
 EOF
 
 # IMPORTANT: Container runs as uid 1000 (node user), which is typically 'ubuntu' on the host
-# Change ownership of .openclaw to uid 1000 for container write access
+# Change ownership of .openclaw and sandboxes-home to uid 1000 for container write access
 sudo chown -R 1000:1000 /home/openclaw/.openclaw
+sudo chown -R 1000:1000 /home/openclaw/sandboxes-home
 ```
 
 ---

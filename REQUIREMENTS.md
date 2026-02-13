@@ -267,7 +267,8 @@ Key parameters:
 │   ├── credentials/             # Stored credentials
 │   ├── logs/
 │   └── backups/
-├── .claude-sandbox/             # Sandbox Claude Code credentials (isolated from gateway)
+├── sandboxes-home/              # Persistent sandbox home directories (bind-mounted into sandboxes)
+│   └── code/                    # Code agent's $HOME — credentials, SSH keys, dotfiles
 └── build/
     ├── build-openclaw.sh        # Build script with auto-patching
     └── host-alert.sh            # Cron alerter: disk/memory/CPU -> Telegram
@@ -308,7 +309,7 @@ Runs as root inside container (Sysbox isolation). Performs pre-start tasks in or
 
 1. **Lock file cleanup** — Removes stale `gateway.*.lock` files from unclean shutdowns
 2. **Config permissions** — Enforces `chmod 600` on `openclaw.json` (gateway may rewrite with looser perms)
-3. **Sandbox credentials ownership** — `chown -R 1000:1000 /home/node/.claude-sandbox` (Sysbox uid remapping: host uid 1000 appears as uid 1002 inside container)
+3. **Sandbox home ownership** — `chown -R 1000:1000 /home/node/sandboxes-home` (Sysbox uid remapping: host uid 1000 appears as uid 1002 inside container)
 4. **Config/state dir ownership** — `chown -R 1000:1000 /home/node/.openclaw` if any files are not owned by node (fixes identity/, memory/ dirs created by root before gosu drops privileges)
 5. **Start nested Docker daemon** — `dockerd --host=unix:///var/run/docker.sock --storage-driver=overlay2 --log-level=warn`, waits up to 30 seconds for `docker info` to succeed
 6. **Build sandbox images** (only if dockerd is ready):
@@ -359,11 +360,12 @@ See `04-vps1-openclaw.md` § 4.8 for the full `openclaw.json` content.
 | `controlUi.basePath` | URL prefix for Control UI, set from `OPENCLAW_DOMAIN_PATH` in config |
 | `sandbox.mode: "all"` | All agents run in Docker sandboxes. Requires Docker installed inside container (build patch #2). Without Docker, `spawn docker` crashes with EACCES. Fallback: `"non-main"` |
 | `sandbox.docker.network: "bridge"` | Required for browser tool. `"none"` breaks CDP connectivity (gateway can't reach port 9222 in sandbox) |
-| `tmpfs /home/linuxbrew:uid=1000,gid=1000` | Makes sandbox home writable for `~/.claude.json`. The `:uid=1000,gid=1000` is critical — without it, tmpfs mounts as root-owned and linuxbrew user can't write |
+| `tmpfs /home/linuxbrew:uid=1000,gid=1000` | Writable `$HOME` for agents using the default `HOME=/home/linuxbrew`. The `:uid=1000,gid=1000` is critical — without it, tmpfs mounts as root-owned |
 | `readOnlyRoot: true` | Sandbox filesystem is read-only for security. Home dir writable via tmpfs overlay |
 | `prune.idleHours: 168` (7 days) | Longer prune avoids repeatedly rebuilding sandbox state |
 | `capDrop: ["ALL"]` | Drop all Linux capabilities in sandboxes — minimal privilege |
-| `binds` on sandbox | Mounts gateway's `.claude-sandbox` credentials into sandbox home |
+| `binds` on code agent | Mounts `sandboxes-home/code` as `/home/sandbox` — persistent home for credentials, SSH keys, dotfiles |
+| `env.HOME` on code agent | Overrides default `HOME=/home/linuxbrew` to `/home/sandbox` so `$HOME` points to the persistent bind mount. Cannot use `/home/sandbox` tmpfs in defaults because it conflicts with bind mounts at the same path. |
 
 ### 3.8 Sandbox Images
 
@@ -389,19 +391,25 @@ Adding a new tool = edit `sandbox-toolkit.yaml` + rebuild sandbox images.
 - Do NOT use `docker build -f - /dev/null` — nested Docker (Sysbox) rejects `/dev/null` as build context. Use `printf ... | docker build -t tag -` instead.
 - Do NOT use `docker run`/`docker commit` to mutate images — creates a dirty layer. Use `docker build` with proper FROM layer.
 
-### 3.9 Claude Code in Sandboxes
+### 3.9 Persistent Sandbox Home Directories
 
-**Credential isolation:** Sandboxes use `/home/openclaw/.claude-sandbox` (NOT gateway's `/home/openclaw/.claude`). Gateway credentials are device-bound OAuth tokens that don't work across containers. Sandbox gets its own credentials via `claude login` (one-time setup).
+Agents that need persistent home state (credentials, SSH keys, git config, dotfiles) opt in by adding a bind mount in `openclaw.json` that maps a `sandboxes-home/[agent-id]` subdirectory to `/home/sandbox` (`$HOME`).
 
 **Bind chain:**
 
-1. Host: `/home/openclaw/.claude-sandbox`
-2. -> Gateway container: `/home/node/.claude-sandbox` (via compose volume mount)
-3. -> Sandbox container: `/home/linuxbrew/.claude` (via openclaw.json `binds`)
+1. Host: `/home/openclaw/sandboxes-home/<agent-id>/`
+2. -> Gateway container: `/home/node/sandboxes-home/<agent-id>/` (via compose volume mount)
+3. -> Sandbox container: `/home/sandbox` (via openclaw.json agent `binds`)
 
-**Sandbox user:** `linuxbrew` (uid 1000), home at `/home/linuxbrew`
+The compose override mounts the entire `sandboxes-home/` tree into the gateway. Each agent adds its own bind in openclaw.json — no compose or entrypoint changes needed per agent.
 
-**Sysbox uid remapping fix:** Host uid 1000 appears as uid 1002 inside gateway. Entrypoint runs `chown -R 1000:1000 /home/node/.claude-sandbox` to fix this before gosu drops privileges.
+**Sandbox user:** `sandbox` (uid 1000), home at `/home/sandbox`
+
+**Dotfile seeding:** `rebuild-sandboxes.sh` extracts `/etc/skel/` dotfiles (`.bashrc`, `.profile`) from the sandbox image into each agent's home dir on first creation. This prevents losing default shell config when the bind mount shadows `/home/sandbox`.
+
+**Credential isolation:** The code agent's home (`sandboxes-home/code/`) contains its own Claude Code credentials (NOT gateway's). Gateway credentials are device-bound OAuth tokens that don't work across containers. Sandbox gets its own credentials via `claude login` (one-time setup).
+
+**Sysbox uid remapping fix:** Host uid 1000 appears as uid 1002 inside gateway. Entrypoint runs `chown -R 1000:1000 /home/node/sandboxes-home` to fix this before gosu drops privileges.
 
 ### 3.10 Vector (Log Shipping)
 

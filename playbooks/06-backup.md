@@ -50,6 +50,7 @@ tar -czf "${BACKUP_FILE}" \
     .openclaw/credentials \
     .openclaw/workspace \
     openclaw/.env \
+    sandboxes-home \
     2>/dev/null || true
 
 # Set ownership so container can also access backups if needed
@@ -132,6 +133,7 @@ sudo cat /home/openclaw/.openclaw/logs/backup.log
 | `.openclaw/credentials/` | API keys and tokens |
 | `.openclaw/workspace/` | User workspaces and data |
 | `openclaw/.env` | Environment variables |
+| `sandboxes-home/` | Persistent sandbox home directories (credentials, dotfiles, SSH keys) |
 
 ---
 

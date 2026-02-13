@@ -22,15 +22,15 @@ if [ -f "$config_file" ]; then
   fi
 fi
 
-# ── 1c. Fix .claude-sandbox dir ownership (Sysbox uid remapping) ────
-# Sandbox credentials dir: host bind mount arrives with host uid which Sysbox remaps.
-# Chown to node (1000) so sandbox containers (via binds) can access it.
-claude_dir="/home/node/.claude-sandbox"
-if [ -d "$claude_dir" ]; then
-  dir_owner=$(stat -c '%u' "$claude_dir" 2>/dev/null)
+# ── 1c. Fix sandboxes-home dir ownership (Sysbox uid remapping) ─────
+# Persistent sandbox home dirs: host bind mount arrives with host uid which Sysbox remaps.
+# Chown to node (1000) so sandbox containers (via binds) can access them.
+sandboxes_dir="/home/node/sandboxes-home"
+if [ -d "$sandboxes_dir" ]; then
+  dir_owner=$(stat -c '%u' "$sandboxes_dir" 2>/dev/null)
   if [ "$dir_owner" != "1000" ]; then
-    chown -R 1000:1000 "$claude_dir"
-    echo "[entrypoint] Fixed .claude-sandbox ownership: ${dir_owner} -> 1000"
+    chown -R 1000:1000 "$sandboxes_dir"
+    echo "[entrypoint] Fixed sandboxes-home ownership: ${dir_owner} -> 1000"
   fi
 fi
 
