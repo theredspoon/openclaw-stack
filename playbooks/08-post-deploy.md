@@ -281,6 +281,111 @@ sudo docker exec --user node openclaw-gateway \
 
 ---
 
+## 8.6 Deployment Report
+
+**IMPORTANT:** After the user confirms the chat interface is working, output a complete deployment report. This is the final step — do NOT skip it.
+
+Collect the following values and present them in a single, neatly formatted report:
+
+### Values to collect
+
+1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), read them from your conversation history or inform the user they were displayed during base setup and should have been saved.
+
+2. **Gateway token** — read from VPS:
+   ```bash
+   ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+     "sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2"
+   ```
+
+3. **Domain and URLs** — from `openclaw-config.env` values set during this playbook.
+
+### Report format
+
+Output the report using exactly this structure:
+
+```
+## OpenClaw Deployment Report
+
+**Date:** <current date>
+**VPS IP:** <VPS1_IP>
+**Domain:** <OPENCLAW_DOMAIN>
+
+---
+
+### VPS Users
+
+| User | Password | Purpose |
+|------|----------|---------|
+| `adminclaw` | `<password>` | SSH admin, passwordless sudo |
+| `openclaw` | `<password>` | App runtime, no SSH, no sudo |
+
+> These passwords are for emergency VNC/console access only. Normal access is via SSH key.
+
+---
+
+### SSH Access
+
+\`\`\`bash
+ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
+\`\`\`
+
+---
+
+### Gateway Token
+
+\`\`\`
+<GATEWAY_TOKEN>
+\`\`\`
+
+---
+
+### URLs
+
+| Service | URL |
+|---------|-----|
+| **Chat** | `https://<DOMAIN><PATH>/chat?token=<TOKEN>` |
+| **Control UI** | `https://<DOMAIN><PATH>/?token=<TOKEN>` |
+| **Browser VNC** | `https://<BROWSER_URL>/` |
+
+All URLs are protected by Cloudflare Access.
+
+---
+
+### Workers
+
+| Worker | URL |
+|--------|-----|
+| AI Gateway Proxy | `<AI_GATEWAY_WORKER_URL>` |
+| Log Receiver | `<LOG_WORKER_URL without /logs suffix>` |
+
+---
+
+### Automated Jobs
+
+| Job | Schedule |
+|-----|----------|
+| Backup | Daily at 3:00 AM UTC (30-day retention) |
+| Host alerter | Every 15 minutes via Telegram |
+
+---
+
+### Quick Reference
+
+| Task | Command |
+|------|---------|
+| SSH to VPS | `ssh -i <KEY> -p 222 adminclaw@<IP>` |
+| Gateway logs | `sudo docker logs -f openclaw-gateway` |
+| Container status | `sudo -u openclaw docker compose ps` |
+| List devices | `openclaw devices list` |
+| Approve device | `openclaw devices approve <requestId>` |
+| Run backup | `sudo /home/openclaw/scripts/backup.sh` |
+| Update OpenClaw | See `04-vps1-openclaw.md` § Updating OpenClaw |
+```
+
+> **Note:** If user passwords are no longer in the conversation context, note that they were displayed during step 2.2 and should have been saved at that time. The passwords can also be reset via VNC/console access if needed.
+
+---
+
 ## Troubleshooting
 
 ### "Connection refused" when opening the URL
