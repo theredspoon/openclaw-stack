@@ -135,6 +135,27 @@ No gateway restart needed — builds happen inside the running container's neste
 - When entrypoint logs a staleness warning (images > 30 days old)
 - After editing `sandbox-toolkit.yaml` — auto-detected on next gateway restart, but `update-sandboxes.sh` applies immediately without restart
 
+### Bind-Mounted Deploy Files
+
+Several deploy files are bind-mounted read-only into the gateway container. These can be updated without a full image rebuild — just SCP the file and restart the gateway.
+
+**Bind-mounted files:** `novnc-proxy.mjs`, `entrypoint-gateway.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`, `hooks/`
+
+```bash
+# From local machine
+scp -i <SSH_KEY_PATH> -P 222 deploy/<file> adminclaw@<VPS1_IP>:/tmp/<file>
+
+# On VPS (or via ssh)
+sudo cp /tmp/<file> /home/openclaw/openclaw/deploy/<file>
+sudo chown 1000:1000 /home/openclaw/openclaw/deploy/<file>
+rm /tmp/<file>
+
+# Restart gateway to pick up changes (service name is "openclaw-gateway")
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'
+```
+
+> **Note:** `sandbox-toolkit.yaml` changes are also auto-detected on gateway restart via Docker label comparison, triggering a sandbox image rebuild if needed.
+
 ### OpenClaw Gateway
 
 Update the gateway to the latest upstream version:

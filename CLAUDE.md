@@ -117,11 +117,16 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose down'    
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'    # Logs
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'         # Status
 
+# Restart gateway (service name is "openclaw-gateway", not "gateway")
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'
+
 # Vector logs (log shipper)
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs vector'        # View Vector logs
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f vector'     # Follow Vector logs
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'     # Restart Vector
 ```
+
+> **Note:** Docker Compose prints warnings about unset `CLAUDE_AI_SESSION_KEY`, `CLAUDE_WEB_SESSION_KEY`, and `CLAUDE_WEB_COOKIE` variables on every command. These are harmless — the variables are optional and default to blank strings.
 
 ### Firewall
 
