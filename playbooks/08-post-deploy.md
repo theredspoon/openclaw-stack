@@ -86,35 +86,32 @@ Wait for the user to confirm before proceeding.
 
 ## 8.0b Connect Browser VNC via Cloudflare Tunnel
 
-### Check if OPENCLAW_BROWSER_PUBLIC_URL has a placeholder
+### Check if OPENCLAW_BROWSER_DOMAIN has a placeholder
 
-Read `OPENCLAW_BROWSER_PUBLIC_URL` from `openclaw-config.env`. If it contains `<example>` or other angle-bracket placeholders:
+Read `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_BROWSER_DOMAIN_PATH` from `openclaw-config.env`. If `OPENCLAW_BROWSER_DOMAIN` contains `<example>` or other angle-bracket placeholders:
 
-> "Your browser VNC URL isn't configured yet. You need to:
+> "Your browser VNC domain isn't configured yet. You need to:
 >
 > 1. **Decide on your browser URL** — either:
->    - A subpath on your main domain (e.g., `openclaw.yourdomain.com/browser`)
->    - A separate subdomain (e.g., `browser-openclaw.yourdomain.com`)
+>    - A subpath on your main domain (e.g., domain `openclaw.yourdomain.com`, path `/browser`)
+>    - A separate subdomain (e.g., domain `browser-openclaw.yourdomain.com`, path empty)
 > 2. **Add a public hostname** (or path) in your Cloudflare Tunnel pointing to `http://localhost:6090`
 > 3. **Protect it with Cloudflare Access** (same Access application or a new one)
 >
-> Tell me the full browser URL and I'll update the config."
+> Tell me the browser domain and path (if any) and I'll update the config."
 
-Wait for the user to provide the URL. Then:
+Wait for the user to provide the values. Then:
 
-1. Update `OPENCLAW_BROWSER_PUBLIC_URL` in `openclaw-config.env`
-2. Parse the path component:
-   - `openclaw.example.com/browser` → `NOVNC_BASE_PATH=/browser`
-   - `browser-openclaw.example.com` → `NOVNC_BASE_PATH=` (empty)
-3. Update `NOVNC_BASE_PATH` in the `.env` file on VPS:
+1. Update `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_BROWSER_DOMAIN_PATH` in `openclaw-config.env`
+2. Update `NOVNC_BASE_PATH` in the `.env` file on VPS (direct copy of `OPENCLAW_BROWSER_DOMAIN_PATH`):
 
 ```bash
 # Update NOVNC_BASE_PATH in .env on VPS
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo sed -i 's|^NOVNC_BASE_PATH=.*|NOVNC_BASE_PATH=<extracted-path>|' /home/openclaw/openclaw/.env"
+  "sudo sed -i 's|^NOVNC_BASE_PATH=.*|NOVNC_BASE_PATH=<OPENCLAW_BROWSER_DOMAIN_PATH>|' /home/openclaw/openclaw/.env"
 ```
 
-4. Restart the gateway to pick up the new base path:
+3. Restart the gateway to pick up the new base path:
 
 ```bash
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
@@ -125,7 +122,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 ```bash
 # Test browser VNC URL — should get 302/403 redirect to Cloudflare Access login
-curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_PUBLIC_URL>/ 2>&1 | head -10
+curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/ 2>&1 | head -10
 ```
 
 **Expected:** A 302 or 403 response redirecting to the Cloudflare Access login page. This confirms the tunnel route exists and is protected. Do NOT expect a 200 — Cloudflare Access blocks unauthenticated requests.
@@ -345,7 +342,7 @@ ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
 |---------|-----|
 | **Chat** | `https://<DOMAIN><PATH>/chat?token=<TOKEN>` |
 | **Control UI** | `https://<DOMAIN><PATH>/?token=<TOKEN>` |
-| **Browser VNC** | `https://<BROWSER_URL>/` |
+| **Browser VNC** | `https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/` |
 
 All URLs are protected by Cloudflare Access.
 

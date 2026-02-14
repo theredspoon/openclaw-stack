@@ -35,6 +35,11 @@ const BASE_PATH = RAW_BASE === '/' ? '' : RAW_BASE.replace(/\/+$/, '');
 // Ensure it starts with / if non-empty
 const BP = BASE_PATH && !BASE_PATH.startsWith('/') ? `/${BASE_PATH}` : BASE_PATH;
 
+// Auto-detected base path — set on first request when BP is empty and
+// the first path segment doesn't match any known agent or reserved route.
+// Once detected, used for URL generation (links, redirects) in all responses.
+let effectiveBP = BP;
+
 // ── Cloudflare Access JWT verification ──────────────────────────────
 // Every request (HTTP and WebSocket) must carry a valid Cf-Access-Jwt-Assertion
 // header. The JWT signature is verified against Cloudflare's published public
@@ -219,7 +224,7 @@ function htmlPage(title, body) {
 
 async function indexPage() {
   const entries = readBrowsers();
-  const mediaLink = `<p style="margin-top: 16px;"><a href="${BP}/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>`;
+  const mediaLink = `<p style="margin-top: 16px;"><a href="${effectiveBP}/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>`;
   if (entries.length === 0) {
     return htmlPage('OpenClaw Browser Sessions',
       `<h1>OpenClaw Browser Sessions</h1>
@@ -227,14 +232,14 @@ async function indexPage() {
        ${mediaLink}`);
   }
 
-  // Strip leading / from BP for the WebSocket path param (noVNC expects a relative path)
-  const wsPrefix = BP.startsWith('/') ? BP.slice(1) : BP;
+  // Strip leading / from effectiveBP for the WebSocket path param (noVNC expects a relative path)
+  const wsPrefix = effectiveBP.startsWith('/') ? effectiveBP.slice(1) : effectiveBP;
   const rows = await Promise.all(entries.map(async (e) => {
     const id = e.sessionKey.replace('agent:', '');
     const up = await isPortOpen(e.noVncPort);
     const statusDot = `<span class="status ${up ? 'up' : 'down'}"></span>`;
     const link = up
-      ? `<a href="${BP}/${id}/vnc.html?path=${wsPrefix ? wsPrefix + '/' : ''}${id}/websockify">${id}</a>`
+      ? `<a href="${effectiveBP}/${id}/vnc.html?path=${wsPrefix ? wsPrefix + '/' : ''}${id}/websockify">${id}</a>`
       : `${id}`;
     return `<tr>
       <td>${statusDot}${link}</td>
@@ -259,7 +264,7 @@ function containerDownPage(agentId) {
      <p>The browser container for agent <strong>"${agentId}"</strong> is registered but not currently running.</p>
      <p>Browser containers are started on-demand when an agent uses the browser tool and are stopped when the session ends or the gateway restarts.</p>
      <p>Send a browser task to the agent to start a new session, then refresh this page.</p>
-     <p style="margin-top: 24px;"><a href="${BP}/">&larr; Back to sessions</a></p>`);
+     <p style="margin-top: 24px;"><a href="${effectiveBP}/">&larr; Back to sessions</a></p>`);
 }
 
 function formatSize(bytes) {
@@ -294,8 +299,8 @@ function mediaDirectoryPage(dirPath, urlPath) {
     ...files.map(e => `<tr><td>&#128196; <a href="${prefix}${e.name}">${e.name}</a></td><td>${formatSize(e.size)}</td><td><a href="${prefix}${e.name}" download class="dl">&#8681;</a></td></tr>`),
   ];
 
-  const mediaRoot = BP + '/media';
-  const parentLink = urlPath === mediaRoot ? `${BP}/` : urlPath.replace(/\/[^/]+\/?$/, '/');
+  const mediaRoot = effectiveBP + '/media';
+  const parentLink = urlPath === mediaRoot ? `${effectiveBP}/` : urlPath.replace(/\/[^/]+\/?$/, '/');
   const body = `<h1>Media Files &mdash; ${urlPath.replace(mediaRoot, '') || '/'}</h1>
      <p><a href="${parentLink}">&larr; Back</a></p>
      ${rows.length === 0
@@ -309,8 +314,8 @@ function mediaDirectoryPage(dirPath, urlPath) {
 }
 
 function handleMediaRequest(req, res, path) {
-  // Strip BP + /media prefix to get relative path for filesystem access
-  const mediaPrefix = BP + '/media';
+  // Strip effectiveBP + /media prefix to get relative path for filesystem access
+  const mediaPrefix = effectiveBP + '/media';
   const relPath = decodeURIComponent(path.slice(mediaPrefix.length)) || '/';
   const resolved = resolve(MEDIA_ROOT, relPath.startsWith('/') ? relPath.slice(1) : relPath);
 
@@ -329,7 +334,7 @@ function handleMediaRequest(req, res, path) {
     if (resolved === MEDIA_ROOT || resolved.startsWith(MEDIA_ROOT + '/')) {
       const html = htmlPage('Media Files',
         `<h1>Media Files</h1>
-         <p><a href="${BP}/">&larr; Back to sessions</a></p>
+         <p><a href="${effectiveBP}/">&larr; Back to sessions</a></p>
          <p class="empty">No media files yet. Media files appear here when agents capture screenshots or download files.</p>`);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
@@ -383,9 +388,9 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   let path = url.pathname;
 
-  // Base path handling: the proxy may receive requests with or without the BP
+  // Base path handling: the proxy may receive requests with or without the
   // prefix depending on how the upstream reverse proxy (e.g., Cloudflare Tunnel)
-  // is configured. Accept both forms and strip BP if present.
+  // is configured. Accept both forms and strip the prefix if present.
   if (BP) {
     if (path === BP) {
       // Redirect /browser → /browser/
@@ -401,6 +406,30 @@ const server = createServer(async (req, res) => {
     // Route as-is — internal routing is the same either way.
   }
 
+  // Auto-detect base path when NOVNC_BASE_PATH is not set.
+  // If the first path segment isn't a known agent or "media", treat it as
+  // a base path prefix — strip it for routing. This handles the case where
+  // Cloudflare Tunnel sends /browser/... but NOVNC_BASE_PATH wasn't configured.
+  if (!BP) {
+    const seg = path.match(/^\/([^/]+)(\/.*)?$/);
+    if (seg && seg[1] !== 'media' && !findEntry(seg[1])) {
+      const detected = `/${seg[1]}`;
+      if (!effectiveBP) {
+        effectiveBP = detected;
+        console.log(`[novnc-proxy] Auto-detected base path: ${effectiveBP} (set NOVNC_BASE_PATH=${effectiveBP} to make this explicit)`);
+      }
+      if (effectiveBP === detected) {
+        if (!seg[2]) {
+          // Bare /prefix → redirect to /prefix/
+          res.writeHead(302, { Location: `${detected}/` });
+          res.end();
+          return;
+        }
+        path = seg[2]; // Strip prefix, continue routing remainder
+      }
+    }
+  }
+
   // Index page
   if (path === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -410,9 +439,9 @@ const server = createServer(async (req, res) => {
 
   // Media file serving
   if (path === '/media' || path.startsWith('/media/')) {
-    // Pass the BP-prefixed path so directory listings generate correct links
+    // Pass the effectiveBP-prefixed path so directory listings generate correct links
     const mediaPath = path === '/media' ? '/media/' : path;
-    handleMediaRequest(req, res, BP + mediaPath);
+    handleMediaRequest(req, res, effectiveBP + mediaPath);
     return;
   }
 
@@ -429,9 +458,9 @@ const server = createServer(async (req, res) => {
 
   // Bare /<agent-id> or /<agent-id>/ → redirect to vnc.html
   if (subPath === '/') {
-    // WebSocket path param is relative (no leading /) — include BP without leading /
-    const wsPrefix = BP.startsWith('/') ? BP.slice(1) : BP;
-    res.writeHead(302, { Location: `${BP}/${agentId}/vnc.html?path=${wsPrefix ? wsPrefix + '/' : ''}${agentId}/websockify` });
+    // WebSocket path param is relative (no leading /) — include effectiveBP without leading /
+    const wsPrefix = effectiveBP.startsWith('/') ? effectiveBP.slice(1) : effectiveBP;
+    res.writeHead(302, { Location: `${effectiveBP}/${agentId}/vnc.html?path=${wsPrefix ? wsPrefix + '/' : ''}${agentId}/websockify` });
     res.end();
     return;
   }
@@ -442,7 +471,7 @@ const server = createServer(async (req, res) => {
     res.end(htmlPage('Not Found',
       `<h1>Session Not Found</h1>
        <p>No browser session for agent <strong>"${agentId}"</strong>.</p>
-       <p><a href="${BP}/">&larr; Back to sessions</a></p>`));
+       <p><a href="${effectiveBP}/">&larr; Back to sessions</a></p>`));
     return;
   }
 
@@ -490,9 +519,11 @@ server.on('upgrade', async (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   let wsPath = url.pathname;
 
-  // Strip base path prefix for WebSocket routing (accept with or without BP)
+  // Strip base path prefix for WebSocket routing (accept with or without prefix)
   if (BP && wsPath.startsWith(BP + '/')) {
     wsPath = wsPath.slice(BP.length);
+  } else if (!BP && effectiveBP && wsPath.startsWith(effectiveBP + '/')) {
+    wsPath = wsPath.slice(effectiveBP.length);
   }
 
   const match = wsPath.match(/^\/([^/]+)(\/.*)?$/);
@@ -528,5 +559,5 @@ server.on('upgrade', async (req, socket, head) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[novnc-proxy] Listening on port ${PORT}${BP ? `, base path: ${BP}` : ''}`);
+  console.log(`[novnc-proxy] Listening on port ${PORT}${BP ? `, base path: ${BP}` : ' (no base path — will auto-detect from first request if needed)'}`);
 });

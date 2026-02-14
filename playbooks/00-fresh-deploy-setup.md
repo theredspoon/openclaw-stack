@@ -4,7 +4,7 @@ Minimal validation and overview for starting a fresh VPS deployment. Only `VPS1_
 
 ## Overview
 
-This playbook validates the minimum configuration needed to begin deploying OpenClaw on a fresh Ubuntu VPS. Domain-related settings (`OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_PUBLIC_URL`, `OPENCLAW_DOMAIN_PATH`) are only needed during post-deploy (step 8) when the user configures Cloudflare Tunnel public routes.
+This playbook validates the minimum configuration needed to begin deploying OpenClaw on a fresh Ubuntu VPS. Domain-related settings (`OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN_PATH`, `OPENCLAW_DOMAIN_PATH`) are only needed during post-deploy (step 8) when the user configures Cloudflare Tunnel public routes.
 
 ## Prerequisites
 
@@ -143,6 +143,6 @@ Deployment Plan:
      browser VNC access, device pairing (08-post-deploy.md)
 ```
 
-**Note:** `OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_PUBLIC_URL`, and `OPENCLAW_DOMAIN_PATH` can remain as placeholders for now. They're only needed during post-deploy (step 7) when the user configures Cloudflare Tunnel public hostname routes.
+**Note:** `OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN_PATH`, and `OPENCLAW_DOMAIN_PATH` can remain as placeholders for now. They're only needed during post-deploy (step 7) when the user configures Cloudflare Tunnel public hostname routes.
 
 Ask the user to confirm before proceeding with the deployment.

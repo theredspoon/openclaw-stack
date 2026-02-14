@@ -39,14 +39,21 @@ The proxy reads this file on every request (no caching needed — the file is ti
 
 ## URL Configuration
 
-The browser VNC URL is configured via `OPENCLAW_BROWSER_PUBLIC_URL` in `openclaw-config.env`. Two formats are supported:
+The browser VNC URL is configured via two variables in `openclaw-config.env`:
 
-| Format | Example | `NOVNC_BASE_PATH` |
-|--------|---------|-------------------|
-| **Subpath on main domain** | `openclaw.example.com/browser` | `/browser` |
-| **Separate subdomain** | `browser-openclaw.example.com` | *(empty)* |
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `OPENCLAW_BROWSER_DOMAIN` | Browser VNC hostname | `openclaw.example.com` |
+| `OPENCLAW_BROWSER_DOMAIN_PATH` | noVNC proxy base path | `/browser` (or empty for subdomain) |
 
-The path component (if any) is automatically extracted during deployment and passed to the noVNC proxy as `NOVNC_BASE_PATH`. The proxy strips this prefix from incoming requests and includes it in all generated URLs.
+| Setup | Domain | Path | `NOVNC_BASE_PATH` |
+|-------|--------|------|-------------------|
+| **Subpath on main domain** | `openclaw.example.com` | `/browser` | `/browser` |
+| **Separate subdomain** | `browser-openclaw.example.com` | *(empty)* | *(empty)* |
+
+`OPENCLAW_BROWSER_DOMAIN_PATH` is passed directly to the noVNC proxy as `NOVNC_BASE_PATH` — no parsing needed. The proxy strips this prefix from incoming requests and includes it in all generated URLs.
+
+**Auto-detection fallback:** If `NOVNC_BASE_PATH` is empty but Cloudflare Tunnel sends requests with a path prefix (e.g., `/browser/...`), the proxy auto-detects the base path from the first unrecognized path segment. This prevents browser sessions from breaking if the env var is misconfigured. A log message indicates auto-detection occurred.
 
 ## URL Routing
 
@@ -93,7 +100,7 @@ fi
 
 - Port mapping: `127.0.0.1:6090:6090` (localhost-only for tunnel access)
 - Volume: `./deploy/novnc-proxy.mjs:/app/deploy/novnc-proxy.mjs:ro`
-- Environment: `NOVNC_BASE_PATH=${NOVNC_BASE_PATH:-}` (derived from `OPENCLAW_BROWSER_PUBLIC_URL`)
+- Environment: `NOVNC_BASE_PATH=${NOVNC_BASE_PATH:-}` (set from `OPENCLAW_BROWSER_DOMAIN_PATH`)
 
 ### Cloudflare Tunnel Route
 
@@ -105,7 +112,7 @@ Add a route on the existing `openclaw` tunnel. Two approaches:
 |-----------|--------|------|---------|
 | `browser-openclaw` | `yourdomain.com` | *(empty)* | `http://localhost:6090` |
 
-Set `OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com` (no path → `NOVNC_BASE_PATH` is empty).
+Set `OPENCLAW_BROWSER_DOMAIN=browser-openclaw.yourdomain.com` and `OPENCLAW_BROWSER_DOMAIN_PATH=` (empty → `NOVNC_BASE_PATH` is empty).
 
 **Option B: Subpath on main domain** (e.g., `openclaw.yourdomain.com/browser`)
 
@@ -113,7 +120,7 @@ Set `OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com` (no path → `
 |-----------|--------|------|---------|
 | `openclaw` | `yourdomain.com` | `/browser` | `http://localhost:6090` |
 
-Set `OPENCLAW_BROWSER_PUBLIC_URL=openclaw.yourdomain.com/browser` (path `/browser` → `NOVNC_BASE_PATH=/browser`).
+Set `OPENCLAW_BROWSER_DOMAIN=openclaw.yourdomain.com` and `OPENCLAW_BROWSER_DOMAIN_PATH=/browser` (→ `NOVNC_BASE_PATH=/browser`).
 
 No new tunnel needed — just add a public hostname to the existing tunnel in the Dashboard.
 
@@ -148,7 +155,7 @@ This avoids the concurrency problems of a shared browser sidecar approach.
 2. Click your tunnel → **Configure** → **Public Hostname** tab
 3. Add a new public hostname pointing to `http://localhost:6090` (see "Cloudflare Tunnel Route" above for subdomain vs subpath options)
 4. Add a Cloudflare Access policy to restrict who can view browser sessions
-5. Set `OPENCLAW_BROWSER_PUBLIC_URL` in `openclaw-config.env` to match your chosen URL
+5. Set `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_BROWSER_DOMAIN_PATH` in `openclaw-config.env` to match your chosen URL
 
 ### Verification
 
@@ -165,7 +172,7 @@ sudo docker logs openclaw-gateway 2>&1 | grep 'novnc-proxy'
 sudo docker exec openclaw-gateway curl -s http://127.0.0.1:6090/browser/main/vnc.html
 
 # External access via tunnel
-curl -s https://<OPENCLAW_BROWSER_PUBLIC_URL>/
+curl -s https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/
 ```
 
 ## Troubleshooting

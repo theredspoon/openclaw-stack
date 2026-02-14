@@ -91,7 +91,7 @@
         },
         // Enable each agent to have it's own browser container
         // Move browser settings to individual agent to restrict browser use or enforce single browser container
-        // Browser sessions are accessible to users via the novnc-proxy at OPENCLAW_BROWSER_PUBLIC_URL after deploy
+        // Browser sessions are accessible to users via the novnc-proxy at OPENCLAW_BROWSER_DOMAIN after deploy
         "browser": {
           "enabled": true,
           "image": "openclaw-sandbox-browser:bookworm-slim",

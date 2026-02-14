@@ -210,7 +210,8 @@ Then set in `openclaw-config.env`:
 
 ```
 OPENCLAW_DOMAIN=openclaw.yourdomain.com
-OPENCLAW_BROWSER_PUBLIC_URL=openclaw.yourdomain.com/browser
+OPENCLAW_BROWSER_DOMAIN=openclaw.yourdomain.com
+OPENCLAW_BROWSER_DOMAIN_PATH=/browser
 ```
 
 > **Why catch-all routing?** The OpenClaw Control UI opens a WebSocket connection to
@@ -259,7 +260,8 @@ Then set in `openclaw-config.env`:
 
 ```
 OPENCLAW_DOMAIN=openclaw.yourdomain.com
-OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com
+OPENCLAW_BROWSER_DOMAIN=browser-openclaw.yourdomain.com
+OPENCLAW_BROWSER_DOMAIN_PATH=
 ```
 
 > With separate subdomains, you may want a second Cloudflare Access application
@@ -269,10 +271,10 @@ OPENCLAW_BROWSER_PUBLIC_URL=browser-openclaw.yourdomain.com
 
 #### Config Notes
 
-The path component of `OPENCLAW_BROWSER_PUBLIC_URL` is automatically extracted during deployment and configured as `NOVNC_BASE_PATH` in the `.env` file. The noVNC proxy uses this to strip/add the path prefix so URLs work correctly through the tunnel.
+`OPENCLAW_BROWSER_DOMAIN_PATH` is passed directly to the noVNC proxy as `NOVNC_BASE_PATH` in the `.env` file — no URL parsing needed. The proxy uses this to strip/add the path prefix so URLs work correctly through the tunnel.
 
-- `openclaw.yourdomain.com/browser` → `NOVNC_BASE_PATH=/browser`
-- `browser-openclaw.yourdomain.com` → `NOVNC_BASE_PATH=` (empty)
+- `OPENCLAW_BROWSER_DOMAIN_PATH=/browser` → `NOVNC_BASE_PATH=/browser`
+- `OPENCLAW_BROWSER_DOMAIN_PATH=` (empty) → `NOVNC_BASE_PATH=` (empty)
 
 See [BROWSER-VNC.md](BROWSER-VNC.md) for details on URL routing and base path behavior.
 

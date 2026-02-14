@@ -33,7 +33,7 @@ From `../openclaw-config.env`:
 - `TELEGRAM_CHAT_ID` - Optional (required for host alerter)
 - `DISCORD_BOT_TOKEN` - Optional
 - `OPENCLAW_DOMAIN_PATH` - URL subpath for the gateway UI (default: `/_openclaw`)
-- `OPENCLAW_BROWSER_PUBLIC_URL` - Public URL for browser VNC access (used to derive `NOVNC_BASE_PATH`)
+- `OPENCLAW_BROWSER_DOMAIN_PATH` - Base path for the noVNC proxy (e.g., `/browser`), empty if using a separate subdomain
 
 ---
 
@@ -169,15 +169,8 @@ EOF
 # Generate gateway token
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 
-# Parse OPENCLAW_BROWSER_PUBLIC_URL to extract path component for noVNC proxy
-# "openclaw.example.com/browser" → "/browser"
-# "browser-openclaw.example.com" → "" (no subpath)
-# Still has placeholder (<example>) → "" (set during post-deploy)
-BROWSER_URL="${OPENCLAW_BROWSER_PUBLIC_URL}"
-NOVNC_BASE_PATH=""
-if [[ "$BROWSER_URL" != *"<"* ]] && [[ "$BROWSER_URL" == */* ]]; then
-  NOVNC_BASE_PATH="/${BROWSER_URL#*/}"  # everything after first /
-fi
+# noVNC proxy base path — direct from config, no parsing needed
+NOVNC_BASE_PATH="${OPENCLAW_BROWSER_DOMAIN_PATH:-}"
 
 sudo -u openclaw tee /home/openclaw/openclaw/.env << EOF
 # Gateway authentication
@@ -197,7 +190,7 @@ LOG_WORKER_URL=${LOG_WORKER_URL}
 LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
 VPS1_IP=${VPS1_IP}
 
-# noVNC proxy base path — derived from OPENCLAW_BROWSER_PUBLIC_URL path component
+# noVNC proxy base path — from OPENCLAW_BROWSER_DOMAIN_PATH
 # Empty = proxy serves at root (e.g., browser on a separate subdomain)
 NOVNC_BASE_PATH=${NOVNC_BASE_PATH}
 

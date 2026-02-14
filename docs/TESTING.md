@@ -114,11 +114,11 @@ mcp__chrome-devtools__take_snapshot()
 
 ### 2.5 Test Browser VNC Access (Optional)
 
-If `OPENCLAW_BROWSER_PUBLIC_URL` is configured:
+If `OPENCLAW_BROWSER_DOMAIN` is configured:
 
 ```
 # Navigate to browser VNC — may hit Cloudflare Access login
-mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_BROWSER_PUBLIC_URL>/")
+mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/")
 mcp__chrome-devtools__take_snapshot()
 ```
 

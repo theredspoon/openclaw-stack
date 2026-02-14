@@ -49,7 +49,7 @@ IMPORTANT: Read configuration from `openclaw-config.env`:
 ```bash
 # See openclaw-config.env.example for all fields and documentation.
 # Only VPS1_IP and CF_TUNNEL_TOKEN are required to start a fresh deployment.
-# Domain config (OPENCLAW_DOMAIN, OPENCLAW_BROWSER_PUBLIC_URL, OPENCLAW_DOMAIN_PATH)
+# Domain config (OPENCLAW_DOMAIN, OPENCLAW_BROWSER_DOMAIN, OPENCLAW_BROWSER_DOMAIN_PATH, OPENCLAW_DOMAIN_PATH)
 # is deferred to post-deploy when Cloudflare Tunnel routes are configured.
 ```
 
