@@ -2,21 +2,87 @@
 
 See <https://docs.openclaw.ai/gateway/authentication>
 
-Claude Code OAuth tokens are designed for CI/CD that uses claude code.
+Claude Code OAuth tokens (Pro/Max subscription) are designed for CI/CD that uses claude code.
+
+OpenClaw supports using subscription tokens with a workaround provided by the `pi-ai` lib.
+
+When openclaw is configured with `openclaw models auth paste-token ...`, it creates an
+`auth-profiles.json` file in the agent's config directory. The file simply contains
+the pasted-in token and some meta data.
+
+Then when `pi-ai` is building the LLM request, it:
+
+1. Checks if the Anthropic API key starts with `sk-ant-oat`
+2. Spoofs the headers used by claude code
+3. Sets `Authorization: Bearer [your setup token]` header
+4. Injects `You are Claude Code...` at the start of the system prompt
+5. Send the API request to the provider baseUrl (proxy or api.anthropic.com)
+
+Anthropic accepts the setup token because the headers match what it's expecting from Claude Code.
+
+> At best, OpenClaw's hack is a gray area for Anthropic TOS violation. You're technically not using
+> the setup token with Claude Code, but it works for now. Use at your own risk.
+>
+> Refer to OpenClaw's official documentation for additional details.
+
+## Using Subscriptions with your OpenClaw VPS
+
+These steps are essentially the same whether or not you're using the AI Proxy worker.
+The only difference is the key you give to openclaw.
+
+1. Generate a claude code setup token
+2. Use `openclaw models paste-token` to configure openclaw
 
 ```bash
-# Get setup token from claude
-claude setup-token
+# First, get a setup token from claude code
+# This can be run on any machine or the code sandbox on the VPS
+# Run `./scripts/ssh-agent.ts` and select the code agent to run claude in the sandbox
 
-# Provide token to openclaw
-openclaw models auth paste-token --provider anthropic
+# Generate the token
+claude setup-token
+# claude will give you a URL to click
+# The URL generates a one time auth token
+# Paste the token back into claude
+# Claude code then gives you a setup token
+# Copy the setup token
 ```
+
+If you're using the **AI Proxy Worker**, simply...
+
+```bash
+# Run the enable claude subscription script
+./scripts/enable-claude-subscription.sh
+
+# Past in the setup token generated from `claude setup-token`
+# The script takes care of the rest
+# Your setup token is NOT shared with OpenClaw
+# or save on your VPS. It's stored in your AI Worker.
+```
+
+If you're not using a proxy...
+
+```bash
+# SSH into the gateway
+./scripts/ssh-gateway.sh
+
+# Provide the setup token to openclaw
+openclaw models auth paste-token --provider anthropic
+# openclaw will prompt you to paste in the setup token from claude
+
+# NOTE: this method saves your setup token on your VPS
+```
+
+That's it! You should be good to go.
+
+The rest of this document is technical details for nerds.
+
+---
 
 ## How OpenClaw Handles Subscription Tokens
 
 ### Setup-Token Flow
 
-The `openclaw models auth setup-token --provider anthropic` command:
+The `openclaw models auth paste-token --provider anthropic` command:
 
 1. Prompts user for a token (must start with sk-ant-oat01-, min 80 chars)
 2. Stores it as a type: "token" credential in auth-profiles.json
