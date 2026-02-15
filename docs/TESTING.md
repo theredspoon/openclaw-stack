@@ -107,12 +107,12 @@ mcp__chrome-devtools__list_console_messages(types=["error"])
 ### 2.4 Verify 404 on Unknown Paths
 
 ```
-# Try random path - should return 404 (or Access login if path isn't covered by the same Access app)
-mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_DOMAIN>/random-path")
+# Try random path — verify it doesn't expose unexpected content
+mcp__chrome-devtools__navigate_page(url="https://<OPENCLAW_DOMAIN>/random-path-test-12345")
 mcp__chrome-devtools__take_snapshot()
 ```
 
-**Success criteria**: Random paths return 404 (not proxied to backend) or Cloudflare Access login (if the path isn't under the same Access application scope).
+**Success criteria**: Random paths return one of: (a) the OpenClaw SPA (gateway catch-all — normal for SPAs), (b) 404, or (c) Cloudflare Access login. The key check is that no unexpected backend content or error details are leaked.
 
 ### 2.5 Test Browser VNC Access (Optional)
 
