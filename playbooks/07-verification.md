@@ -121,7 +121,7 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 
 **Expected:** Returns `{"status":"ok"}`.
 
-> **Note:** The health check passing confirms the worker is deployed and reachable. It does NOT verify that provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured — that is tested during post-deploy (`08-post-deploy.md` § 8.5). On a fresh deploy, the worker is healthy but won't proxy LLM requests until keys are added.
+> **Note:** The health check passing confirms the worker is deployed and reachable. It does NOT verify that provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured — that is tested during post-deploy (`08-post-deploy.md` § 8.1). On a fresh deploy, the worker is healthy but won't proxy LLM requests until keys are added.
 
 **If either worker health check fails:**
 
@@ -374,7 +374,7 @@ sudo docker inspect openclaw-gateway --format '{{.HostConfig.PidsLimit}}'
 
 1. **User: Access OpenClaw** via configured domain (authenticate through Cloudflare Access)
 2. **User: Send a test message** via webchat
-3. **User: Verify LLM response** comes back (confirms AI Gateway Worker is routing to a provider). This may fail until provider API keys are configured in the worker — see `08-post-deploy.md` § 8.5 for the configuration flow.
+3. **User: Verify LLM response** comes back (confirms AI Gateway Worker is routing to a provider). This may fail until provider API keys are configured in the worker — see `08-post-deploy.md` § 8.1 for the configuration flow.
 4. **(CF AI Gateway mode only)** Check Cloudflare AI Gateway dashboard for the request (Dashboard -> AI -> AI Gateway)
 5. **Check Cloudflare Workers logs** for container log entries (Workers & Pages -> log-receiver -> Logs)
 

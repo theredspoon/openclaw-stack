@@ -1,12 +1,13 @@
 # 08 - Post-Deploy: Device Pairing & Deployment Report
 
-Guide for pairing your first device and completing deployment.
+Guide for configuring the AI proxy, pairing your first device, and completing deployment.
 
 ## Overview
 
 After `07-verification.md` confirms all services are healthy and domain routing is
 verified, this playbook walks you through:
 
+- Verifying and configuring the AI proxy
 - Retrieving the gateway access token
 - Opening the OpenClaw UI for the first time
 - Approving your first device pairing request
@@ -19,7 +20,142 @@ verified, this playbook walks you through:
 
 ---
 
-## 8.1 Retrieve Gateway Token
+## 8.1 AI Proxy Configuration
+
+Verify the AI proxy worker and configure provider access so the gateway can reach LLM providers before device pairing.
+
+### Step 1: Health Check
+
+```bash
+curl -s https://<AI_GATEWAY_WORKER_URL>/health
+```
+
+**Expected:** `{"status":"ok"}` — the worker was deployed during step 1 (`01-workers.md`).
+
+**If unhealthy:** The worker may not have deployed correctly. Re-run `01-workers.md` § 1.1 before continuing.
+
+### Step 2: Test LLM Proxy
+
+Send a minimal request through the AI proxy to verify it can reach a provider:
+
+```bash
+curl -s -w "\n%{http_code}" https://<AI_GATEWAY_WORKER_URL>/v1/messages \
+  -H "Authorization: Bearer <AI_GATEWAY_AUTH_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":10,"messages":[{"role":"user","content":"Say hi"}]}'
+```
+
+### Step 3: Evaluate Result
+
+**If 200 (LLM responds):** Provider access is already configured. Skip to § 8.2 (Retrieve Gateway Token).
+
+**If error (expected on fresh deploy — no provider access yet):**
+
+The AI proxy is deployed and healthy, but doesn't have provider access configured yet. Present three options using `AskUserQuestion`:
+
+1. **Setup API keys now** — configure provider keys interactively
+2. **Configure Cloudflare AI Gateway** — self-service with instructions
+3. **Chat about it** — discuss options with Claude before deciding
+
+#### Option 1: Setup API keys now
+
+Ask a sub-question with two choices:
+
+- **Anthropic API Key** — direct API access with a `sk-ant-*` key
+- **Claude Code Subscription** — use an existing Claude Code subscription
+
+**Anthropic API Key flow:**
+
+> "I can add your Anthropic API key to the worker now. The key is stored only in Cloudflare as an encrypted Worker secret — it never touches the VPS and is not saved locally."
+
+Ask the user for their Anthropic API key. When provided (should start with `sk-ant-`):
+
+```bash
+cd workers/ai-gateway
+echo "<key>" | npx wrangler secret put ANTHROPIC_API_KEY
+```
+
+> **OpenAI:** If the user also wants OpenAI, add it the same way: `echo "<key>" | npx wrangler secret put OPENAI_API_KEY`. Otherwise, note in the deployment report that they can add it later.
+
+**Claude Code Subscription flow:**
+
+Tell the user they need a setup token first:
+
+1. Run `claude setup-token` in another terminal, **OR**
+2. Run `scripts/ssh-agent.sh` to SSH into the code sandbox, then run `claude setup-token` there
+
+Once the user has the token:
+
+```bash
+scripts/enable-claude-subscription.sh --all
+```
+
+The script will:
+- Prompt the user to paste the token (input is hidden)
+- Store the token in the AI Gateway worker via `wrangler secret put CLAUDE_CODE_OAUTH_TOKEN`
+- Write `auth-profiles.json` to all agents on the VPS
+- Restart the gateway
+
+Wait for the script to complete before continuing.
+
+#### Option 2: Configure Cloudflare AI Gateway
+
+Tell the user the secrets they'll need to set:
+
+| Secret | How to get it |
+|--------|---------------|
+| `CF_AI_GATEWAY_ACCOUNT_ID` | Run `wrangler whoami` or check CF Dashboard |
+| `CF_AI_GATEWAY_TOKEN` | CF Dashboard → AI → AI Gateway settings |
+| `CF_AI_GATEWAY_ID` | Set in `wrangler.jsonc` |
+| Provider API key(s) | `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` |
+
+Link them to the [Cloudflare Dashboard](https://dash.cloudflare.com/) and [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for the full guide. Note this in the deployment report and continue to § 8.2 — they can finish setup later.
+
+#### Option 3: Chat about it
+
+Explain the options conversationally:
+
+- **Anthropic API Key** is the simplest — paste a key and go. Requires an Anthropic API account with billing.
+- **Claude Code Subscription** uses an existing Claude Code subscription (Max or Team plan). No separate API billing needed.
+- **Cloudflare AI Gateway** adds analytics, caching, and rate limiting on top of either provider key approach. More setup, but useful for monitoring usage.
+
+When the user is ready, loop back to the options above.
+
+### Step 4: Re-test
+
+After configuration (Option 1 or Option 2), re-run the LLM proxy test from Step 2.
+
+**If 200:** AI proxy is fully configured. Continue to § 8.2.
+
+**If still failing:** Debug before continuing.
+
+#### Debugging
+
+1. **Check worker logs** — run briefly from the local machine while retrying the curl test:
+
+   ```bash
+   cd workers/ai-gateway
+   npx wrangler tail --format pretty
+   ```
+
+   In another terminal, re-run the curl test from Step 2 and check the wrangler tail output for errors.
+
+2. **Common issues:**
+   - Invalid API key — double-check the key value, ensure no trailing whitespace
+   - Expired or invalid subscription token — re-run `claude setup-token` and `scripts/enable-claude-subscription.sh --all`
+   - Provider billing — check your Anthropic/OpenAI account has active billing
+   - Worker not picking up new secrets — wait 30 seconds and retry
+
+3. **After 2-3 debugging iterations**, offer to skip:
+
+   > "Would you like to skip AI proxy setup for now and continue with device pairing? You can configure it later via [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md)."
+
+   If skipped, note it in the deployment report (§ 8.6).
+
+---
+
+## 8.2 Retrieve Gateway Token
 
 Read the gateway token from VPS-1:
 
@@ -38,7 +174,7 @@ https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/chat?token=<TOKEN>
 
 ---
 
-## 8.2 Open the URL
+## 8.3 Open the URL
 
 Tell the user to open the URL in their browser.
 
@@ -56,7 +192,7 @@ Ask the user to confirm they can see the page (even with the pairing error) befo
 
 ---
 
-## 8.3 Approve Device Pairing
+## 8.4 Approve Device Pairing
 
 After the user opens the URL and sees "pairing required", approve their device.
 
@@ -80,7 +216,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 Tell the user to wait ~15 seconds for browser auto-retry.
 
-**If this works:** Skip to §8.4.
+**If this works:** Skip to § 8.5.
 
 ### Approach 2: Re-pair CLI with Explicit Token
 
@@ -151,7 +287,7 @@ than first boot), then retry from Approach 1.
 
 ---
 
-## 8.4 Verify Connection
+## 8.5 Verify Connection
 
 Ask the user to confirm:
 
@@ -174,80 +310,6 @@ If the device shows as approved but the browser still can't connect, ask the use
 
 ---
 
-## 8.5 AI Proxy Configuration
-
-After the device pairing is confirmed, verify the AI proxy worker and configure provider API keys if needed.
-
-### Step 1: Health Check
-
-```bash
-curl -s https://<AI_GATEWAY_WORKER_URL>/health
-```
-
-**Expected:** `{"status":"ok"}` — the worker was deployed during step 1 (`01-workers.md`).
-
-**If unhealthy:** The worker may not have deployed correctly. Re-run `01-workers.md` § 1.1 before continuing.
-
-### Step 2: Test LLM Proxy
-
-Send a minimal request through the AI proxy to verify it can reach a provider:
-
-```bash
-curl -s -w "\n%{http_code}" https://<AI_GATEWAY_WORKER_URL>/v1/messages \
-  -H "Authorization: Bearer <AI_GATEWAY_AUTH_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{"model":"claude-sonnet-4-20250514","max_tokens":10,"messages":[{"role":"user","content":"Say hi"}]}'
-```
-
-### Step 3: Evaluate Result
-
-**If 200 (LLM responds):** Provider keys are already configured. Skip to § 8.6 (Deployment Report).
-
-**If error (expected on fresh deploy — no provider keys yet):**
-
-The AI proxy is deployed and healthy, but doesn't have provider API keys yet. Ask the user:
-
-> "The AI proxy worker is deployed but needs provider API keys to proxy LLM requests. How would you like to configure it?"
-
-Offer three options:
-
-- **(a) Direct API access** — API keys stored as Worker secrets, requests go directly to Anthropic/OpenAI
-- **(b) Cloudflare AI Gateway** — Route through CF AI Gateway for analytics/caching (requires additional setup)
-- **(c) Not sure / skip for now** — Direct them to [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md)
-
-### Step 4: Configure Provider Keys (options a or c)
-
-If the user chooses **(a)** or wants to try direct access:
-
-> "I can add your Anthropic API key to the worker now. The key is stored only in Cloudflare as an encrypted Worker secret — it never touches the VPS and is not saved locally."
-
-Ask the user for their Anthropic API key. When provided (should start with `sk-ant-`):
-
-```bash
-cd workers/ai-gateway
-echo "<key>" | npx wrangler secret put ANTHROPIC_API_KEY
-```
-
-> **OpenAI:** If the user also wants OpenAI, add it the same way: `echo "<key>" | npx wrangler secret put OPENAI_API_KEY`. Otherwise, note in the deployment report that they can add it later.
-
-### Step 5: Configure CF AI Gateway (option b)
-
-If the user chooses **(b)**, direct them to [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for the full setup guide (creating an AI Gateway in the CF Dashboard, setting the required secrets). Note this in the deployment report and continue.
-
-### Step 6: Re-test
-
-After adding provider keys, re-run the test from Step 2.
-
-**If 200:** AI proxy is fully configured. Continue to § 8.6.
-
-**If still failing:** Note the issue in the deployment report. Common causes:
-- Invalid API key — double-check the key value
-- Provider account issues (billing, rate limits)
-- Direct the user to [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for troubleshooting
-
----
-
 ## 8.6 Deployment Report
 
 **IMPORTANT:** After the user confirms the chat interface is working, output a complete deployment report. This is the final step — do NOT skip it.
@@ -265,6 +327,12 @@ Collect the following values and present them in a single, neatly formatted repo
    ```
 
 3. **Domain and URLs** — from `openclaw-config.env`.
+
+### AI proxy status
+
+If AI proxy configuration was skipped in § 8.1, include this callout in the report:
+
+> **AI Proxy:** Not configured. See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) to add provider API keys, or run `scripts/enable-claude-subscription.sh` to use a Claude Code subscription.
 
 ### Report format
 

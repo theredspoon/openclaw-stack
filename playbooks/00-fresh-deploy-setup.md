@@ -241,12 +241,12 @@ Deployment Plan:
   4. OpenClaw deployment (04-vps1-openclaw.md)
   5. Backup configuration (06-backup.md)
   6. Reboot & verification (07-verification.md)
-  7. Post-deploy: device pairing, AI proxy configuration & deployment report (08-post-deploy.md)
+  7. Post-deploy: AI proxy configuration, device pairing & deployment report (08-post-deploy.md)
 ```
 
 Domain and Cloudflare Access have been verified.
 
-> **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 7, `08-post-deploy.md` § 8.5), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
+> **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 7, `08-post-deploy.md` § 8.1), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
 
 Ask the user to confirm before proceeding with the deployment.
 

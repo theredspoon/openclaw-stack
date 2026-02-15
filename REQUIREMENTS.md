@@ -562,7 +562,7 @@ Proxies LLM requests to Anthropic and OpenAI. Routes directly to provider APIs b
 |--------|---------|
 | `AUTH_TOKEN` | Token clients use to authenticate to this worker |
 
-*Set post-deploy (see `08-post-deploy.md` § 8.5):*
+*Set post-deploy (see `08-post-deploy.md` § 8.1):*
 
 | Secret | Purpose |
 |--------|---------|
