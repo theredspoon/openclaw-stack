@@ -244,8 +244,17 @@ Deployment Plan:
   7. Post-deploy: device pairing, AI proxy configuration & deployment report (08-post-deploy.md)
 ```
 
-Domain and Cloudflare Access have been verified. The deployment can proceed end-to-end without interruption until device pairing.
+Domain and Cloudflare Access have been verified.
 
 > **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 7, `08-post-deploy.md` § 8.5), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
 
 Ask the user to confirm before proceeding with the deployment.
+
+### Automation directive
+
+After the user confirms, execute playbooks 01 through 07 **continuously without pausing between steps**. Do not ask for confirmation between playbooks. Only stop if:
+
+- A command fails and the error requires user input to resolve
+- A playbook step explicitly says to wait for user input (e.g., a blocking error with multiple resolution paths)
+
+Normal informational output (progress updates, version notes, check results) should be reported inline without pausing. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`.

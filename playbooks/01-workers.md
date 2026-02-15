@@ -47,7 +47,7 @@ Before deploying, check if the worker is already live. If `AI_GATEWAY_WORKER_URL
 curl -s https://<AI_GATEWAY_WORKER_URL>/health
 ```
 
-- **If healthy (`{"status":"ok"}`):** The worker is already deployed. Warn the user: re-deploying will overwrite secrets. Ask to confirm before continuing.
+- **If healthy (`{"status":"ok"}`):** The worker is already deployed. During a **fresh deploy** (called from `00-fresh-deploy-setup.md`), proceed without pausing — secrets will be re-set. Outside of a fresh deploy, warn the user that re-deploying will overwrite secrets and ask to confirm.
 - **If unhealthy or URL is a placeholder:** Proceed with fresh deployment.
 
 ### Configure AI Gateway Worker Secrets
@@ -110,7 +110,7 @@ Before deploying, check if the worker is already live. If `LOG_WORKER_URL` in `o
 curl -s https://<LOG_WORKER_BASE_URL>/health
 ```
 
-- **If healthy (`{"status":"ok"}`):** The worker is already deployed. Warn the user: re-deploying will overwrite secrets. Ask to confirm before continuing.
+- **If healthy (`{"status":"ok"}`):** The worker is already deployed. During a **fresh deploy**, proceed without pausing. Outside of a fresh deploy, warn the user that re-deploying will overwrite secrets and ask to confirm.
 - **If unhealthy or URL is a placeholder:** Proceed with fresh deployment.
 
 ### Configure Log Worker Secrets

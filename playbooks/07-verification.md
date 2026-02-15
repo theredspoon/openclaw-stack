@@ -284,7 +284,9 @@ NanoCpus is CPUs × 1e9 (e.g., `6000000000` = 6 CPUs). Memory is in bytes (e.g.,
 
 **If values match:** Report that resource limits are correctly sized and continue.
 
-**If mismatch detected:** Show the user a comparison:
+**If mismatch detected during a fresh deploy:** Resource limits were already validated in `00-fresh-deploy-setup.md` § 0.4. Auto-apply the recommended values (CPUs = nproc, memory = total - 750M) without prompting, note the adjustment in the output, and continue.
+
+**If mismatch detected outside a fresh deploy:** Show the user a comparison:
 
 ```
 VPS Resources:

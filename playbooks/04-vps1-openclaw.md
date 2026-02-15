@@ -50,12 +50,8 @@ https://github.com/nestybox/sysbox/releases
 
 Compare the latest release tag against `SYSBOX_VERSION` below.
 
-- **If a newer version exists:**
-  1. Fetch the release page and summarize the changelog for the user.
-  2. Ask the user whether to use the new version or keep the pinned one.
-  3. If they choose the new version, update `SYSBOX_VERSION` and `SYSBOX_SHA256` below
-     **and save this playbook file** before proceeding to the install script.
-- **If the pinned version is already the latest:** proceed directly.
+- **If a newer version exists:** Note the newer version in the output but proceed with the pinned version. Do not pause to ask — the pinned version has a verified checksum. The user can update later.
+- **If the pinned version is already the latest:** Proceed directly.
 
 <!-- Pinned version — update both values together -->
 `SYSBOX_VERSION=0.6.7`
