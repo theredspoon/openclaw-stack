@@ -383,13 +383,14 @@ Check `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `opencl
 
 | Task | Command |
 |------|---------|
-| SSH to VPS | `ssh -i <KEY> -p 222 adminclaw@<IP>` |
-| Gateway logs | `sudo docker logs -f openclaw-gateway` |
-| Container status | `sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'` |
-| List devices | `openclaw devices list` |
-| Approve device | `openclaw devices approve <requestId>` |
-| Run backup | `sudo /home/openclaw/scripts/backup.sh` |
-| Update OpenClaw | See `04-vps1-openclaw.md` § Updating OpenClaw |
+| SSH to VPS | `./scripts/ssh-vps.sh` |
+| SSH to Gateway | `./scripts/ssh-gateway.sh` |
+| Gateway logs | `./scripts/logs-gateway.sh` |
+| Health Checks | `./scripts/health-check.sh` |
+| OpenClaw CLI | `./scripts/openclaw.sh [command]` or SSH to Gateway `openclaw` |
+| Run backup | `claude "run the backup script on the vps"` |
+| Update OpenClaw | `claude "update openclaw"` |
+| Update Sandboxes | `claude "update ffmpeg in the sandbox toolkit"` |
 ```
 
 > For additional AI provider configuration (OpenAI, Cloudflare AI Gateway, Claude Code subscription), see [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md).

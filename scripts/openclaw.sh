@@ -25,4 +25,4 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
-ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" "openclaw $*"
+ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" "openclaw $*"

@@ -316,7 +316,7 @@ openclaw doctor --deep
 
 **If you see other doctor warnings:**
 
-- **State integrity: missing transcripts** — clear with: `sudo docker exec --user node openclaw-gateway bash -c 'echo {} > /home/node/.openclaw/agents/main/sessions/sessions.json'`
+- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.8. If missing, recreate: `sudo mkdir -p /home/openclaw/.openclaw/agents/main/sessions && echo '{}' | sudo tee /home/openclaw/.openclaw/agents/main/sessions/sessions.json > /dev/null && sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main`
 - **Sandbox: base image missing** — restart gateway to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
 
 ### Checklist

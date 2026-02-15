@@ -14,7 +14,7 @@ the playbooks as designed.
 
    ```bash
    # Run claude with skip permissions if you want a more automated deploy
-   claude --allow-dangerously-skip-permissions
+   claude --dangerously-skip-permissions
    # Prompt: 'start'
 
    # Claude will deploy and test the VPS (15+ minutes)

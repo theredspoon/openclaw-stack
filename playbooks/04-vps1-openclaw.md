@@ -352,6 +352,11 @@ for agent in main code skills; do
   sudo tee /home/openclaw/.openclaw/agents/${agent}/agent/models.json << 'JSONEOF'
 # <<< deploy/models.json (template) >>>
 JSONEOF
+  # Pre-create session store — the gateway lazily creates this dir only when the
+  # first session is saved, but `openclaw doctor` reports CRITICAL if it's missing.
+  sudo mkdir -p /home/openclaw/.openclaw/agents/${agent}/sessions
+  [ -f /home/openclaw/.openclaw/agents/${agent}/sessions/sessions.json ] || \
+    echo '{}' | sudo tee /home/openclaw/.openclaw/agents/${agent}/sessions/sessions.json > /dev/null
   sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/${agent}
   sudo chmod 600 /home/openclaw/.openclaw/agents/${agent}/agent/models.json
 done
@@ -440,7 +445,12 @@ Create a convenience wrapper so `adminclaw` can run `openclaw <command>` directl
 sudo tee /usr/local/bin/openclaw << 'WRAPEOF'
 #!/bin/bash
 # OpenClaw CLI wrapper — runs commands inside the gateway container as node user
-exec sudo docker exec -it --user node openclaw-gateway openclaw "$@"
+# Detect TTY to avoid garbled output when called over non-interactive SSH
+TTY_FLAG=""
+if [ -t 0 ] && [ -t 1 ]; then
+  TTY_FLAG="-it"
+fi
+exec sudo docker exec $TTY_FLAG --user node openclaw-gateway openclaw "$@"
 WRAPEOF
 
 sudo chmod +x /usr/local/bin/openclaw
