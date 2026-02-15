@@ -260,7 +260,13 @@ ss -tlnp | grep 222
 ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP> "echo 'Port 222 works!'"
 ```
 
-**If port 222 test succeeds:** SSH back in on 222 and remove port 22:
+**If port 222 test succeeds:** Update `openclaw-config.env` on the LOCAL machine to reflect the new SSH settings, then SSH back in on 222 and remove port 22:
+
+```bash
+# On LOCAL machine — update config to use new SSH user and port
+sed -i'' -e 's|^SSH_USER=ubuntu.*|SSH_USER=adminclaw            # Changed from ubuntu during hardening|' openclaw-config.env
+sed -i'' -e 's|^SSH_PORT=22.*|SSH_PORT=222                  # Changed from 22 during hardening|' openclaw-config.env
+```
 
 ```bash
 ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>

@@ -359,6 +359,7 @@ JSONEOF
     echo '{}' | sudo tee /home/openclaw/.openclaw/agents/${agent}/sessions/sessions.json > /dev/null
   sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/${agent}
   sudo chmod 600 /home/openclaw/.openclaw/agents/${agent}/agent/models.json
+  sudo chmod 600 /home/openclaw/.openclaw/agents/${agent}/sessions/sessions.json
 done
 ```
 
@@ -371,7 +372,7 @@ Instead of maintaining a forked Dockerfile, we patch upstream source files in-pl
 Two patches are applied:
 
 1. **Dockerfile**: installs `docker.io` and `gosu` for nested Docker (sandbox isolation via Sysbox)
-2. **attempt.ts**: enables `systemPrompt` in the `before_agent_start` hook result (needed by skill-router plugin)
+2. **docker.ts**: applies sandbox env vars (`docker.env`) to container creation (missing upstream feature)
 
 ```bash
 #!/bin/bash
