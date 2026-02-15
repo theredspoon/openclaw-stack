@@ -3,7 +3,11 @@
 Example commands to resize and record claude sessions.
 
 ```bash
+# Resize terminal & record
 printf '\e[8;30;120t' && sleep 0.3 && asciinema rec -c "claude" demo.cast
+
+# Record
+asciinema rec -c "claude" demo.cast
 
 # 16:9-ish, good for embedding on a blog or README
 printf '\e[8;30;120t'
