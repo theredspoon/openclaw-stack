@@ -42,6 +42,10 @@ export default {
     }
 
     const apiKey = getProviderApiKey(route.provider, authToken, env)
+    if (!apiKey) {
+      console.error(`No API key configured for ${route.provider}: ${request.method} ${route}`)
+      return addCorsHeaders(jsonError(`No API key configured for ${route.provider}`, 500))
+    }
 
     if (env.LOG_LEVEL === 'debug') {
       logInboundRequest(log, request, route, apiKey)

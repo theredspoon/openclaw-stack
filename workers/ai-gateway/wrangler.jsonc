@@ -29,13 +29,13 @@
     // Required (set during deployment):
     //   AUTH_TOKEN            — token clients use to authenticate to this worker
     //
-    // Set post-deploy (see docs/AI-GATEWAY-CONFIG.md):
-    //   OPENAI_API_KEY        — forwarded to OpenAI (required for OpenAI models)
+    // Provider API keys (see docs/AI-GATEWAY-CONFIG.md):
     //   ANTHROPIC_API_KEY     — forwarded to Anthropic (required for Anthropic models)
-    //   CLAUDE_CODE_OAUTH_TOKEN — claude code setup token
+    //   OPENAI_API_KEY        — forwarded to OpenAI (required for OpenAI models)
     //
-    // Optional (CF AI Gateway mode only):
-    //   CF_AI_GATEWAY_ACCOUNT_ID — Cloudflare account ID (`wrangler whoami` to find it)
+    // Advanced (see docs/AI-GATEWAY-CONFIG.md):
+    //   CLAUDE_CODE_OAUTH_TOKEN  — Claude Code subscription token (sk-ant-oat-*)
+    //   CF_AI_GATEWAY_ACCOUNT_ID — Cloudflare account ID (CF AI Gateway mode only)
     //   CF_AI_GATEWAY_TOKEN      — authenticates requests to Cloudflare AI Gateway
   }
 }
