@@ -13,7 +13,8 @@ the playbooks as designed.
 3. Run `claude` in this repo dir, just say `start`
 
    ```bash
-   claude
+   # Run claude with skip permissions if you want a more automated deploy
+   claude --allow-dangerously-skip-permissions
    # Prompt: 'start'
 
    # Claude will deploy and test the VPS (15+ minutes)
