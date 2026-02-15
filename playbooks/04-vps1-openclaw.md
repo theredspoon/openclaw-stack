@@ -247,6 +247,16 @@ fi
 echo "========================================="
 ```
 
+**Record gateway token locally:** Immediately after the script above runs, write/update the `GATEWAY_TOKEN` and `GATEWAY_URL` values in the `# DEPLOYED:` section of `openclaw-config.env`. Compose the URL from `OPENCLAW_DOMAIN` and `OPENCLAW_DOMAIN_PATH`:
+
+```bash
+# Run on LOCAL machine — persist gateway token as comments in openclaw-config.env
+sed -i'' -e "s|^# DEPLOYED: GATEWAY_TOKEN=.*|# DEPLOYED: GATEWAY_TOKEN=${GATEWAY_TOKEN}|" openclaw-config.env
+sed -i'' -e "s|^# DEPLOYED: GATEWAY_URL=.*|# DEPLOYED: GATEWAY_URL=https://${OPENCLAW_DOMAIN}${OPENCLAW_DOMAIN_PATH}/chat?token=${GATEWAY_TOKEN}|" openclaw-config.env
+```
+
+> These are comments — `source openclaw-config.env` won't export them. They're a safety net in case the session ends before the deployment report (§ 8.6).
+
 ---
 
 ## 4.6 Create Docker Compose Override
@@ -612,6 +622,7 @@ sudo docker logs --tail 20 openclaw-gateway
 > `sudo docker logs openclaw-gateway`
 >
 > Common issues:
+>
 > - **Port already in use:** another process on port 18789 — `sudo ss -tlnp | grep 18789`
 > - **Sysbox not available:** `sudo systemctl status sysbox` — must be active
 > - **Invalid .env:** missing required variables — `cat /home/openclaw/openclaw/.env`

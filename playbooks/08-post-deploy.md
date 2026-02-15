@@ -92,6 +92,7 @@ scripts/enable-claude-subscription.sh --all
 ```
 
 The script will:
+
 - Prompt the user to paste the token (input is hidden)
 - Store the token in the AI Gateway worker via `wrangler secret put CLAUDE_CODE_OAUTH_TOKEN`
 - Write `auth-profiles.json` to all agents on the VPS
@@ -318,9 +319,10 @@ Collect the following values and present them in a single, neatly formatted repo
 
 ### Values to collect
 
-1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), read them from your conversation history or inform the user they were displayed during base setup and should have been saved.
+1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), check the `# DEPLOYED:` lines in `openclaw-config.env` first (`grep 'DEPLOYED.*PASSWORD' openclaw-config.env`). If those are also empty, inform the user the passwords were displayed during base setup and can be reset via VNC/console access.
 
 2. **Gateway token** — read from VPS:
+
    ```bash
    ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
      "sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2"
@@ -431,7 +433,7 @@ Check `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `opencl
 | Update OpenClaw | See `04-vps1-openclaw.md` § Updating OpenClaw |
 ```
 
-> **Note:** If user passwords are no longer in the conversation context, note that they were displayed during step 2.2 and should have been saved at that time. The passwords can also be reset via VNC/console access if needed.
+> **Note:** If user passwords are no longer in the conversation context, check `openclaw-config.env` for `# DEPLOYED:` lines first (`grep 'DEPLOYED' openclaw-config.env`). These are written automatically during deployment as a safety net. If those are also empty, the passwords can be reset via VNC/console access.
 
 ---
 

@@ -135,6 +135,16 @@ echo "  openclaw:  ${OPENCLAW_PASS}"
 echo "========================================="
 ```
 
+**Record passwords locally:** Immediately after the script above runs, write/update the `ADMINCLAW_PASSWORD` and `OPENCLAW_PASSWORD` values in the `# DEPLOYED:` section of `openclaw-config.env`. Use `sed` to update existing lines in-place (don't append duplicates):
+
+```bash
+# Run on LOCAL machine — persist passwords as comments in openclaw-config.env
+sed -i'' -e "s|^# DEPLOYED: ADMINCLAW_PASSWORD=.*|# DEPLOYED: ADMINCLAW_PASSWORD=${ADMINCLAW_PASS}|" openclaw-config.env
+sed -i'' -e "s|^# DEPLOYED: OPENCLAW_PASSWORD=.*|# DEPLOYED: OPENCLAW_PASSWORD=${OPENCLAW_PASS}|" openclaw-config.env
+```
+
+> These are comments — `source openclaw-config.env` won't export them. They're a safety net in case the session ends before the deployment report (§ 8.6).
+
 **Workflow after setup:**
 
 ```bash
@@ -464,6 +474,7 @@ sudo ufw delete allow 443/tcp 2>/dev/null || true
 > `sudo journalctl -u cloudflared --no-pager | tail -20`
 >
 > Common issues:
+>
 > - **"failed to sufficiently increase receive buffer size"** — harmless warning, not a crash cause
 > - **"Tunnel credentials not found"** — token is malformed. Re-copy from Cloudflare Dashboard
 > - **"connection refused"** — outbound connectivity issue. Check `curl -sI https://cloudflare.com`
