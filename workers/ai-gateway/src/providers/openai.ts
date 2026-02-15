@@ -1,5 +1,5 @@
 import type { Env, Log } from '../types'
-import { sanitizeHeaders } from '../log'
+import { sanitizeHeaders, truncateBody } from '../log'
 
 /** Proxy the request to OpenAI via AI Gateway. */
 export async function proxyOpenAI(
@@ -19,7 +19,7 @@ export async function proxyOpenAI(
 
   const body = await request.text()
   log.debug('[openai] upstream headers', sanitizeHeaders(headers))
-  log.debug('[openai] request body', body)
+  log.debug('[openai] request body', truncateBody(body))
 
   return fetch(url, {
     method: request.method,

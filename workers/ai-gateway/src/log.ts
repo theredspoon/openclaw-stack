@@ -42,6 +42,14 @@ export function sanitizeHeaders(headers: Headers): Record<string, string> {
   return out
 }
 
+const MAX_LOG_BODY = 8192
+
+/** Truncate a string for safe logging within Cloudflare's 256 KB log limit. */
+export function truncateBody(body: string, max = MAX_LOG_BODY): string {
+  if (body.length <= max) return body
+  return body.slice(0, max) + `… [truncated, ${body.length} chars total]`
+}
+
 export function logInboundRequest(log: Log, request: Request, route: RouteMatch, apiKey: string) {
   const headers = new Headers()
   // Merge request headers, skipping auth and cf-* headers

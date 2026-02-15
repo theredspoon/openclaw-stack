@@ -1,5 +1,5 @@
 import type { Env, Log } from '../types'
-import { sanitizeHeaders } from '../log'
+import { sanitizeHeaders, truncateBody } from '../log'
 
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01'
 
@@ -43,7 +43,7 @@ export async function proxyAnthropic(
   const body = await request.text()
 
   log.debug('[anthropic] upstream headers', sanitizeHeaders(headers))
-  log.debug('[anthropic] request body', body)
+  log.debug('[anthropic] request body', truncateBody(body))
 
   return fetch(url, {
     method: 'POST',
