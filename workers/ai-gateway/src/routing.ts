@@ -23,10 +23,10 @@ function toGatewayPath(route: string): string {
   return route.replace('/v1/', '/')
 }
 
-/** Direct API path: strip provider prefix, keep /v1/ */
+/** Direct API path: strip provider prefix, keep /v1/ (no leading slash — callers add the separator) */
 function toDirectPath(route: string): string {
   const slash = route.indexOf('/')
-  return '/' + route.slice(slash + 1)
+  return route.slice(slash + 1)
 }
 
 /** Match a request to a provider route, returning the provider and upstream paths. */
