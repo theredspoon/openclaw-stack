@@ -32,7 +32,7 @@ export async function proxyAnthropic(
 
   if (apiKey.startsWith('sk-ant-oat')) {
     // Using OAuth token
-    headers.set('authorization', `Bearer: ${apiKey}`)
+    headers.set('authorization', `Bearer ${apiKey}`)
     log.debug(`[anthropic] Using OAuth Token: ${apiKey.substring(0, 10)}...`)
   } else {
     // Using regular API key
