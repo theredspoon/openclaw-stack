@@ -2,7 +2,7 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
-- [ ] Update playbooks to remove AI Gateway requirement or checks
+- [ ] Make claude store adminclaw and openclaw user passwords in openclaw-config.env as comments when they're generated
 
 - [ ] Add docs/SKILL-ROUTER.md to point to skill router README.md on how to use skill-router config in openclaw.json
 
@@ -23,6 +23,7 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 
 ## Completed (this branch)
 
+- [x] Update playbooks to remove AI Gateway requirement or checks
 - [x] Serve html instead of not found for media server when no files are present
 - [x] Add docs/ to sandbox agents, system prompt references docs/ to assist users with openclaw: <https://docs.openclaw.ai/concepts/system-prompt>
 - [x] Set OPENAI_BASE_URL and ANTHROPIC_BASE_URL in sandbox env so sdk's pick up the urls
