@@ -187,7 +187,14 @@ sudo ufw --force enable
 
 Run on: **VPS-1**
 
-**IMPORTANT**: Ubuntu uses systemd socket activation for SSH. To change the SSH port, you must update BOTH the socket AND the sshd config.
+**IMPORTANT**: Ubuntu uses systemd socket activation for SSH. The socket controls which port SSH listens on. You must update BOTH the socket AND the sshd config.
+
+> **WARNING — Lockout prevention:**
+> - The socket override below listens on BOTH ports 22 and 222 during transition. Port 22 is only removed after verifying 222 works from your local machine.
+> - `AllowUsers` includes both `adminclaw` and the initial SSH user during transition, so you can fall back to the original user if adminclaw auth fails.
+> - Do NOT `systemctl restart ssh` after restarting `ssh.socket`. The socket already binds the ports — restarting the service causes "Address already in use" failures. Only restart `ssh.socket`; socket activation handles the service automatically.
+
+### Step 1: Write config files
 
 ```bash
 #!/bin/bash
@@ -195,6 +202,8 @@ Run on: **VPS-1**
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
 
 # Create hardened sshd config
+# NOTE: AllowUsers temporarily includes the initial user (ubuntu) for fallback.
+# It will be tightened to adminclaw-only after verifying port 222 works.
 sudo tee /etc/ssh/sshd_config.d/hardening.conf << 'EOF'
 # Use non-standard port to avoid bot scanners
 # NOTE: The systemd socket override (below) also sets this port
@@ -211,8 +220,8 @@ KbdInteractiveAuthentication no
 # IMPORTANT: Keep UsePAM yes on Ubuntu - required for proper authentication
 UsePAM yes
 
-# Only allow admin user (openclaw has no SSH access for security)
-AllowUsers adminclaw
+# Allow admin user + initial user during transition (tightened in Step 3)
+AllowUsers adminclaw ubuntu
 
 # Connection settings
 MaxAuthTries 3
@@ -232,35 +241,62 @@ Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 EOF
 
-# CRITICAL: Update systemd socket to listen on port 222
-# Ubuntu uses socket activation - the socket controls which port SSH listens on
+# Systemd socket override: listen on BOTH ports during transition
+# Port 22 is removed in Step 3 after verifying 222 works
 sudo mkdir -p /etc/systemd/system/ssh.socket.d
 sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
 [Socket]
-# Clear the default ListenStream (port 22) and set port 222
+# Clear defaults and listen on both ports during transition
 ListenStream=
+ListenStream=0.0.0.0:22
+ListenStream=[::]:22
 ListenStream=0.0.0.0:222
 ListenStream=[::]:222
 EOF
-
-# Reload systemd and restart SSH socket and service
-sudo systemctl daemon-reload
-sudo systemctl restart ssh.socket
-sudo systemctl restart ssh
-
-# Verify SSH is listening on port 222
-echo "Verifying SSH is listening on port 222..."
-ss -tlnp | grep 222
 ```
 
-**IMPORTANT**: Test SSH on port 222 from your LOCAL machine BEFORE removing port 22:
+### Step 2: Validate and apply
+
+```bash
+#!/bin/bash
+# Validate config BEFORE applying changes
+echo "Validating SSH config..."
+sudo sshd -t
+if [ $? -ne 0 ]; then
+    echo "ERROR: SSH config validation failed! NOT restarting SSH."
+    echo "Reverting config..."
+    sudo rm -f /etc/ssh/sshd_config.d/hardening.conf
+    sudo rm -rf /etc/systemd/system/ssh.socket.d
+    echo "Config reverted. Fix issues and retry."
+    exit 1
+fi
+echo "SSH config valid."
+
+# Reload systemd to pick up socket override
+sudo systemctl daemon-reload
+
+# ONLY restart the socket — do NOT restart ssh.service
+# Socket activation will start the service automatically for new connections.
+sudo systemctl restart ssh.socket
+
+# Verify SSH is listening on BOTH ports
+echo "Verifying SSH is listening on ports 22 and 222..."
+ss -tlnp | grep -E ':(22|222)\s'
+echo ""
+echo "SSH hardening applied with both ports active."
+echo "Test port 222 from your LOCAL machine before proceeding."
+```
+
+### Step 3: Test and finalize
+
+**MANDATORY STOP**: Test SSH on port 222 from your LOCAL machine BEFORE proceeding. Do not skip this step during automated deployment.
 
 ```bash
 # From LOCAL machine — test port 222
 ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP> "echo 'Port 222 works!'"
 ```
 
-**If port 222 test succeeds:** Update `openclaw-config.env` on the LOCAL machine to reflect the new SSH settings, then SSH back in on 222 and remove port 22:
+**If port 222 test succeeds:** Update `openclaw-config.env` on the LOCAL machine, then lock down SSH to port 222 only:
 
 ```bash
 # On LOCAL machine — update config to use new SSH user and port
@@ -269,24 +305,45 @@ sed -i'' -e 's|^SSH_PORT=22.*|SSH_PORT=222                  # Changed from 22 du
 ```
 
 ```bash
+# On VPS — lock down: remove port 22 from socket, remove ubuntu from AllowUsers
 ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
+
+# Update socket to port 222 only
+sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
+[Socket]
+# Clear defaults and listen on port 222 only (port 22 removed after verification)
+ListenStream=
+ListenStream=0.0.0.0:222
+ListenStream=[::]:222
+EOF
+
+# Tighten AllowUsers to adminclaw only
+sudo sed -i 's/^AllowUsers adminclaw ubuntu$/AllowUsers adminclaw/' /etc/ssh/sshd_config.d/hardening.conf
+
+# Apply socket change and remove port 22 from firewall
+sudo systemctl daemon-reload
+sudo systemctl restart ssh.socket
 sudo ufw delete allow 22/tcp
 sudo ufw status
+
+# Verify only port 222 is listening
+ss -tlnp | grep -E ':(22|222)\s'
 ```
 
 **If port 222 test fails with "Connection refused":**
 
-> "SSH on port 222 is not responding. This usually means the systemd socket override
-> didn't take effect. I'll check the socket config and restart SSH."
+> "SSH on port 222 is not responding. Port 22 is still active (both SSH and UFW).
+> Connect on port 22 and debug."
 
 ```bash
-# SSH in on port 22 (still open) and debug
+# SSH in on port 22 (still listening during transition) and debug
 ssh -i <SSH_KEY_PATH> -p 22 adminclaw@<VPS1_IP>
+sudo systemctl status ssh.socket
 cat /etc/systemd/system/ssh.socket.d/override.conf
+# Retry socket restart (NOT ssh.service)
 sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
-sudo systemctl restart ssh
-ss -tlnp | grep 222
+ss -tlnp | grep -E ':(22|222)\s'
 ```
 
 **If port 222 test fails with "Permission denied":**
@@ -295,7 +352,7 @@ ss -tlnp | grep 222
 > authorized_keys file was copied correctly."
 
 ```bash
-# SSH in as ubuntu (original user) and check adminclaw's keys
+# SSH in as ubuntu (still allowed during transition) and check adminclaw's keys
 ssh -i <SSH_KEY_PATH> -p 22 ubuntu@<VPS1_IP>
 sudo cat /home/adminclaw/.ssh/authorized_keys
 sudo ls -la /home/adminclaw/.ssh/
@@ -525,9 +582,9 @@ ls -la /etc/systemd/system/ssh.socket.d/
 # Check what port SSH is listening on
 ss -tlnp | grep ssh
 
-# Restart SSH properly (Ubuntu uses 'ssh' not 'sshd')
+# ONLY restart the socket — NEVER restart ssh.service (causes port conflict)
+sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
-sudo systemctl restart ssh
 ```
 
 ### Locked Out of SSH
@@ -537,7 +594,7 @@ If you can't SSH in:
 1. Use host provider console/KVM access
 2. Login as adminclaw (or root if still available)
 3. Check `/etc/ssh/sshd_config.d/hardening.conf` for errors
-4. Temporarily: `sudo ufw allow 22/tcp` and restart ssh
+4. Restore port 22: add `ListenStream=0.0.0.0:22` and `ListenStream=[::]:22` to `/etc/systemd/system/ssh.socket.d/override.conf`, then `sudo ufw allow 22/tcp && sudo systemctl daemon-reload && sudo systemctl restart ssh.socket`
 
 ### UsePAM Error
 
