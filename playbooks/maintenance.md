@@ -97,11 +97,11 @@ See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for details on b
 ssh-keygen -t ed25519 -f ~/.ssh/vps1_openclaw_ed25519_new
 
 # 2. Add new public key to VPS (while old key still works)
-ssh -i ~/.ssh/vps1_openclaw_ed25519 -p 222 adminclaw@<VPS1_IP> \
+ssh -i ~/.ssh/vps1_openclaw_ed25519 -p <SSH_PORT> adminclaw@<VPS1_IP> \
   "echo 'NEW_PUBLIC_KEY' >> ~/.ssh/authorized_keys"
 
 # 3. Test new key
-ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p 222 adminclaw@<VPS1_IP> echo "OK"
+ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS1_IP> echo "OK"
 
 # 4. Remove old key from VPS authorized_keys
 # 5. Update openclaw-config.env with new SSH_KEY_PATH
@@ -150,7 +150,7 @@ Several deploy files are bind-mounted read-only into the gateway container. Thes
 
 ```bash
 # From local machine
-scp -i <SSH_KEY_PATH> -P 222 deploy/<file> adminclaw@<VPS1_IP>:/tmp/<file>
+scp -i <SSH_KEY_PATH> -P <SSH_PORT> deploy/<file> adminclaw@<VPS1_IP>:/tmp/<file>
 
 # On VPS (or via ssh)
 sudo cp /tmp/<file> /home/openclaw/openclaw/deploy/<file>

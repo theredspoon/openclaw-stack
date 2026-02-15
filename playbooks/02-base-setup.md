@@ -9,7 +9,7 @@ This playbook configures:
 - System updates and essential packages
 - Two-user security model (adminclaw + openclaw)
 - UFW firewall
-- SSH hardening (port 222, key-only)
+- SSH hardening (custom port, key-only)
 - Fail2ban intrusion prevention
 - Automatic security updates
 - Kernel hardening
@@ -17,7 +17,7 @@ This playbook configures:
 
 ## Prerequisites
 
-- Fresh Ubuntu VPS with SSH access as `ubuntu` user
+- Fresh Linux VPS with SSH access
 - SSH key configured and accessible
 - VPS IP known and reachable
 
@@ -35,14 +35,15 @@ From `../openclaw-config.env`:
 
 - `VPS1_IP` - Public IP of VPS-1
 - `SSH_KEY_PATH` - Path to SSH private key
-- `SSH_USER` - Initial SSH user (ubuntu)
+- `SSH_USER` - Initial SSH user (e.g., ubuntu, root, debian — depends on provider)
+- `SSH_HARDENED_PORT` - Target SSH port for hardening (default: 222 if not set)
 - `CF_TUNNEL_TOKEN` - Cloudflare Tunnel token
 
 ## Execution Order
 
 Complete sections 2.1-2.9 on VPS-1.
 
-Connect initially as `ubuntu` (or whatever the default is for the particular host provider & distro), then switch to `adminclaw` after section 2.4 (SSH hardening).
+Connect initially as `<SSH_USER>`, then switch to `adminclaw` after section 2.4 (SSH hardening).
 
 ---
 
@@ -105,7 +106,7 @@ echo "adminclaw:${ADMINCLAW_PASS}" | sudo chpasswd
 echo "adminclaw ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/adminclaw
 sudo chmod 440 /etc/sudoers.d/adminclaw
 
-# Copy SSH authorized_keys from current user (ubuntu)
+# Copy SSH authorized_keys from current user (<SSH_USER>)
 sudo mkdir -p /home/adminclaw/.ssh
 sudo cp ~/.ssh/authorized_keys /home/adminclaw/.ssh/
 sudo chown -R adminclaw:adminclaw /home/adminclaw/.ssh
@@ -149,7 +150,7 @@ sed -i'' -e "s|^# DEPLOYED: OPENCLAW_PASSWORD=.*|# DEPLOYED: OPENCLAW_PASSWORD=$
 
 ```bash
 # SSH as admin user
-ssh -p 222 adminclaw@<VPS1_IP>
+ssh -p <SSH_PORT> adminclaw@<VPS1_IP>
 
 # Run commands as openclaw (no direct SSH — adminclaw can't cd into openclaw's home)
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
@@ -164,16 +165,16 @@ sudo su - openclaw
 
 Run on: **VPS-1**
 
-**IMPORTANT**: Configure the firewall FIRST to allow port 222, then apply SSH hardening. This prevents lockout.
+**IMPORTANT**: Configure the firewall FIRST to allow port `<SSH_HARDENED_PORT>`, then apply SSH hardening. This prevents lockout.
 
 ```bash
 #!/bin/bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 
-# SSH - allow BOTH ports during transition (remove port 22 after verifying 222 works)
+# SSH - allow BOTH ports during transition (remove port 22 after verifying <SSH_HARDENED_PORT> works)
 sudo ufw allow 22/tcp
-sudo ufw allow 222/tcp
+sudo ufw allow <SSH_HARDENED_PORT>/tcp
 
 # Enable
 sudo ufw --force enable
@@ -190,8 +191,8 @@ Run on: **VPS-1**
 **IMPORTANT**: Ubuntu uses systemd socket activation for SSH. The socket controls which port SSH listens on. You must update BOTH the socket AND the sshd config.
 
 > **WARNING — Lockout prevention:**
-> - The socket override below listens on BOTH ports 22 and 222 during transition. Port 22 is only removed after verifying 222 works from your local machine.
-> - `AllowUsers` includes both `adminclaw` and the initial SSH user during transition, so you can fall back to the original user if adminclaw auth fails.
+> - The socket override below listens on BOTH ports 22 and `<SSH_HARDENED_PORT>` during transition. Port 22 is only removed after verifying `<SSH_HARDENED_PORT>` works from your local machine.
+> - `AllowUsers` includes both `adminclaw` and `<SSH_USER>` during transition, so you can fall back to the original user if adminclaw auth fails.
 > - Do NOT `systemctl restart ssh` after restarting `ssh.socket`. The socket already binds the ports — restarting the service causes "Address already in use" failures. Only restart `ssh.socket`; socket activation handles the service automatically.
 
 ### Step 1: Write config files
@@ -202,12 +203,12 @@ Run on: **VPS-1**
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
 
 # Create hardened sshd config
-# NOTE: AllowUsers temporarily includes the initial user (ubuntu) for fallback.
-# It will be tightened to adminclaw-only after verifying port 222 works.
+# NOTE: AllowUsers temporarily includes the initial user (<SSH_USER>) for fallback.
+# It will be tightened to adminclaw-only after verifying port <SSH_HARDENED_PORT> works.
 sudo tee /etc/ssh/sshd_config.d/hardening.conf << 'EOF'
 # Use non-standard port to avoid bot scanners
 # NOTE: The systemd socket override (below) also sets this port
-Port 222
+Port <SSH_HARDENED_PORT>
 
 # Disable root login
 PermitRootLogin no
@@ -221,7 +222,7 @@ KbdInteractiveAuthentication no
 UsePAM yes
 
 # Allow admin user + initial user during transition (tightened in Step 3)
-AllowUsers adminclaw ubuntu
+AllowUsers adminclaw <SSH_USER>
 
 # Connection settings
 MaxAuthTries 3
@@ -242,7 +243,7 @@ MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 EOF
 
 # Systemd socket override: listen on BOTH ports during transition
-# Port 22 is removed in Step 3 after verifying 222 works
+# Port 22 is removed in Step 3 after verifying <SSH_HARDENED_PORT> works
 sudo mkdir -p /etc/systemd/system/ssh.socket.d
 sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
 [Socket]
@@ -250,8 +251,8 @@ sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
 ListenStream=
 ListenStream=0.0.0.0:22
 ListenStream=[::]:22
-ListenStream=0.0.0.0:222
-ListenStream=[::]:222
+ListenStream=0.0.0.0:<SSH_HARDENED_PORT>
+ListenStream=[::]:<SSH_HARDENED_PORT>
 EOF
 ```
 
@@ -280,45 +281,46 @@ sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
 
 # Verify SSH is listening on BOTH ports
-echo "Verifying SSH is listening on ports 22 and 222..."
-ss -tlnp | grep -E ':(22|222)\s'
+echo "Verifying SSH is listening on ports 22 and <SSH_HARDENED_PORT>..."
+ss -tlnp | grep -E ':(22|<SSH_HARDENED_PORT>)\s'
 echo ""
 echo "SSH hardening applied with both ports active."
-echo "Test port 222 from your LOCAL machine before proceeding."
+echo "Test port <SSH_HARDENED_PORT> from your LOCAL machine before proceeding."
 ```
 
 ### Step 3: Test and finalize
 
-**MANDATORY STOP**: Test SSH on port 222 from your LOCAL machine BEFORE proceeding. Do not skip this step during automated deployment.
+**MANDATORY STOP**: Test SSH on port `<SSH_HARDENED_PORT>` from your LOCAL machine BEFORE proceeding. Do not skip this step during automated deployment.
 
 ```bash
-# From LOCAL machine — test port 222
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP> "echo 'Port 222 works!'"
+# From LOCAL machine — test port <SSH_HARDENED_PORT>
+ssh -i <SSH_KEY_PATH> -p <SSH_HARDENED_PORT> adminclaw@<VPS1_IP> "echo 'Port <SSH_HARDENED_PORT> works!'"
 ```
 
-**If port 222 test succeeds:** Update `openclaw-config.env` on the LOCAL machine, then lock down SSH to port 222 only:
+**If port `<SSH_HARDENED_PORT>` test succeeds:** Update `openclaw-config.env` on the LOCAL machine, then lock down SSH:
 
 ```bash
-# On LOCAL machine — update config to use new SSH user and port
-sed -i'' -e 's|^SSH_USER=ubuntu.*|SSH_USER=adminclaw            # Changed from ubuntu during hardening|' openclaw-config.env
-sed -i'' -e 's|^SSH_PORT=22.*|SSH_PORT=222                  # Changed from 22 during hardening|' openclaw-config.env
+# On LOCAL machine — update config to use new SSH user and port, remove SSH_HARDENED_PORT
+sed -i'' -e 's|^SSH_USER=.*|SSH_USER=adminclaw            # Changed from <SSH_USER> during hardening|' openclaw-config.env
+sed -i'' -e 's|^SSH_PORT=.*|SSH_PORT=<SSH_HARDENED_PORT>                  # Changed from <SSH_PORT> during hardening|' openclaw-config.env
+sed -i'' -e '/^SSH_HARDENED_PORT=/d' openclaw-config.env
 ```
 
 ```bash
-# On VPS — lock down: remove port 22 from socket, remove ubuntu from AllowUsers
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
+# On VPS — lock down: remove port 22 from socket, remove <SSH_USER> from AllowUsers
+ssh -i <SSH_KEY_PATH> -p <SSH_HARDENED_PORT> adminclaw@<VPS1_IP>
 
-# Update socket to port 222 only
+# Update socket to port <SSH_HARDENED_PORT> only
 sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
 [Socket]
-# Clear defaults and listen on port 222 only (port 22 removed after verification)
+# Clear defaults and listen on port <SSH_HARDENED_PORT> only (port 22 removed after verification)
 ListenStream=
-ListenStream=0.0.0.0:222
-ListenStream=[::]:222
+ListenStream=0.0.0.0:<SSH_HARDENED_PORT>
+ListenStream=[::]:<SSH_HARDENED_PORT>
 EOF
 
 # Tighten AllowUsers to adminclaw only
-sudo sed -i 's/^AllowUsers adminclaw ubuntu$/AllowUsers adminclaw/' /etc/ssh/sshd_config.d/hardening.conf
+sudo sed -i 's/^AllowUsers adminclaw <SSH_USER>$/AllowUsers adminclaw/' /etc/ssh/sshd_config.d/hardening.conf
 
 # Apply socket change and remove port 22 from firewall
 sudo systemctl daemon-reload
@@ -326,13 +328,13 @@ sudo systemctl restart ssh.socket
 sudo ufw delete allow 22/tcp
 sudo ufw status
 
-# Verify only port 222 is listening
-ss -tlnp | grep -E ':(22|222)\s'
+# Verify only port <SSH_HARDENED_PORT> is listening
+ss -tlnp | grep -E ':(22|<SSH_HARDENED_PORT>)\s'
 ```
 
-**If port 222 test fails with "Connection refused":**
+**If port `<SSH_HARDENED_PORT>` test fails with "Connection refused":**
 
-> "SSH on port 222 is not responding. Port 22 is still active (both SSH and UFW).
+> "SSH on port `<SSH_HARDENED_PORT>` is not responding. Port 22 is still active (both SSH and UFW).
 > Connect on port 22 and debug."
 
 ```bash
@@ -343,17 +345,17 @@ cat /etc/systemd/system/ssh.socket.d/override.conf
 # Retry socket restart (NOT ssh.service)
 sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
-ss -tlnp | grep -E ':(22|222)\s'
+ss -tlnp | grep -E ':(22|<SSH_HARDENED_PORT>)\s'
 ```
 
-**If port 222 test fails with "Permission denied":**
+**If port `<SSH_HARDENED_PORT>` test fails with "Permission denied":**
 
-> "SSH key authentication failed for adminclaw on port 222. I'll verify the
+> "SSH key authentication failed for adminclaw on port `<SSH_HARDENED_PORT>`. I'll verify the
 > authorized_keys file was copied correctly."
 
 ```bash
-# SSH in as ubuntu (still allowed during transition) and check adminclaw's keys
-ssh -i <SSH_KEY_PATH> -p 22 ubuntu@<VPS1_IP>
+# SSH in as <SSH_USER> (still allowed during transition) and check adminclaw's keys
+ssh -i <SSH_KEY_PATH> -p 22 <SSH_USER>@<VPS1_IP>
 sudo cat /home/adminclaw/.ssh/authorized_keys
 sudo ls -la /home/adminclaw/.ssh/
 ```
@@ -408,7 +410,7 @@ backend = systemd
 
 [sshd]
 enabled = true
-port = 222
+port = <SSH_PORT>
 filter = sshd
 logpath = /var/log/auth.log
 maxretry = 3
@@ -553,8 +555,8 @@ sudo ufw delete allow 443/tcp 2>/dev/null || true
 After completing all steps on VPS-1:
 
 ```bash
-# Test SSH on port 222
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP> "echo 'VPS-1 OK'"
+# Test SSH on hardened port
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP> "echo 'VPS-1 OK'"
 
 # Verify UFW is active
 sudo ufw status
@@ -573,7 +575,7 @@ sudo systemctl status cloudflared
 
 ## Troubleshooting
 
-### SSH Connection Refused on Port 222
+### SSH Connection Refused on Hardened Port
 
 ```bash
 # Check if socket override exists

@@ -322,7 +322,7 @@ Output the report using exactly this structure:
 ### SSH Access
 
 \`\`\`bash
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP>
 \`\`\`
 
 ---

@@ -14,7 +14,7 @@ This playbook configures:
 
 - [04-vps1-openclaw.md](04-vps1-openclaw.md) completed
 - OpenClaw running and configured
-- SSH access as `adminclaw` on port 222
+- SSH access as `adminclaw` on port `<SSH_PORT>`
 
 ## Variables
 

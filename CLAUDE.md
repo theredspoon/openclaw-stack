@@ -53,7 +53,7 @@ IMPORTANT: Read configuration from `openclaw-config.env`:
 # is validated during fresh deploy setup (00-fresh-deploy-setup.md).
 ```
 
-SSH_USER and SSH_PORT start as `ubuntu`/`22` and are changed to `adminclaw`/`222` during hardening.
+SSH_USER and SSH_PORT start as provider defaults (e.g., `ubuntu`/`22`) and are changed to `adminclaw`/`<SSH_HARDENED_PORT>` during hardening. `SSH_HARDENED_PORT` (default `222`) is set in config and removed after hardening completes.
 
 ---
 

@@ -265,7 +265,7 @@ Comprehensive security check: system hardening, port exposure, and built-in audi
 sudo ufw status
 sudo systemctl status fail2ban
 sudo systemctl status cloudflared
-ss -tlnp | grep 222
+ss -tlnp | grep <SSH_PORT>
 
 # Services and cron jobs
 sudo systemctl status sysbox
@@ -275,7 +275,7 @@ cat /etc/cron.d/openclaw-backup
 cat /etc/cron.d/openclaw-alerts
 ```
 
-**Expected:** SSH on port 222 only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
+**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
 
 ### Port Binding & External Reachability
 
@@ -284,7 +284,7 @@ cat /etc/cron.d/openclaw-alerts
 sudo ss -tlnp | grep -E '187(89|90)'
 # Expected: 127.0.0.1:18789 and 127.0.0.1:18790 (NOT 0.0.0.0)
 
-# Full port audit — only 222 should be on 0.0.0.0 or [::]
+# Full port audit — only <SSH_PORT> should be on 0.0.0.0 or [::]
 sudo ss -tlnp
 
 # Verify pids_limit set (prevents fork bombs)
@@ -321,7 +321,7 @@ openclaw doctor --deep
 
 ### Checklist
 
-- [ ] SSH port 222 only, key-only auth, AllowUsers adminclaw
+- [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
 - [ ] UFW enabled (SSH only), port 443 closed
 - [ ] Fail2ban running, cloudflared active
 - [ ] Gateway + Vector + Sysbox running
@@ -408,7 +408,7 @@ sudo journalctl -u <service> -f
 
 Deployment is complete when:
 
-1. VPS-1 accessible via SSH on port 222
+1. VPS-1 accessible via SSH on port `<SSH_PORT>`
 2. OpenClaw gateway responding on localhost (internal health check)
 3. Vector running and shipping logs
 4. Cloudflare Workers responding to health checks

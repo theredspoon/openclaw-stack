@@ -68,10 +68,10 @@ Wait for user to fix all issues before continuing. Re-validate after they confir
 ## 0.3 SSH Check
 
 1. Validate `SSH_KEY_PATH` exists on the local system (default: `~/.ssh/vps1_openclaw_ed25519`).
-2. Test SSH connectivity using **fresh VPS defaults** (`SSH_USER=ubuntu`, `SSH_PORT=22`):
+2. Test SSH connectivity using config values (`SSH_USER`, `SSH_PORT`):
 
 ```bash
-ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 ubuntu@<VPS1_IP> echo "VPS OK"
+ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_USER>@<VPS1_IP> echo "VPS OK"
 ```
 
 **If SSH fails — diagnose by error type:**
@@ -256,6 +256,6 @@ After the user confirms, execute playbooks 01 through 07 **continuously without 
 
 - A command fails and the error requires user input to resolve
 - A playbook step explicitly says to wait for user input (e.g., a blocking error with multiple resolution paths)
-- **SSH verification (02-base-setup.md § 2.4 Step 3):** You MUST test SSH on port 222 from the local machine and confirm it works before proceeding. This is a mandatory stop point — do not skip it during automated deployment.
+- **SSH verification (02-base-setup.md § 2.4 Step 3):** You MUST test SSH on port `<SSH_HARDENED_PORT>` from the local machine and confirm it works before proceeding. This is a mandatory stop point — do not skip it during automated deployment.
 
 Normal informational output (progress updates, version notes, check results) should be reported inline without pausing. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`.
