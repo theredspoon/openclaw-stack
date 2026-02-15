@@ -174,7 +174,7 @@ For a rapid health check, run this single command (note: SSH uses port 222):
 
 ```bash
 echo "=== VPS-1 Health ===" && \
-ssh -p 222 adminclaw@<VPS1_IP> "sudo -u openclaw docker ps --format '{{.Names}}: {{.Status}}' && echo && curl -s http://localhost:18789/health && echo && sudo systemctl is-active cloudflared"
+ssh -p 222 adminclaw@<VPS1_IP> "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && echo && curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -1 && echo && sudo systemctl is-active cloudflared"
 ```
 
 ---
@@ -191,7 +191,7 @@ ssh -p 222 adminclaw@<VPS1_IP> "sudo -u openclaw docker ps --format '{{.Names}}:
 
 1. Check container logs: `sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs --tail 50 openclaw-gateway'`
 2. Check container is running: `sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'`
-3. Verify localhost access: `curl -s http://localhost:18789/health`
+3. Verify localhost access: `curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5`
 
 ### No Logs in Cloudflare
 
