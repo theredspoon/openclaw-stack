@@ -505,9 +505,9 @@ SCP the plugin to the VPS:
 **Run from LOCAL machine:**
 
 ```bash
-# Create deploy/plugins directory on VPS
+# Create deploy/plugins directory on VPS and staging dir for SCP
 ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
-  "sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/plugins"
+  "sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/plugins && mkdir -p /tmp/deploy-plugins"
 
 # Copy plugins from local repo to VPS
 scp -P ${SSH_PORT} -i ${SSH_KEY_PATH} -r deploy/plugins/* ${SSH_USER}@${VPS1_IP}:/tmp/deploy-plugins/
@@ -570,9 +570,9 @@ SCP hooks to the VPS:
 **Run from LOCAL machine:**
 
 ```bash
-# Create deploy/hooks directory on VPS
+# Create deploy/hooks directory on VPS and staging dir for SCP
 ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
-  "sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/hooks"
+  "sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/hooks && mkdir -p /tmp/deploy-hooks"
 
 # Copy hooks from local repo to VPS
 scp -P ${SSH_PORT} -i ${SSH_KEY_PATH} -r deploy/hooks/* ${SSH_USER}@${VPS1_IP}:/tmp/deploy-hooks/

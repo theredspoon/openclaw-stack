@@ -35,7 +35,12 @@
     "mode": "local",
     "auth": {
       "mode": "token",
-      "token": "{{GATEWAY_TOKEN}}"
+      "token": "{{GATEWAY_TOKEN}}",
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000
+      }
     },
     "remote": {
       "token": "{{GATEWAY_TOKEN}}"
