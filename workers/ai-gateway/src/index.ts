@@ -1,8 +1,11 @@
-import { validateAuth } from './auth'
+import { validateAuthToken } from './auth'
 import { handlePreflight, addCorsHeaders } from './cors'
 import { jsonError } from './errors'
-import { matchOpenAI, proxyOpenAI } from './providers/openai'
-import { matchAnthropic, proxyAnthropic } from './providers/anthropic'
+import { createLog, logInboundRequest } from './log'
+import { matchProviderRoute } from './routing'
+import { getProviderApiKey } from './keys'
+import { proxyOpenAI } from './providers/openai'
+import { proxyAnthropic } from './providers/anthropic'
 import type { Env } from './types'
 
 export default {
@@ -23,27 +26,36 @@ export default {
       )
     }
 
+    const log = createLog(env)
+
     // Auth check for all other routes
-    const authError = await validateAuth(request, env.AUTH_TOKEN)
-    if (authError) {
-      return addCorsHeaders(jsonError(authError, 401))
+    const authToken = await validateAuthToken(request, env.AUTH_TOKEN)
+    if (!authToken) {
+      return addCorsHeaders(jsonError('Invalid or missing auth credentials', 401))
     }
 
     // Route to provider
+    const route = matchProviderRoute(request.method, pathname)
+    if (!route) {
+      return addCorsHeaders(jsonError('Not found', 404))
+    }
+
+    const apiKey = getProviderApiKey(route.provider, authToken, env)
+
+    if (env.LOG_LEVEL === 'debug') {
+      logInboundRequest(log, request, route, apiKey)
+    }
+
+    if (!authToken) {
+      return addCorsHeaders(jsonError('Invalid or missing auth credentials', 401))
+    }
+
     let response: Response
-
-    const openaiPath = matchOpenAI(request.method, pathname)
-    if (openaiPath) {
-      response = await proxyOpenAI(request, env, openaiPath)
-      return addCorsHeaders(response)
+    if (route.provider === 'anthropic') {
+      response = await proxyAnthropic(apiKey, request, env, route.path, log)
+    } else {
+      response = await proxyOpenAI(apiKey, request, env, route.path, log)
     }
-
-    const anthropicPath = matchAnthropic(request.method, pathname)
-    if (anthropicPath) {
-      response = await proxyAnthropic(request, env, anthropicPath)
-      return addCorsHeaders(response)
-    }
-
-    return addCorsHeaders(jsonError('Not found', 404))
+    return addCorsHeaders(response)
   },
 } satisfies ExportedHandler<Env>
