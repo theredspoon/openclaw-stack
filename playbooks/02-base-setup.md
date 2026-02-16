@@ -38,6 +38,7 @@ From `../openclaw-config.env`:
 - `SSH_USER` - Initial SSH user (e.g., ubuntu, root, debian — depends on provider)
 - `SSH_HARDENED_PORT` - Target SSH port for hardening (default: 222 if not set)
 - `CF_TUNNEL_TOKEN` - Cloudflare Tunnel token
+- `VPS_HOSTNAME` - Optional, friendly hostname (replaces provider default)
 
 ## Execution Order
 
@@ -75,6 +76,23 @@ sudo apt install -y \
 >
 > If DNS fails, check `/etc/resolv.conf` — it may need a valid nameserver
 > (e.g., `nameserver 1.1.1.1`).
+
+---
+
+## 2.1a Set Hostname
+
+If `VPS_HOSTNAME` is set in `openclaw-config.env`, replace the provider's default hostname (e.g., `vps-54a00e96`) with a friendly name. Skip if empty.
+
+```bash
+#!/bin/bash
+# Only set if VPS_HOSTNAME is configured
+if [[ -n "${VPS_HOSTNAME:-}" ]]; then
+  sudo hostnamectl set-hostname "${VPS_HOSTNAME}"
+  echo "Hostname set to: $(hostname)"
+else
+  echo "VPS_HOSTNAME not set — keeping current hostname: $(hostname)"
+fi
+```
 
 ---
 
