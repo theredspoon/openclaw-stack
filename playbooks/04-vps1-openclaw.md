@@ -271,7 +271,7 @@ sed -i'' -e "s|^# DEPLOYED: GATEWAY_URL=.*|# DEPLOYED: GATEWAY_URL=https://${OPE
 
 ## 4.6 Create Docker Compose Override
 
-The OpenClaw repo includes a docker-compose.yml. Create an override file to add security hardening and monitoring services. Building happens separately via the build script (section 4.8a), not via `docker compose build`.
+The OpenClaw repo includes a docker-compose.yml. Create an override file to add security hardening and monitoring services. Building happens separately via the build script (section 4.9), not via `docker compose build`.
 
 ```bash
 #!/bin/bash
@@ -373,7 +373,7 @@ done
 
 ---
 
-## 4.8a Install Build Script and Patches
+## 4.9 Install Build Script and Patches
 
 Instead of maintaining a forked Dockerfile, we patch upstream source files in-place before building. Each patch auto-skips when already applied.
 
@@ -397,7 +397,7 @@ sudo chmod +x /home/openclaw/scripts/build-openclaw.sh
 
 ---
 
-## 4.8c Create Gateway Entrypoint Script
+## 4.10 Create Gateway Entrypoint Script
 
 Runs as root (`user: "0:0"`). Handles lock cleanup, permission fixes, dockerd startup, sandbox image builds, then drops to node via `exec gosu node "$@"`. See inline comments for details.
 
@@ -417,7 +417,7 @@ sudo chmod +x /home/openclaw/openclaw/scripts/entrypoint-gateway.sh
 
 ---
 
-## 4.8d Create Host Alerter & Maintenance Checker
+## 4.11 Create Host Alerter & Maintenance Checker
 
 Install host monitoring scripts:
 
@@ -480,7 +480,7 @@ sudo chmod 644 /etc/cron.d/openclaw-maintenance
 
 ---
 
-## 4.8e Create OpenClaw CLI Host Wrapper
+## 4.12 Create OpenClaw CLI Host Wrapper
 
 Create a convenience wrapper so `adminclaw` can run `openclaw <command>` directly from the VPS host without typing the full `docker exec` prefix.
 
@@ -513,7 +513,7 @@ openclaw devices list
 
 ---
 
-## 4.8f Deploy Skill Router Plugin
+## 4.13 Deploy Skill Router Plugin
 
 Network-requiring skills (gifgrep, etc.) fail in the main agent's sandbox (`network: "none"`). The skills agent has bridge network access but doesn't receive slash commands — the main agent does.
 
@@ -568,7 +568,7 @@ No new files needed — just update the config and restart the gateway.
 
 ---
 
-## 4.8g Configure Log Rotation
+## 4.14 Configure Log Rotation
 
 The hook-generated JSONL logs (`debug.log`, `commands.log`) and the backup cron log (`backup.log`) in `~/.openclaw/logs/` grow unbounded. Docker container logs are already rotated via the `json-file` driver in `docker-compose.override.yml`, but these application-level files need logrotate.
 
@@ -587,7 +587,7 @@ sudo logrotate -d /etc/logrotate.d/openclaw
 
 ---
 
-## 4.8h Deploy Managed Hooks
+## 4.15 Deploy Managed Hooks
 
 Custom managed hooks live in `deploy/hooks/<name>/` (HOOK.md + handler.js). The entrypoint copies them to `~/.openclaw/hooks/` on boot, and `openclaw.json` enables them via `hooks.internal.entries`.
 
@@ -617,7 +617,7 @@ To add a new hook: create `deploy/hooks/<name>/` with HOOK.md + handler.js, add 
 
 ---
 
-## 4.9 Build, Start, and Auto-Pair CLI
+## 4.16 Build, Start, and Auto-Pair CLI
 
 ```bash
 #!/bin/bash
@@ -756,7 +756,7 @@ sudo /usr/local/bin/openclaw devices list
 
 ---
 
-## 4.10 Deploy OpenClaw Cron Jobs
+## 4.17 Deploy OpenClaw Cron Jobs
 
 After the gateway is running and the CLI is paired, deploy the cron jobs defined in `deploy/openclaw-crons.jsonc`.
 
@@ -764,7 +764,7 @@ The playbook reads each job from the reference file and runs `openclaw cron add`
 
 ### Daily VPS Health Check
 
-This job runs the main agent daily to read the health and maintenance JSON files written by the host cron scripts (§4.8d). If everything is healthy, the agent responds with `HEARTBEAT_OK` and no notification is sent. If issues are found, the agent sends a concise alert.
+This job runs the main agent daily to read the health and maintenance JSON files written by the host cron scripts (§4.11). If everything is healthy, the agent responds with `HEARTBEAT_OK` and no notification is sent. If issues are found, the agent sends a concise alert.
 
 ```bash
 #!/bin/bash
@@ -818,7 +818,7 @@ Keep it brief — this goes to Telegram."
 
 **Placeholder rules:**
 
-- `<CRON_EXPR>` — cron expression derived from `HOSTALERT_DAILY_REPORT_TIME`. Same conversion rules as §4.8d. Default: `30 9 * * *`.
+- `<CRON_EXPR>` — cron expression derived from `HOSTALERT_DAILY_REPORT_TIME`. Same conversion rules as §4.11. Default: `30 9 * * *`.
 - `<CRON_TZ>` — IANA timezone for the cron expression. Derive from the timezone specified in `HOSTALERT_DAILY_REPORT_TIME` (e.g., "PST" → `America/Los_Angeles`). Default: `America/Los_Angeles`.
 - `<DELIVERY_FLAGS>` — conditional based on Telegram configuration:
   - **If `HOSTALERT_TELEGRAM_CHAT_ID` is set:** `--channel telegram --to <HOSTALERT_TELEGRAM_CHAT_ID>`
@@ -994,7 +994,7 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart v
 ### CLI Pairing Lost
 
 If the CLI device identity is deleted or corrupted, follow the same pairing procedure
-as section 4.9 (fix ownership → trigger pending → approve via file manipulation → verify).
+as section 4.16 (fix ownership → trigger pending → approve via file manipulation → verify).
 
 If the Control UI is accessible, you can also approve pending devices there instead of
 using file manipulation.

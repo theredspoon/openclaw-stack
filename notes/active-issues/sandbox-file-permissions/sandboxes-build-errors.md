@@ -183,4 +183,4 @@ So to answer your original question: **the upstream script doesn't work anywhere
 
 **Self-healing:** If upstream ever fixes the bug, the intermediate image becomes harmless — the script succeeds with or without it, and `USER 1000` at the end is a no-op if already set.
 
-**Implemented in:** `playbooks/04-vps1-openclaw.md` section 4.8c (entrypoint) + sandbox verification section.
+**Implemented in:** `playbooks/04-vps1-openclaw.md` section 4.10 (entrypoint) + sandbox verification section.
