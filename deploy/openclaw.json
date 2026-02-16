@@ -53,6 +53,15 @@
       "basePath": "{{OPENCLAW_DOMAIN_PATH}}"
     }
   },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing", // Require device pairing for DMs
+      "groupPolicy": "allowlist", // Only respond in explicitly allowed groups
+      "streamMode": "partial" // Stream partial responses to Telegram
+      // botToken read from TELEGRAM_BOT_TOKEN env var (set in docker-compose.override.yml)
+    }
+  },
   "logging": {
     "consoleStyle": "json", // Send json logs to vector -> Log Worker
     "redactSensitive": "tools" // Redact sensitive info before shipping logs
