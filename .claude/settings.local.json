@@ -32,7 +32,9 @@
       "Bash(python3:*)",
       "Bash(fi)",
       "Bash(until ssh:*)",
-      "Bash(do sleep 10)"
+      "Bash(do sleep 10)",
+      "mcp__plugin_claude-mem_mcp-search__search",
+      "mcp__plugin_claude-mem_mcp-search__save_memory"
     ]
   }
 }

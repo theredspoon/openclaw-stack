@@ -122,9 +122,10 @@
             // Skill bins shims — pass through to real binaries inside sandboxes,
             // satisfy gateway preflight checks on the host
             "/opt/skill-bins:/opt/skill-bins:ro",
-            // Add openclaw docs to each agent - helps agents answer openclaw usage questions without relying on LLM fetching of docs
-            "/app/docs:/workspace/docs:ro", // Agents can use 'read' tool to access docs here - requires customizing AGENTS.md to use /workspace/docs location
-            "/app/docs:/app/docs:ro" // Default location of docs - openclaw's default instructions direct agents to look here - requires 'exec' to access
+            // OpenClaw docs — system prompt tells agents to read from <sandboxRoot>/docs (= /workspace/docs inside container)
+            "/app/docs:/workspace/docs:ro",
+            // Host health & maintenance data — written by host cron scripts, read-only for agents
+            "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
           ]
         },
         // Each agent has it's browser container - requires the "browser" tool
@@ -184,7 +185,7 @@
             "code",
             "skills"
           ]
-        },
+        }
         // Example tool override settings
         // "tools": {
         //   "deny": [
@@ -205,6 +206,11 @@
             "memorySwap": "4g",
             "cpus": 2,
             "binds": [
+              // Repeat defaults — per-agent binds replace (not merge) the defaults array
+              "/opt/skill-bins:/opt/skill-bins:ro",
+              "/app/docs:/workspace/docs:ro",
+              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro",
+              // Code agent specific
               "/home/node/sandboxes-home/code:/home/sandbox"
             ]
           }
@@ -217,9 +223,21 @@
         "id": "skills",
         "name": "Skills Agent",
         "skills": [
-          "blogwatcher", "gemini", "gifgrep", "healthcheck", "himalaya",
-          "mcporter", "nano-pdf", "openai-image-gen", "openai-whisper-api",
-          "oracle", "ordercli", "tmux", "video-frames", "wacli", "weather"
+          "blogwatcher",
+          "gemini",
+          "gifgrep",
+          "healthcheck",
+          "himalaya",
+          "mcporter",
+          "nano-pdf",
+          "openai-image-gen",
+          "openai-whisper-api",
+          "oracle",
+          "ordercli",
+          "tmux",
+          "video-frames",
+          "wacli",
+          "weather"
         ],
         "sandbox": {
           "docker": {
