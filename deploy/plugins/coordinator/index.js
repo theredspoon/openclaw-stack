@@ -30,9 +30,10 @@ function buildRoutingSection(routes) {
   return (
     `${ROUTING_START}\n` +
     `## Sub-Agent Routing\n\n` +
-    `You are a coordinator. You do NOT have skill binaries installed.\n` +
-    `When a task requires a skill listed below, delegate to the appropriate ` +
-    `sub-agent using \`sessions_spawn\`.\n` +
+    `You are a coordinator. You do NOT have skill binaries or dev tools installed.\n` +
+    `Delegate to sub-agents for any task that involves their skills or capabilities.\n` +
+    `This includes questions about tools, versions, or environments that only ` +
+    `exist in their sandboxes.\n` +
     `Handle conversation, questions, and general chat directly.\n\n` +
     `### Sub-Agents\n${table}\n\n` +
     `### Delegation\n` +
