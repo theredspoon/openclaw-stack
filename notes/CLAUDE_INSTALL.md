@@ -20,7 +20,7 @@ Ask the user:
 
 > Do you already have a VPS set up with root access?
 >
-> - If you don't have a VPS yet, you'll need one running **Ubuntu 24.04+** with at least **4 CPU cores** and **8GB RAM**. Providers like OVHCloud, Hetzner, DigitalOcean, and Linode all work. Set one up first, then come back.
+> - If you don't have a VPS yet, you'll need one running **Ubuntu 24.04+** with at least **2 CPU cores** and **4GB RAM**. Providers like OVHCloud, Hetzner, DigitalOcean, and Linode all work. Set one up first, then come back.
 
 If they don't have one, stop here and let them know what to provision. Don't proceed until they have a VPS.
 
@@ -39,7 +39,7 @@ Ask the user:
 
 > Do you already have **passwordless SSH** (key-based) access to this VPS, or do you only have a **password**?
 
-#### If they have passwordless SSH already:
+#### If they have passwordless SSH already
 
 1. Ask which SSH key they use (or if they're not sure, list keys in `~/.ssh/`):
 
@@ -47,34 +47,48 @@ Ask the user:
 ls -la ~/.ssh/*.pub 2>/dev/null
 ```
 
-2. Try to connect:
+1. Try to connect:
 
 ```bash
 ssh -i <KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS1_IP> echo "SSH OK"
 ```
 
-3. **If it works:** Add the key to the SSH agent so deployment commands don't prompt for a passphrase:
+1. **If it works:** Check if the key is already loaded in the SSH agent:
 
 ```bash
-# macOS — also stores in Keychain so it persists across reboots
-ssh-add --apple-use-keychain <KEY_PATH> 2>/dev/null || ssh-add <KEY_PATH>
+ssh-add -l
 ```
 
-Verify the key is loaded: `ssh-add -l` should list the key. Save `SSH_KEY_PATH` and move on.
+If the key's fingerprint or path appears in the output, it's already loaded — save `SSH_KEY_PATH` and move on.
 
-4. **If it fails:** Work with the user to debug:
+If the key is **not** listed, ask the user to add it themselves:
+
+> Your SSH key needs to be loaded into the SSH agent so deployment commands don't prompt for a passphrase. Please run this in a **separate terminal window** (it may ask for your key's passphrase):
+>
+> ```bash
+> # macOS — also stores in Keychain so it persists across reboots
+> ssh-add --apple-use-keychain <KEY_PATH> 2>/dev/null || ssh-add <KEY_PATH>
+> ```
+>
+> Let me know when you've done that.
+
+After they confirm, verify by running `ssh-add -l` again. If the key now appears, save `SSH_KEY_PATH` and move on. If it still doesn't appear, help them troubleshoot (wrong path, agent not running, etc.).
+
+1. **If it fails:** Work with the user to debug:
    - **"Connection refused" / "Connection timed out"** — VPS might not be running, IP might be wrong, or provider firewall is blocking. Ask them to check their provider dashboard.
    - **"Host key verification failed"** — They may have reinstalled the VPS or reused an IP. Offer to clear it:
+
      ```bash
      ssh-keygen -R <VPS1_IP>
      ```
+
    - **"Permission denied (publickey)"** — Wrong key, key not added to VPS, or wrong user. Help them troubleshoot:
      - Verify the key file exists
-     - Try loading it into the agent: `ssh-add <KEY_PATH>`
+     - Check if it's loaded: `ssh-add -l`
      - Ask if they might need a different username
    - If they have **multiple keys** in `~/.ssh/`, list them and help identify the right one by trying each.
 
-#### If they only have a password:
+#### If they only have a password
 
 1. Generate an SSH key pair:
 
@@ -82,7 +96,7 @@ Verify the key is loaded: `ssh-add -l` should list the key. Save `SSH_KEY_PATH` 
 ssh-keygen -t ed25519 -f ~/.ssh/vps1_openclaw_ed25519 -C "openclaw-vps" -N ""
 ```
 
-2. Copy the public key to the VPS using password auth:
+1. Copy the public key to the VPS using password auth:
 
 ```bash
 ssh-copy-id -i ~/.ssh/vps1_openclaw_ed25519.pub -p 22 <SSH_USER>@<VPS1_IP>
@@ -90,22 +104,32 @@ ssh-copy-id -i ~/.ssh/vps1_openclaw_ed25519.pub -p 22 <SSH_USER>@<VPS1_IP>
 
 The user will be prompted for their VPS password. Tell them to enter it when asked.
 
-3. Verify passwordless access works:
+1. Verify passwordless access works:
 
 ```bash
 ssh -i ~/.ssh/vps1_openclaw_ed25519 -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS1_IP> echo "SSH OK"
 ```
 
-4. Add the key to the SSH agent so deployment commands don't prompt repeatedly:
+1. Check if the key is already in the SSH agent:
 
 ```bash
-# macOS — also stores in Keychain so it persists across reboots
-ssh-add --apple-use-keychain ~/.ssh/vps1_openclaw_ed25519 2>/dev/null || ssh-add ~/.ssh/vps1_openclaw_ed25519
+ssh-add -l
 ```
 
-Verify with `ssh-add -l`.
+If the key is **not** listed, ask the user to add it in a **separate terminal window**:
 
-5. Save `SSH_KEY_PATH=~/.ssh/vps1_openclaw_ed25519`.
+> Please run this in another terminal (it may ask for your key's passphrase, though since we just generated it without one, it should load immediately):
+>
+> ```bash
+> # macOS — also stores in Keychain so it persists across reboots
+> ssh-add --apple-use-keychain ~/.ssh/vps1_openclaw_ed25519 2>/dev/null || ssh-add ~/.ssh/vps1_openclaw_ed25519
+> ```
+>
+> Let me know when you've done that.
+
+After they confirm, verify with `ssh-add -l` again.
+
+1. Save `SSH_KEY_PATH=~/.ssh/vps1_openclaw_ed25519`.
 
 **If ssh-copy-id fails** (some providers disable password auth by default), tell the user:
 
@@ -131,6 +155,7 @@ Ask the user:
 - **If no:** They need a domain with DNS managed by Cloudflare. Guide them:
 
 > You need:
+>
 > 1. A domain name (buy one from any registrar, or get a free one)
 > 2. A Cloudflare account (free tier works) — [sign up at cloudflare.com](https://cloudflare.com)
 > 3. The domain's DNS pointed to Cloudflare — in Cloudflare Dashboard, click **Add a Site**, enter your domain, and follow the instructions to update your nameservers at your registrar
@@ -221,7 +246,7 @@ Ask the user to paste the token. Validate it starts with `ey` (JWT format). Save
 > | **Application domain** | Your chosen subdomain, e.g. `openclaw.example.com` |
 > | **Path** | Leave blank to protect the entire subdomain |
 >
-> 4. Click **Next**
+> 1. Click **Next**
 
 #### Step C: Create an Access Policy
 
@@ -235,7 +260,7 @@ Ask the user to paste the token. Validate it starts with `ey` (JWT format). Save
 > | **Emails ending in** | `@yourdomain.com` | Allow anyone at your domain |
 > | **Everyone** | — | Allow all authenticated users (still forces login) |
 >
-> 4. Click **Next** -> review -> **Add application**
+> 1. Click **Next** -> review -> **Add application**
 
 ### 3.4 Connect the Domain to the Tunnel
 
@@ -267,7 +292,7 @@ Ask the user to paste the token. Validate it starts with `ey` (JWT format). Save
 
 > **Why this order?** Cloudflare evaluates rules top-to-bottom and uses the first match. The `/browser` rule must come first so browser VNC traffic is routed correctly. The catch-all gateway rule handles everything else.
 
-> 4. Save the tunnel configuration.
+> 1. Save the tunnel configuration.
 
 Set the domain config values:
 
@@ -296,6 +321,7 @@ curl -sI --connect-timeout 10 "https://<OPENCLAW_DOMAIN>/" 2>&1 | head -10
 **If you get a 200 (unprotected):**
 
 > Your domain is responding without requiring authentication. This means Cloudflare Access isn't protecting it yet. Go back to the Zero Trust Dashboard -> Access -> Applications and make sure:
+>
 > - The application domain matches exactly (including subdomain)
 > - The policy is set to "Allow" (not "Bypass")
 > - The application is enabled
@@ -349,11 +375,61 @@ Ask the user to paste the bot token. Validate it matches the format `<numbers>:<
 
 Ask the user for their ID. Validate it's a positive integer. Save as `YOUR_TELEGRAM_ID`.
 
+### 4.3 Host Alert Bot Setup
+
+Explain what host alerts are:
+
+> **Host Alerts** is a lightweight monitoring system that runs on your VPS. It checks disk usage, memory, and CPU every 15 minutes and sends you a Telegram message if anything crosses a threshold (e.g., disk over 85% full). It also sends a daily health report summary so you can see at a glance that everything is running smoothly — even when there are no problems.
+>
+> This uses a separate Telegram bot token and chat ID so alerts arrive in their own conversation, separate from your OpenClaw agent chats.
+
+Ask the user:
+
+> Do you want to **reuse the same Telegram bot** you just created for host alerts, or do you have a **separate bot** for monitoring?
+>
+> - **Same bot** — Simpler setup. Host alerts will come from the same bot as your OpenClaw agent messages. You'll still be able to tell them apart since alerts have a distinct format.
+> - **Separate bot** — Keeps monitoring messages in their own Telegram chat, completely separate from agent conversations. You'd need to create another bot via [@BotFather](https://t.me/BotFather).
+
+#### If they want to reuse the same bot
+
+Set `HOSTALERT_TELEGRAM_BOT_TOKEN` to the same value as `OPENCLAW_TELEGRAM_BOT_TOKEN`.
+
+For the chat ID, explain:
+
+> To receive alerts, you need to start a chat with the bot first. Open Telegram, find your bot by its username, and send it any message (e.g., "hi"). Then we can get the chat ID.
+
+Get the chat ID by calling the Telegram API:
+
+```bash
+curl -s "https://api.telegram.org/bot<OPENCLAW_TELEGRAM_BOT_TOKEN>/getUpdates" | python3 -m json.tool
+```
+
+Look for the user's chat ID in the response (under `result[].message.chat.id`). It should match their Telegram user ID. Save as `HOSTALERT_TELEGRAM_CHAT_ID`.
+
+If the response is empty (`"result": []`), remind the user they need to send a message to the bot first, then retry.
+
+#### If they have a separate bot
+
+Ask them to paste the bot token. Validate format (same as before). Save as `HOSTALERT_TELEGRAM_BOT_TOKEN`.
+
+Then follow the same chat ID steps above — they need to message this separate bot and we retrieve the chat ID from `getUpdates` using the separate bot's token.
+
+Save `HOSTALERT_TELEGRAM_CHAT_ID`.
+
+### 4.4 Daily Report Time
+
+> Host alerts also sends a daily health summary at a scheduled time. What time would you like to receive it?
+>
+> Default is **9:30 AM PST**. You can say something like "8am EST" or "noon UTC" — any human-readable time works.
+
+Save as `HOSTALERT_DAILY_REPORT_TIME` (keep the user's original phrasing, e.g., `"9:30 AM PST"`).
+
 ---
 
 ## Step 5: Prepare for Deployment
 
 At this point you should have collected all required values:
+
 - `VPS1_IP`
 - `SSH_USER`
 - `SSH_KEY_PATH`
@@ -363,6 +439,9 @@ At this point you should have collected all required values:
 - `OPENCLAW_BROWSER_DOMAIN_PATH`
 - `YOUR_TELEGRAM_ID`
 - `OPENCLAW_TELEGRAM_BOT_TOKEN`
+- `HOSTALERT_TELEGRAM_BOT_TOKEN`
+- `HOSTALERT_TELEGRAM_CHAT_ID`
+- `HOSTALERT_DAILY_REPORT_TIME`
 
 ### 5.1 Install Git
 
@@ -404,6 +483,9 @@ SSH_PORT=22
 CF_TUNNEL_TOKEN=<collected value>
 YOUR_TELEGRAM_ID=<collected value>
 OPENCLAW_TELEGRAM_BOT_TOKEN=<collected value>
+HOSTALERT_TELEGRAM_BOT_TOKEN=<collected value>
+HOSTALERT_TELEGRAM_CHAT_ID=<collected value>
+HOSTALERT_DAILY_REPORT_TIME=<collected value>
 OPENCLAW_DOMAIN=<collected value>
 OPENCLAW_BROWSER_DOMAIN=<collected value>
 OPENCLAW_BROWSER_DOMAIN_PATH=<collected value>
@@ -420,6 +502,7 @@ After writing, show the user a summary:
 > - Browser: `<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>`
 > - Tunnel: Configured (token saved)
 > - Telegram: Bot configured, user ID set
+> - Host Alerts: Configured (daily report at `<HOSTALERT_DAILY_REPORT_TIME>`)
 >
 > The remaining configuration (Cloudflare Workers, passwords, gateway tokens) will be auto-generated during deployment.
 
@@ -433,10 +516,12 @@ Setup is complete. Tell the user to exit this session and start a new one in the
 >
 > 1. Exit this Claude session (type `/exit` or press `Ctrl+C`)
 > 2. Open a new Claude Code session in the cloned repo:
+>
 >    ```bash
 >    cd openclaw-vps
 >    claude
 >    ```
+>
 > 3. When Claude starts, say: **"Let's start the deployment"**
 >
 > The new session will read the project's `CLAUDE.md` which has the full deployment instructions. The deployment is largely automated — after you confirm the deployment plan, Claude will run through all the steps continuously. You'll only need to interact again for device pairing at the very end.
