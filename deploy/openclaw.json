@@ -177,16 +177,13 @@
         "default": true,
         "skills": [],
         "tools": {
-          // Main operator session gets gateway control (restart, config, channels)
-          // This only applies on the host — sandboxed sessions still inherit the global deny
-          "allow": ["gateway"]
+          // No allow list needed — main runs on host and gets all tools by default.
+          // gateway is available because the sandbox deny doesn't apply to host sessions.
+          // Deny tools main shouldn't use as a coordinator:
+          "deny": ["canvas", "nodes", "discord"]
         },
         "subagents": {
-          // Main agent can spawn other agents to complete tasks
-          "allowAgents": [
-            "code",
-            "skills"
-          ]
+          "allowAgents": ["code", "skills"]
         }
       },
       // CODING AGENT
