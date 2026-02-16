@@ -12,7 +12,70 @@ This repo wraps OpenClaw with production-grade infrastructure: SSH hardening, fi
 
 ## Quick Start
 
-You need three things to get started: a VPS, a Cloudflare account, and Claude Code.
+1. Clone this repo
+2. Create a **[new VPS](docs/VPS-SETUP-GUIDE.md)** and [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)
+3. Run `claude` in this repo dir, just say `start`
+
+   ```bash
+   # Run claude with skip permissions if you want a more automated deploy
+   claude --dangerously-skip-permissions
+   # Prompt: 'start'
+
+   # Claude will deploy and test the VPS (15+ minutes)
+   ```
+
+### Claude guides you through whole process
+
+1. Asks you for any missing config values
+2. Auto repairs any issues encountered with your setup
+3. Walks you through openclaw device pairing
+4. Runs comprehensive verification and security tests
+
+After deployment, claude can be used to make any changes or manage your VPS with the same prompt.
+
+## Key Features
+
+- **Fully automated deployment**
+   — Claude Code runs modular playbooks to set up the entire VPS from scratch
+- **Single VPS**
+   — gateway, sandboxes, and log shipping all run on one server
+- **Cloudflare Tunnel**
+   — zero exposed ports, hidden origin IP, no SSL certificates to manage
+- **AI Gateway Worker**
+   — all LLM requests proxy through a worker for observability & API key management; real API keys never touch the VPS
+- **Log shipping**
+   — Vector ships container logs to a Cloudflare Log Receiver Worker
+- **Host monitoring**
+   — cron-based alerts for disk, memory, and CPU via Telegram
+- **Automated backups**
+   — scheduled backup scripts with cron
+- **Browser viewing**
+   — view and control agent browser sessions remotely via [noVNC proxy](docs/BROWSER-VNC.md)
+- **Ongoing management**
+   — use Claude Code for day-to-day VPS operations after deploy
+
+### Security
+
+- **Sysbox sandboxing**
+   — agent code executes in isolated Docker-in-Docker containers
+- **API key isolation**
+   — LLM provider keys stored as Cloudflare Worker secrets, not on the VPS
+- **Cloudflare Access**
+   — optional authentication layer in front of the tunnel
+- **No exposed ports**
+   — Cloudflare Tunnel uses outbound-only connections; SSH is the only public port
+- **SSH hardened**
+   — non-standard port (222), key-only auth, restricted ciphers, fail2ban
+- **Two-user model**
+   — `adminclaw` (SSH/sudo) and `openclaw` (app runtime, no SSH, no sudo)
+- **UFW firewall**
+   — only SSH allowed; all other inbound ports closed
+- **Docker localhost binding**
+   — daemon configured to bind container ports to 127.0.0.1 only, preventing Docker's iptables rules from bypassing UFW
+- **Kernel hardening**
+   — sysctl tuning and automatic security updates
+- **Security audit**
+   — built-in `openclaw security audit` checks for misconfigurations; claude runs comprehensive verifications & security checks during deploy
 
 ### 1. Set up your VPS
 
@@ -352,6 +415,32 @@ This is normal during first boot — the gateway takes ~14 minutes to build thre
 
 ```bash
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f openclaw-gateway'
+```
+openclaw-vps/
+├── README.md                 # This file (for users)
+├── CLAUDE.md                 # Deployment orchestration (for Claude)
+├── REQUIREMENTS.md           # Architecture reference
+├── openclaw-config.env       # Configuration (contains secrets)
+├── vector.yaml               # Vector log shipper config (YAML; deployed to VPS)
+├── build/
+│   ├── build-openclaw.sh     # Build script with auto-patching
+│   └── host-alert.sh         # Host monitoring + Telegram alerts
+├── workers/
+│   ├── ai-gateway/           # LLM API proxy worker (direct or optional CF AI Gateway)
+│   └── log-receiver/         # Cloudflare log receiver worker
+├── docs/
+│   ├── BROWSER-VNC.md        # Browser VNC access via noVNC proxy
+│   ├── CLOUDFLARE-TUNNEL.md  # Cloudflare Tunnel reference
+│   └── TESTING.md            # Testing instructions
+│   └── VPS-SETUP-GUIDE.md    # VPS setup instructions
+└── playbooks/                # Deployment playbooks (for Claude)
+    ├── 01-workers.md
+    ├── 02-base-setup.md
+    ├── 03-docker.md
+    ├── 04-vps1-openclaw.md
+    ├── 06-backup.md
+    ├── 07-verification.md
+    └── 08-post-deploy.md
 ```
 
 Look for `Executing as node` — that means initialization is complete.

@@ -1,37 +1,58 @@
-import type { Env } from '../types'
+import type { ProviderConfig, Log } from '../types'
+import { sanitizeHeaders, truncateBody } from '../log'
 
-const GW_PATH = 'anthropic/v1/messages'
 const DEFAULT_ANTHROPIC_VERSION = '2023-06-01'
 
-/** Returns the AI Gateway sub-path if this request matches the Anthropic route, or null. */
-export function matchAnthropic(method: string, pathname: string): string | null {
-  if (method === 'POST' && pathname === '/v1/messages') {
-    return GW_PATH
+/** Proxy the request to Anthropic (via AI Gateway or direct). */
+export async function proxyAnthropic(
+  apiKey: string,
+  request: Request,
+  config: ProviderConfig,
+  path: string,
+  log: Log
+): Promise<Response> {
+  const url = `${config.baseUrl}/${path}`
+
+  const headers = new Headers()
+
+  // Set provider-config headers (e.g. cf-aig-authorization for gateway mode)
+  if (config.headers) {
+    for (const [key, value] of Object.entries(config.headers)) {
+      headers.set(key, value)
+    }
   }
-  return null
-}
 
-/** Proxy the request to Anthropic via AI Gateway. */
-export function proxyAnthropic(request: Request, env: Env, gwPath: string): Promise<Response> {
-  const url = `https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.CF_AI_GATEWAY_ID}/${gwPath}`
-
-  const headers = new Headers(request.headers)
-  // Remove client auth headers before forwarding to upstream
-  headers.delete('Authorization')
-  headers.delete('x-api-key')
-  // Set the real Anthropic API key for upstream
-  headers.set('x-api-key', env.ANTHROPIC_API_KEY)
-  // Authenticate to Cloudflare AI Gateway
-  headers.set('cf-aig-authorization', `Bearer ${env.CF_AI_GATEWAY_TOKEN}`)
+  // Merge request headers, skipping auth and cf-* headers
+  for (const [key, value] of request.headers) {
+    const lower = key.toLowerCase()
+    if (lower === 'authorization' || lower === 'x-api-key' || lower.startsWith('cf-')) continue
+    if (!headers.has(key)) headers.set(key, value)
+  }
 
   // Ensure anthropic-version is set
   if (!headers.has('anthropic-version')) {
     headers.set('anthropic-version', DEFAULT_ANTHROPIC_VERSION)
   }
 
+  if (apiKey.startsWith('sk-ant-oat')) {
+    // Using OAuth token
+    headers.set('authorization', `Bearer ${apiKey}`)
+    log.debug(`[anthropic] Using OAuth Token: ${apiKey.substring(0, 10)}...`)
+  } else {
+    // Using regular API key
+    headers.set('x-api-key', apiKey)
+    log.debug(`[anthropic] Using API key: ${apiKey.substring(0, 10)}...`)
+  }
+
+  const body = await request.text()
+
+  log.debug(`[anthropic] url=${url}`)
+  log.debug('[anthropic] upstream headers', sanitizeHeaders(headers))
+  log.debug('[anthropic] request body', truncateBody(body))
+
   return fetch(url, {
     method: 'POST',
     headers,
-    body: request.body,
+    body,
   })
 }

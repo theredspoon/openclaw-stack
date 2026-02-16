@@ -1,8 +1,8 @@
 /**
  * Validate the Authorization header using timing-safe comparison.
- * Returns null on success, or an error message string on failure.
+ * Returns the provided token string on success, or null on failure.
  */
-export async function validateAuth(
+export async function validateAuthToken(
   request: Request,
   expectedToken: string
 ): Promise<string | null> {
@@ -13,7 +13,7 @@ export async function validateAuth(
   const authHeader = request.headers.get("Authorization");
   if (authHeader) {
     if (!authHeader.startsWith("Bearer ")) {
-      return "Authorization header must use Bearer scheme";
+      return null;
     }
     provided = authHeader.slice(7);
   } else {
@@ -24,12 +24,21 @@ export async function validateAuth(
   }
 
   if (!provided) {
-    return "Missing auth credentials (expected Authorization: Bearer or x-api-key header)";
+    return null;
   }
 
-  const match = await timingSafeEqual(provided, expectedToken);
-  if (!match) {
-    return "Invalid token";
+  // Check exact match first
+  if (await timingSafeEqual(provided, expectedToken)) {
+    return provided;
+  }
+
+  // If the token contains dashes, check if the last segment matches
+  // (supports prefixed keys like "sk-ant-api03-xxxxx-AUTH_TOKEN")
+  if (provided.includes("-")) {
+    const lastSegment = provided.split("-").pop()!;
+    if (await timingSafeEqual(lastSegment, expectedToken)) {
+      return provided;
+    }
   }
 
   return null;

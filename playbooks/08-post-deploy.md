@@ -1,157 +1,90 @@
-# 08 - Post-Deploy: First Access & Device Pairing
+# 08 - Post-Deploy: Device Pairing & Deployment Report
 
-Interactive guide for accessing OpenClaw and pairing your first device after deployment.
+Guide for configuring the AI proxy, pairing your first device, and completing deployment.
 
 ## Overview
 
-After `07-verification.md` confirms all services are healthy, this playbook walks you through:
+After `07-verification.md` confirms all services are healthy and domain routing is
+verified, this playbook walks you through:
 
-- Configuring Cloudflare Access and connecting the domain
+- Verifying and configuring the AI proxy
 - Retrieving the gateway access token
 - Opening the OpenClaw UI for the first time
 - Approving your first device pairing request
-- Verifying the connection works end-to-end
+- Generating the deployment report
 
 ## Prerequisites
 
 - `07-verification.md` completed successfully
-- OpenClaw gateway running on VPS-1
-- Cloudflare Tunnel service running (02-base-setup.md section 2.9)
-- Browser available on your local machine
+- Domain verified as protected by Cloudflare Access (during `00-fresh-deploy-setup.md`)
 
 ---
 
-## 8.0 Connect Gateway Domain via Cloudflare Tunnel
+## 8.1 AI Proxy Configuration
 
-### Check if OPENCLAW_DOMAIN has a placeholder
+Verify the AI proxy worker and configure an Anthropic API key so the gateway can reach LLM providers before device pairing.
 
-Read `OPENCLAW_DOMAIN` from `openclaw-config.env`. If it still contains `<example>` or other angle-bracket placeholders:
-
-> "Your gateway domain isn't configured yet. You need to:
->
-> 1. **Decide on your domain** (e.g., `openclaw.yourdomain.com`)
-> 2. **Configure Cloudflare Access** — see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md) (Steps 1-3)
-> 3. **Add a public hostname** to your tunnel pointing to `localhost:18789`
->
-> Once done, tell me your domain (e.g., `openclaw.mydomain.com`) and I'll update the config."
-
-Wait for the user to provide the domain. Update `OPENCLAW_DOMAIN` in `openclaw-config.env`, then continue.
-
-### Verify domain is protected by Cloudflare Access
+### Step 1: Health Check
 
 ```bash
-# Test if the domain resolves — should get a 302/403 redirect to the Access login page
-curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | head -10
+curl -s https://<AI_GATEWAY_WORKER_URL>/health
 ```
 
-**If connection refused, timeout, or DNS error:**
+**Expected:** `{"status":"ok"}` — the worker was deployed during step 1 (`01-workers.md`).
 
-The user needs to configure Cloudflare Access and add the published hostname route. Present:
+**If unhealthy:** The worker may not have deployed correctly. Re-run `01-workers.md` § 1.1 before continuing.
 
-> "Your tunnel is running but the domain isn't connected yet. Before connecting it, you should set up Cloudflare Access so the domain is protected from the first request.
->
-> Follow the steps in [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md):
->
-> 1. **Configure Cloudflare Access** (Steps 1-3) — set up the application, policy, and identity provider
-> 2. **Connect your domain** (Step 4) — add the published hostname route in the tunnel config
-> 3. **Test** (Step 5) — verify the Access login page appears in an incognito window
->
-> Let me know when you've completed these steps."
+### Step 2: Check Anthropic API Key
 
-Wait for the user to confirm before proceeding.
+Check if `ANTHROPIC_API_KEY` is already configured:
 
-**If the response is a 302/403 redirect** (to a URL containing `cloudflareaccess.com` or `access.` in the `Location` header): Cloudflare Access is protecting the domain. Proceed to section 8.0b.
+```bash
+npx wrangler secret list --cwd workers/ai-gateway
+```
 
-**If the response is 200** (domain accessible without auth), warn:
+**If `ANTHROPIC_API_KEY` appears in the list:** Go to Step 3.
 
-> "Your domain is accessible without Cloudflare Access authentication. This means anyone with the URL can reach OpenClaw.
->
-> Configure Cloudflare Access now — see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md) (Steps 1-3).
->
-> Let me know when done."
+**If not set:** Use `AskUserQuestion` to ask the user if they want to add an Anthropic API key now.
 
-Wait for the user to confirm before proceeding.
+- **Yes:** Ask for the key (should start with `sk-ant-`). The key is stored only in Cloudflare as an encrypted Worker secret — it never touches the VPS and is not saved locally.
 
-> **Note:** Do NOT attempt to verify that the gateway is reachable through the tunnel from here. Cloudflare Access blocks unauthenticated requests. The gateway was already verified internally (localhost) in `07-verification.md`. End-to-end browser verification happens in [`docs/TESTING.md`](../docs/TESTING.md) where the user authenticates through Cloudflare Access via Chrome DevTools.
+  ```bash
+  echo "<key>" | npx wrangler secret put ANTHROPIC_API_KEY --cwd workers/ai-gateway
+  ```
 
-> **Tunnel routing:** The gateway's WebSocket endpoint accepts connections at any URL path,
-> but the Control UI client connects to `wss://<host>/` (root path, not the basePath).
-> This means the reverse proxy/tunnel **must use catch-all routing** for the gateway hostname
-> — path-based routing (e.g., only forwarding `/openclaw/*`) will break WebSocket connections.
-> If both gateway and browser VNC share the same hostname, configure the browser path rule
-> (`/browser` → `localhost:6090`) **before** the catch-all gateway rule (`*` → `localhost:18789`).
-> There is no gateway config option for a WebSocket basePath.
+  > **OpenAI:** If the user also wants OpenAI, add it the same way: `echo "<key>" | npx wrangler secret put OPENAI_API_KEY --cwd workers/ai-gateway`.
+
+  Go to Step 3.
+
+- **Skip:** Note in the deployment report (§ 8.6) that the AI proxy is not configured. Continue to § 8.2.
+
+### Step 3: Test LLM Proxy
+
+Send a minimal request through the AI proxy to verify the key works:
+
+```bash
+curl -s -w "\n%{http_code}" https://<AI_GATEWAY_WORKER_URL>/anthropic/v1/messages \
+  -H "Authorization: Bearer <AI_GATEWAY_AUTH_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":10,"messages":[{"role":"user","content":"Say hi"}]}'
+```
+
+**If 200:** AI proxy is configured and working. Continue to § 8.2.
+
+**If error:** Note in the deployment report that the key is set but the test failed. Don't block the deploy.
+
+Brief troubleshooting tips to share with the user:
+
+- Check the API key is correct (no trailing whitespace)
+- Verify the Anthropic account has active billing
+- Wait 30 seconds and retry (worker may still be picking up the new secret)
+
+Continue to § 8.2.
 
 ---
 
-## 8.0b Connect Browser VNC via Cloudflare Tunnel
-
-### Check if OPENCLAW_BROWSER_DOMAIN has a placeholder
-
-Read `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_BROWSER_DOMAIN_PATH` from `openclaw-config.env`. If `OPENCLAW_BROWSER_DOMAIN` contains `<example>` or other angle-bracket placeholders:
-
-> "Your browser VNC domain isn't configured yet. You need to:
->
-> 1. **Decide on your browser URL** — either:
->    - A subpath on your main domain (e.g., domain `openclaw.yourdomain.com`, path `/browser`)
->    - A separate subdomain (e.g., domain `browser-openclaw.yourdomain.com`, path empty)
-> 2. **Add a public hostname** (or path) in your Cloudflare Tunnel pointing to `http://localhost:6090`
-> 3. **Protect it with Cloudflare Access** (same Access application or a new one)
->
-> Tell me the browser domain and path (if any) and I'll update the config."
-
-Wait for the user to provide the values. Then:
-
-1. Update `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_BROWSER_DOMAIN_PATH` in `openclaw-config.env`
-2. Update `NOVNC_BASE_PATH` in the `.env` file on VPS (direct copy of `OPENCLAW_BROWSER_DOMAIN_PATH`):
-
-```bash
-# Update NOVNC_BASE_PATH in .env on VPS
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo sed -i 's|^NOVNC_BASE_PATH=.*|NOVNC_BASE_PATH=<OPENCLAW_BROWSER_DOMAIN_PATH>|' /home/openclaw/openclaw/.env"
-```
-
-3. Restart the gateway to pick up the new base path:
-
-```bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'"
-```
-
-### Verify browser VNC route is protected
-
-```bash
-# Test browser VNC URL — should get 302/403 redirect to Cloudflare Access login
-curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/ 2>&1 | head -10
-```
-
-**Expected:** A 302 or 403 response redirecting to the Cloudflare Access login page. This confirms the tunnel route exists and is protected. Do NOT expect a 200 — Cloudflare Access blocks unauthenticated requests.
-
-If you get a connection error or timeout, the tunnel route hasn't been configured yet. Ask the user to add it in the Cloudflare Dashboard.
-
-### Verify novnc-proxy internally (via SSH)
-
-```bash
-# Check novnc-proxy is running with the correct base path
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker logs openclaw-gateway 2>&1 | grep 'novnc-proxy'"
-```
-
-**Expected:** Log line showing `[novnc-proxy] Listening on port 6090, base path: /browser` (or similar, matching the configured path).
-
-```bash
-# Internal check: verify the proxy responds on localhost (inside the VPS, bypasses Cloudflare Access)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "curl -sI http://localhost:6090/<NOVNC_BASE_PATH_WITHOUT_LEADING_SLASH>/ 2>&1 | head -5"
-```
-
-**Expected:** 200 response with `text/html` content type (the index page).
-
-> **Note:** Full end-to-end browser verification (authenticating through Cloudflare Access and viewing VNC sessions) is covered in [`docs/TESTING.md`](../docs/TESTING.md).
-
----
-
-## 8.1 Retrieve Gateway Token
+## 8.2 Retrieve Gateway Token
 
 Read the gateway token from VPS-1:
 
@@ -170,7 +103,7 @@ https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/chat?token=<TOKEN>
 
 ---
 
-## 8.2 Open the URL
+## 8.3 Open the URL
 
 Tell the user to open the URL in their browser.
 
@@ -188,15 +121,16 @@ Ask the user to confirm they can see the page (even with the pairing error) befo
 
 ---
 
-## 8.3 Approve Device Pairing
+## 8.4 Approve Device Pairing
 
-After the user opens the URL and sees the "pairing required" message, approve their webchat device.
+After the user opens the URL and sees "pairing required", approve their device.
 
-The CLI was auto-paired during deployment (section 4.9 of `04-vps1-openclaw.md`),
-so `openclaw devices approve` works directly.
+### Approach 1: Standard CLI Pairing (try first)
+
+The CLI was auto-paired during deployment (`04-vps1-openclaw.md` §4.16).
 
 ```bash
-# 1. List pending device requests
+# List pending device requests
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "openclaw devices list"
 ```
@@ -204,21 +138,18 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 Find the `requestId` for the `openclaw-control-ui` client, then approve:
 
 ```bash
-# 2. Approve the webchat device
+# Approve the webchat device
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "openclaw devices approve <requestId>"
 ```
 
-Tell the user to wait ~15 seconds — the browser auto-retries and should connect.
+Tell the user to wait ~15 seconds for browser auto-retry.
 
-### If no pending requests appear
+**If this works:** Skip to § 8.5.
 
-- Pending requests have a **5-minute TTL**. If the user waited too long, ask them to refresh.
-- Each browser retry creates a new pending request. Use the most recent `requestId`.
+### Approach 2: Re-pair CLI with Explicit Token
 
-### If CLI fails with "pairing required"
-
-The CLI device identity was lost or never created. Re-run auto-pairing:
+If `openclaw devices list` fails with "pairing required", the CLI identity was lost.
 
 ```bash
 GATEWAY_TOKEN=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
@@ -228,11 +159,85 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
     openclaw devices list --url ws://localhost:18789 --token $GATEWAY_TOKEN"
 ```
 
-Then retry the approval above.
+This re-pairs the CLI. Now retry Approach 1.
+
+### Approach 3: File-Based Pairing
+
+If the CLI pairing keeps failing, bypass WebSocket pairing entirely via file manipulation.
+
+```bash
+# 1. Fix .openclaw ownership (gateway creates dirs as root before gosu drops to node)
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo docker exec openclaw-gateway chown -R 1000:1000 /home/node/.openclaw"
+
+# 2. Trigger a pending CLI pairing request (expected to fail, but registers the device)
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo docker exec --user node openclaw-gateway openclaw devices list 2>&1 || true"
+
+# 3. Approve the CLI device via file manipulation — moves CLI entry from pending.json to paired.json
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "sudo python3 -c \"
+import json, time, os
+pending_file = '/home/openclaw/.openclaw/devices/pending.json'
+paired_file = '/home/openclaw/.openclaw/devices/paired.json'
+if not os.path.exists(pending_file):
+    print('No pending.json found'); exit(1)
+with open(pending_file) as f: pending = json.load(f)
+paired = {}
+if os.path.exists(paired_file):
+    with open(paired_file) as f: paired = json.load(f)
+for req_id, req in list(pending.items()):
+    if req.get('clientId') == 'cli':
+        now = int(time.time() * 1000)
+        paired[req['deviceId']] = {
+            'deviceId': req['deviceId'], 'publicKey': req['publicKey'],
+            'platform': req['platform'], 'clientId': req['clientId'],
+            'clientMode': req['clientMode'], 'role': req['role'],
+            'roles': req['roles'], 'scopes': req['scopes'],
+            'remoteIp': req['remoteIp'],
+            'createdAtMs': now, 'approvedAtMs': now, 'tokens': {},
+        }
+        del pending[req_id]; break
+else:
+    print('No CLI pending request found'); exit(1)
+with open(paired_file, 'w') as f: json.dump(paired, f, indent=2)
+with open(pending_file, 'w') as f: json.dump(pending, f, indent=2)
+print('CLI device approved')
+\""
+
+# 4. Verify CLI is paired (gateway reads files on each connection — no restart needed)
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "openclaw devices list"
+```
+
+**Expected:** Shows 1 paired device with role `operator`. Now retry Approach 1 to
+approve the browser device.
+
+### Approach 4: Gateway Restart + Fresh Pairing
+
+As a last resort, restart the gateway and try again:
+
+```bash
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'"
+```
+
+Wait 30-60 seconds for full startup (sandbox images are cached, so restarts are faster
+than first boot), then retry from Approach 1.
+
+### Tips for Users
+
+- **Pending requests expire after 5 minutes.** If the user waited too long between
+  opening the URL and running `devices list`, ask them to refresh the browser page
+  to generate a new request.
+- **Each browser refresh creates a new request.** Always use the most recent
+  `requestId` from `devices list`.
+- **The browser auto-retries** every few seconds. After approval, the user just
+  needs to wait — no manual refresh needed.
+- **Check the browser console** (F12 → Console) if the page doesn't connect after
+  approval. Look for WebSocket errors.
 
 ---
 
-## 8.4 Verify Connection
+## 8.5 Verify Connection
 
 Ask the user to confirm:
 
@@ -255,26 +260,13 @@ If the device shows as approved but the browser still can't connect, ask the use
 
 ---
 
-## 8.5 Reference: Device Management
+## 8.5.1 Telegram Pairing
 
-**CLI commands** (from local machine via SSH):
+If `OPENCLAW_TELEGRAM_BOT_TOKEN` is set in `openclaw-config.env`, the gateway is already connected to Telegram. Tell the user:
 
-```bash
-openclaw devices list                    # List pending/approved
-openclaw devices approve <requestId>     # Approve a device
-```
+> **Telegram:** Your bot is live. Open Telegram and send a message to your bot. If the gateway prompts for device approval, run `openclaw devices approve <requestId>` the same way you approved the browser.
 
-**Control UI:** Once one device is paired, approve new devices from the Control UI.
-
-**Notes:** Pending requests expire after 5 minutes. The browser auto-retries, creating new requests. Refresh the page if a request expired.
-
-**Re-pairing the CLI** (if device identity is lost):
-
-```bash
-GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
-sudo docker exec --user node openclaw-gateway \
-  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
-```
+If the bot token is empty, skip this step — Telegram was not configured.
 
 ---
 
@@ -286,15 +278,32 @@ Collect the following values and present them in a single, neatly formatted repo
 
 ### Values to collect
 
-1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), read them from your conversation history or inform the user they were displayed during base setup and should have been saved.
+1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), check the `# DEPLOYED:` lines in `openclaw-config.env` first (`grep 'DEPLOYED.*PASSWORD' openclaw-config.env`). If those are also empty, inform the user the passwords were displayed during base setup and can be reset via VNC/console access.
 
 2. **Gateway token** — read from VPS:
+
    ```bash
    ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
      "sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2"
    ```
 
-3. **Domain and URLs** — from `openclaw-config.env` values set during this playbook.
+3. **Domain and URLs** — from `openclaw-config.env`.
+
+### AI proxy status
+
+Include the appropriate callout in the report based on § 8.1 outcome:
+
+**If configured and working (Step 3 returned 200):**
+
+> **AI Proxy:** Configured and verified.
+
+**If configured but test failed (Step 3 returned an error):**
+
+> **AI Proxy:** Anthropic API key is set but the test request failed. Check the key and provider billing. See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for troubleshooting.
+
+**If skipped (user chose to skip in Step 2):**
+
+> **AI Proxy:** Not configured. See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) to add provider API keys.
 
 ### Report format
 
@@ -323,7 +332,7 @@ Output the report using exactly this structure:
 ### SSH Access
 
 \`\`\`bash
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP>
 \`\`\`
 
 ---
@@ -363,18 +372,21 @@ All URLs are protected by Cloudflare Access.
 |-----|----------|--------|
 | Backup | Daily at 3:00 AM UTC (30-day retention) | Active |
 | Host alerter | Every 15 minutes via Telegram | <see note> |
+| Daily report | Daily at <HOSTALERT_DAILY_REPORT_TIME> via Telegram | <see note> |
+| Maintenance checker | Daily (30 min before daily report) | Active |
 ```
 
-Check `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `openclaw-config.env`.
+Check `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `openclaw-config.env`.
 
-**If both are set:** Host alerter is active. Show status as `Active` in the table.
+**If both are set:** Host alerter and daily report are active. Show status as `Active` in both rows. For the daily report schedule, use the value of `HOSTALERT_DAILY_REPORT_TIME` (default: `9:00 AM UTC`).
 
-**If either is empty:** Show status as `Not configured` and append:
+**If either is empty:** Show status as `Not configured` for both rows and append:
 
-> **Host alerter** is not configured. To enable disk/memory/CPU alerts via Telegram:
+> **Host alerter & daily report** are not configured. To enable disk/memory/CPU alerts and daily health reports via Telegram:
 >
 > 1. Follow [`docs/TELEGRAM.md`](../docs/TELEGRAM.md) to create a Telegram bot and get your chat ID
 > 2. Tell Claude to update the host alerter with your bot token and chat ID
+
 ```
 
 ---
@@ -383,16 +395,19 @@ Check `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `openclaw-config.env`.
 
 | Task | Command |
 |------|---------|
-| SSH to VPS | `ssh -i <KEY> -p 222 adminclaw@<IP>` |
-| Gateway logs | `sudo docker logs -f openclaw-gateway` |
-| Container status | `sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'` |
-| List devices | `openclaw devices list` |
-| Approve device | `openclaw devices approve <requestId>` |
-| Run backup | `sudo /home/openclaw/scripts/backup.sh` |
-| Update OpenClaw | See `04-vps1-openclaw.md` § Updating OpenClaw |
+| SSH to VPS | `./scripts/ssh-vps.sh` |
+| SSH to Gateway | `./scripts/ssh-gateway.sh` |
+| Gateway logs | `./scripts/logs-gateway.sh` |
+| Health Checks | `./scripts/health-check.sh` |
+| OpenClaw CLI | `./scripts/openclaw.sh [command]` or SSH to Gateway `openclaw` |
+| Run backup | `claude "run the backup script on the vps"` |
+| Update OpenClaw | `claude "update openclaw"` |
+| Update Sandboxes | `claude "update ffmpeg in the sandbox toolkit"` |
 ```
 
-> **Note:** If user passwords are no longer in the conversation context, note that they were displayed during step 2.2 and should have been saved at that time. The passwords can also be reset via VNC/console access if needed.
+> For additional AI provider configuration (OpenAI, Cloudflare AI Gateway, Claude Code subscription), see [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md).
+
+> **Note:** If user passwords are no longer in the conversation context, check `openclaw-config.env` for `# DEPLOYED:` lines first (`grep 'DEPLOYED' openclaw-config.env`). These are written automatically during deployment as a safety net. If those are also empty, the passwords can be reset via VNC/console access.
 
 ---
 

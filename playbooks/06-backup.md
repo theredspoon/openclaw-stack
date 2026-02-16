@@ -14,7 +14,7 @@ This playbook configures:
 
 - [04-vps1-openclaw.md](04-vps1-openclaw.md) completed
 - OpenClaw running and configured
-- SSH access as `adminclaw` on port 222
+- SSH access as `adminclaw` on port `<SSH_PORT>`
 
 ## Variables
 
@@ -105,6 +105,21 @@ sudo ls -la /home/openclaw/.openclaw/backups/
 # Verify backup contents
 sudo tar -tzf /home/openclaw/.openclaw/backups/openclaw_backup_*.tar.gz
 ```
+
+**If backup script fails with "No such file or directory":**
+
+> "Some backup paths don't exist yet. This is normal on first boot before
+> the gateway has created all directories. The `2>/dev/null || true` in the
+> script allows partial backups. Verify the script completed and check which
+> files were included with `tar -tzf`."
+
+**If backup is empty or very small (< 1KB):**
+
+> "The backup archive is too small — it may not contain any files. Check that
+> the gateway has been started at least once (directories are created on first
+> boot). Verify paths exist:"
+>
+> `sudo ls -la /home/openclaw/.openclaw/openclaw.json /home/openclaw/openclaw/.env`
 
 ---
 

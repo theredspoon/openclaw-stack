@@ -2,12 +2,12 @@
 
 ## Overview
 
-This document orchestrates the automated deployment of OpenClaw on a single OVHCloud VPS instance, with Cloudflare Workers handling observability and LLM proxying.
+This document orchestrates the automated deployment of OpenClaw on a single OVHCloud VPS instance, with Cloudflare Workers handling observability and LLM API proxying.
 
 | Component | Role | Services |
 |-----------|------|----------|
 | **VPS-1** | OpenClaw | Gateway, Sysbox, Vector (log shipper) |
-| **AI Gateway Worker** | LLM Proxy | Cloudflare AI Gateway analytics, API key isolation |
+| **AI Gateway Worker** | LLM Proxy | LLM proxy (direct API or optional CF AI Gateway), API key isolation |
 | **Log Receiver Worker** | Log Ingestion | Accepts container logs from Vector, Cloudflare real-time logs |
 
 ## Playbook Structure
@@ -25,7 +25,7 @@ All deployment steps are in modular playbooks under `playbooks/`:
 | `06-backup.md` | Backup scripts and cron jobs |
 | `07-verification.md` | Testing and verification |
 | `maintenance.md` | Token rotation schedules and procedures |
-| `08-post-deploy.md` | First access & device pairing |
+| `08-post-deploy.md` | Device pairing & deployment report |
 
 See [playbooks/README.md](playbooks/README.md) for detailed playbook documentation.
 
@@ -48,12 +48,12 @@ IMPORTANT: Read configuration from `openclaw-config.env`:
 
 ```bash
 # See openclaw-config.env.example for all fields and documentation.
-# Only VPS1_IP and CF_TUNNEL_TOKEN are required to start a fresh deployment.
+# VPS1_IP, CF_TUNNEL_TOKEN, and domain config are required to start a fresh deployment.
 # Domain config (OPENCLAW_DOMAIN, OPENCLAW_BROWSER_DOMAIN, OPENCLAW_BROWSER_DOMAIN_PATH, OPENCLAW_DOMAIN_PATH)
-# is deferred to post-deploy when Cloudflare Tunnel routes are configured.
+# is validated during fresh deploy setup (00-fresh-deploy-setup.md).
 ```
 
-SSH_USER and SSH_PORT start as `ubuntu`/`22` and are changed to `adminclaw`/`222` during hardening.
+SSH_USER and SSH_PORT start as provider defaults (e.g., `ubuntu`/`22`) and are changed to `adminclaw`/`<SSH_HARDENED_PORT>` during hardening. `SSH_HARDENED_PORT` (default `222`) is set in config and removed after hardening completes.
 
 ---
 
@@ -69,7 +69,7 @@ Check `openclaw-config.env` exists. If missing, tell user to `cp openclaw-config
 
 Ask: **New deployment** (fresh VPS) or **Existing deployment** (already configured)?
 
-- **New deployment:** Follow `playbooks/00-fresh-deploy-setup.md` for minimal validation (only `VPS1_IP` + `CF_TUNNEL_TOKEN` + SSH needed to start). Domain configuration is deferred to post-deploy.
+- **New deployment:** Follow `playbooks/00-fresh-deploy-setup.md` for validation (`VPS1_IP`, `CF_TUNNEL_TOKEN`, domain config, and SSH needed). Cloudflare Access must be configured before deploy begins.
 - **Existing deployment:** Ask: **Analyze** (`00-analysis-mode.md`), **Test** (`07-verification.md`), or **Modify** (describe custom changes). If "something else," use plan mode.
 
 ---
@@ -86,10 +86,12 @@ Ask: **New deployment** (fresh VPS) or **Existing deployment** (already configur
 5. Execute 06-backup.md on VPS-1
 6. Reboot VPS-1
 7. Execute 07-verification.md
-8. Execute 08-post-deploy.md
+8. Execute 08-post-deploy.md (device pairing & deployment report)
 ```
 
 All steps are sequential on a single VPS. Workers deployment (01-workers) runs from the local machine using `wrangler` and is triggered automatically during config validation if needed.
+
+**Automation:** After the user confirms the deployment plan in `00-fresh-deploy-setup.md` § 0.7, execute all playbooks continuously without pausing between steps. Only stop for errors requiring user input. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`.
 
 ---
 
@@ -110,23 +112,20 @@ sudo su - openclaw
 
 ### Service Management
 
+All docker compose commands run as openclaw (adminclaw can't cd into openclaw's home):
+
 ```bash
-# OpenClaw Gateway (adminclaw can't cd into openclaw's home — wrap in bash -c)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'      # Start
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose down'       # Stop
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'    # Logs
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'         # Status
-
-# Restart gateway (service name is "openclaw-gateway", not "gateway")
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'
-
-# Vector logs (log shipper)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs vector'        # View Vector logs
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f vector'     # Follow Vector logs
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'     # Restart Vector
+# Pattern: sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose <cmd>'
+# Examples:
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'       # Start all
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'           # Status
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'      # Follow logs
+# Per-service: append service name (e.g., restart openclaw-gateway, logs vector)
 ```
 
-> **Note:** Docker Compose prints warnings about unset `CLAUDE_AI_SESSION_KEY`, `CLAUDE_WEB_SESSION_KEY`, and `CLAUDE_WEB_COOKIE` variables on every command. These are harmless — the variables are optional and default to blank strings.
+> **Note:** Docker Compose warns about unset `CLAUDE_AI_SESSION_KEY`/`CLAUDE_WEB_SESSION_KEY`/`CLAUDE_WEB_COOKIE` — harmless, these are optional.
+
+> **`restart` vs `up -d`:** `restart` does NOT reload `.env` values (baked at container creation). Use `up -d <service>` after `.env` changes. `restart` is fine for bind-mounted file changes (read from disk at startup).
 
 ### Firewall
 
@@ -140,7 +139,7 @@ sudo ufw reload    # Reload
 
 ## Security Model
 
-See [REQUIREMENTS.md § 2.2](REQUIREMENTS.md#22-two-user-security-model) for the two-user security model (`adminclaw` for admin, `openclaw` for runtime).
+See [REQUIREMENTS.md § 2.1](REQUIREMENTS.md#21-two-user-model) for the two-user security model (`adminclaw` for admin, `openclaw` for runtime).
 
 ---
 
@@ -165,4 +164,4 @@ For detailed architecture, configuration, and gotchas, see [REQUIREMENTS.md](REQ
 
 ## Security Checklist
 
-See [07-verification.md § 7.6](playbooks/07-verification.md) for the full security checklist.
+See [07-verification.md § 7.6](playbooks/07-verification.md) for the full security verification.

@@ -70,9 +70,8 @@ NodeSource over nvm because systemd needs a stable `/usr/bin/node` path.
 - 4.1 Sysbox installation
 - 4.2 Docker networks (172.30.0.0/24, 172.31.0.0/24)
 - 4.6 docker-compose.override.yml (gateway portion)
-- 4.8a Dockerfile.custom
-- 4.8b Runtime OTEL patch
-- 4.8c Custom entrypoint
+- 4.9 Build script and patches
+- 4.10 Custom entrypoint
 
 **Keep/modify:**
 

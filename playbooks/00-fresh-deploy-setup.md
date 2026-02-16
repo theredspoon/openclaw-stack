@@ -1,16 +1,18 @@
 # 00 - Fresh Deploy Setup
 
-Minimal validation and overview for starting a fresh VPS deployment. Only `VPS1_IP` and `CF_TUNNEL_TOKEN` are required upfront — domain configuration is deferred to post-deploy.
+Validation and overview for starting a fresh VPS deployment. All required configuration — including domain and Cloudflare Access — must be in place before deployment begins.
 
 ## Overview
 
-This playbook validates the minimum configuration needed to begin deploying OpenClaw on a fresh Ubuntu VPS. Domain-related settings (`OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN_PATH`, `OPENCLAW_DOMAIN_PATH`) are only needed during post-deploy (step 8) when the user configures Cloudflare Tunnel public routes.
+This playbook validates the configuration needed to deploy OpenClaw on a fresh Ubuntu VPS. Domain settings (`OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN_PATH`, `OPENCLAW_DOMAIN_PATH`) and Cloudflare Access protection are required upfront so the full deployment can run end-to-end without interruption.
 
 ## Prerequisites
 
 - A fresh Ubuntu VPS (>= 24.04) with root/sudo access
 - An SSH key pair for VPS access
-- A Cloudflare account with a domain and Cloudflare Access enabled
+- A Cloudflare account with a domain
+- Cloudflare Tunnel created with public hostname routes configured
+- Cloudflare Access application protecting the domain
 
 ---
 
@@ -28,35 +30,84 @@ ls openclaw-config.env
 cp openclaw-config.env.example openclaw-config.env
 ```
 
-Then ask the user to fill in `VPS1_IP` and `CF_TUNNEL_TOKEN` (the two values needed to start).
+Then ask the user to fill in the required values (see section 0.2).
 
 ---
 
-## 0.2 Required for Start
+## 0.2 Required Config
 
-Validate only these two fields:
+Validate all of these fields:
 
 1. **`VPS1_IP`** — Must be set and not a placeholder (not `15.x.x.1` or containing `<`).
-2. **`CF_TUNNEL_TOKEN`** — Must not be empty. If empty, tell the user to follow [docs/CLOUDFLARE-TUNNEL.md](../docs/CLOUDFLARE-TUNNEL.md) to create a tunnel in the Cloudflare Dashboard, then paste the token into the chat or into `openclaw-config.env`.
+2. **`CF_TUNNEL_TOKEN`** — Must not be empty.
+3. **`OPENCLAW_DOMAIN`** — Must not be a placeholder (no `<example>` or angle brackets).
+4. **`OPENCLAW_BROWSER_DOMAIN`** — Must not be a placeholder.
+5. **`OPENCLAW_BROWSER_DOMAIN_PATH`** — Validated (can be empty for separate subdomain, or a path like `/browser`).
+6. **`OPENCLAW_DOMAIN_PATH`** — Validated (can be empty for root).
+7. **`YOUR_TELEGRAM_ID`** — Must be set and numeric (Telegram user IDs are integers). If empty, warn the user: "Send a message to @userinfobot on Telegram to get your numeric user ID."
+8. **`OPENCLAW_TELEGRAM_BOT_TOKEN`** — Must be set. If empty, warn the user: "Create a Telegram bot via @BotFather and paste the token here. See `docs/TELEGRAM.md`."
 
-Report any missing/invalid fields and wait for the user to provide values before continuing.
+### If any fields are invalid or missing
+
+Report **all** issues at once (don't stop at the first one). Present them as:
+
+> **Configuration issues found:**
+>
+> - `VPS1_IP` is still a placeholder (`15.x.x.1`) — set it to your VPS public IP
+> - `CF_TUNNEL_TOKEN` is empty — create a tunnel in Cloudflare Dashboard and paste
+>   the token (see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md))
+> - `OPENCLAW_DOMAIN` is still a placeholder — set it to your actual domain
+>   (e.g., `openclaw.yourdomain.com`). You need to configure Cloudflare Tunnel
+>   public hostname routes first (see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md))
+> - `OPENCLAW_BROWSER_DOMAIN` is still a placeholder — same as above
+> - `YOUR_TELEGRAM_ID` is empty — send a message to @userinfobot on Telegram to get your ID
+> - `OPENCLAW_TELEGRAM_BOT_TOKEN` is empty — create a bot via @BotFather and paste the token
+>   (see [`docs/TELEGRAM.md`](../docs/TELEGRAM.md))
+>
+> Update `openclaw-config.env` and let me know when ready.
+
+Wait for user to fix all issues before continuing. Re-validate after they confirm.
 
 ---
 
 ## 0.3 SSH Check
 
 1. Validate `SSH_KEY_PATH` exists on the local system (default: `~/.ssh/vps1_openclaw_ed25519`).
-2. Test SSH connectivity using **fresh VPS defaults** (`SSH_USER=ubuntu`, `SSH_PORT=22`):
+2. Test SSH connectivity using config values (`SSH_USER`, `SSH_PORT`):
 
 ```bash
-ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 ubuntu@<VPS1_IP> echo "VPS OK"
+ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_USER>@<VPS1_IP> echo "VPS OK"
 ```
 
-**If SSH fails:**
+**If SSH fails — diagnose by error type:**
 
-- If using a reused IP, suggest `ssh-keygen -R <VPS1_IP>` to clear stale host keys.
-- Suggest `ssh-add <SSH_KEY_PATH>` if the key isn't loaded.
-- Verify the key was added to the VPS during provisioning.
+**"Connection refused" or "Connection timed out":**
+
+> "Can't reach the VPS on port 22. Possible causes:
+>
+> - The VPS isn't running or hasn't finished booting
+> - The IP address is incorrect — double-check `VPS1_IP` in `openclaw-config.env`
+> - The VPS provider's firewall is blocking SSH — check the provider's dashboard"
+
+**"Host key verification failed" (REMOTE HOST IDENTIFICATION HAS CHANGED):**
+
+> "The SSH host key doesn't match a previously known key for this IP. If you
+> reinstalled the VPS or reused the IP from a previous deployment, clear the
+> stale entry:"
+
+```bash
+ssh-keygen -R <VPS1_IP>
+```
+
+Then retry the SSH test.
+
+**"Permission denied (publickey)":**
+
+> "SSH key authentication failed. Possible causes:
+>
+> - The key at `<SSH_KEY_PATH>` wasn't added to the VPS during provisioning
+> - The key file doesn't exist — check: `ls -la <SSH_KEY_PATH>`
+> - The SSH agent doesn't have the key loaded — try: `ssh-add <SSH_KEY_PATH>`"
 
 ---
 
@@ -117,7 +168,63 @@ If the user confirms changes, update `deploy/docker-compose.override.yml` with t
 
 ---
 
-## 0.5 Worker Placeholder Detection
+## 0.5 Cloudflare Access Verification
+
+Verify the domain is protected by Cloudflare Access before deploying. Run from the local machine:
+
+```bash
+curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | head -10
+```
+
+### If 302/403 redirect (Location header contains `cloudflareaccess.com` or `access.`):
+
+Cloudflare Access is protecting the domain. Continue to next step.
+
+### If 200 (unprotected):
+
+> "Your domain is accessible without Cloudflare Access. Anyone with the URL could
+> reach OpenClaw after deployment. Configure Cloudflare Access first — see
+> [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md) (Steps 1-3: Create
+> Access Application, Define Policy, Configure Identity Provider).
+>
+> Let me know when you've set it up."
+
+Wait for user to confirm. Re-run the curl check to verify.
+
+### If connection refused, timeout, or DNS error:
+
+> "Your domain isn't resolving or the tunnel route isn't configured yet. You need to:
+>
+> 1. Add public hostname routes in your Cloudflare Tunnel (see
+>    [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md) Step 4)
+> 2. Configure Cloudflare Access (Steps 1-3 in the same doc)
+>
+> Let me know when you've completed these steps."
+
+Wait for user. Re-check.
+
+### Also verify the browser VNC domain:
+
+```bash
+curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/ 2>&1 | head -10
+```
+
+Same logic: expect 302/403. If not, guide user to fix.
+
+### Opt-out:
+
+If the user cannot or does not want to set up Cloudflare Access right now, they can
+explicitly say so. Warn them:
+
+> "Deploying without Cloudflare Access means the gateway will be publicly accessible
+> once the tunnel routes are active. You can add Access protection later, but the
+> gateway will be exposed in the meantime."
+
+Only proceed without Access if the user explicitly confirms.
+
+---
+
+## 0.6 Worker Placeholder Detection
 
 Scan `AI_GATEWAY_WORKER_URL` and `LOG_WORKER_URL` for angle-bracket placeholders (e.g., `<account>`).
 
@@ -127,22 +234,33 @@ Scan `AI_GATEWAY_WORKER_URL` and `LOG_WORKER_URL` for angle-bracket placeholders
 
 ---
 
-## 0.6 Deployment Overview
+## 0.7 Deployment Overview
 
 Present the full deployment plan to the user:
 
 ```
 Deployment Plan:
-  1. [If needed] Deploy Cloudflare Workers (01-workers.md)
+  1. [If needed] Deploy Cloudflare Workers (01-workers.md) — sets up infrastructure (AUTH_TOKEN only)
   2. Base setup & hardening (02-base-setup.md)
   3. Docker installation (03-docker.md)
   4. OpenClaw deployment (04-vps1-openclaw.md)
   5. Backup configuration (06-backup.md)
   6. Reboot & verification (07-verification.md)
-  7. Post-deploy: Configure Cloudflare Tunnel routes, domain setup,
-     browser VNC access, device pairing (08-post-deploy.md)
+  7. Post-deploy: AI proxy configuration, device pairing & deployment report (08-post-deploy.md)
 ```
 
-**Note:** `OPENCLAW_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN`, `OPENCLAW_BROWSER_DOMAIN_PATH`, and `OPENCLAW_DOMAIN_PATH` can remain as placeholders for now. They're only needed during post-deploy (step 7) when the user configures Cloudflare Tunnel public hostname routes.
+Domain and Cloudflare Access have been verified.
+
+> **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 7, `08-post-deploy.md` § 8.1), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
 
 Ask the user to confirm before proceeding with the deployment.
+
+### Automation directive
+
+After the user confirms, execute playbooks 01 through 07 **continuously without pausing between steps**. Do not ask for confirmation between playbooks. Only stop if:
+
+- A command fails and the error requires user input to resolve
+- A playbook step explicitly says to wait for user input (e.g., a blocking error with multiple resolution paths)
+- **SSH verification (02-base-setup.md § 2.4 Step 3):** You MUST test SSH on port `<SSH_HARDENED_PORT>` from the local machine and confirm it works before proceeding. This is a mandatory stop point — do not skip it during automated deployment.
+
+Normal informational output (progress updates, version notes, check results) should be reported inline without pausing. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`.

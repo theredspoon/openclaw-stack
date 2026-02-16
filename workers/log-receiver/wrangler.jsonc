@@ -1,6 +1,8 @@
 {
   "name": "openclaw-log-receiver",
   "main": "src/index.ts",
+  "workers_dev": true,
+  "preview_urls": false,
 
   "compatibility_date": "2026-02-06",
 

@@ -1,34 +1,36 @@
-import type { Env } from '../types'
+import type { ProviderConfig, Log } from '../types'
+import { sanitizeHeaders, truncateBody } from '../log'
 
-/** Map of client paths to AI Gateway sub-paths for OpenAI. */
-const ROUTE_MAP: Record<string, { method: string; gwPath: string }> = {
-  '/v1/chat/completions': { method: 'POST', gwPath: 'openai/chat/completions' },
-  '/v1/embeddings': { method: 'POST', gwPath: 'openai/embeddings' },
-  '/v1/models': { method: 'GET', gwPath: 'openai/models' },
-}
-
-/** Returns the AI Gateway sub-path if this request matches an OpenAI route, or null. */
-export function matchOpenAI(method: string, pathname: string): string | null {
-  const route = ROUTE_MAP[pathname]
-  if (route && route.method === method) {
-    return route.gwPath
-  }
-  return null
-}
-
-/** Proxy the request to OpenAI via AI Gateway. */
-export function proxyOpenAI(request: Request, env: Env, gwPath: string): Promise<Response> {
-  const url = `https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.CF_AI_GATEWAY_ID}/${gwPath}`
+/** Proxy the request to OpenAI (via AI Gateway or direct). */
+export async function proxyOpenAI(
+  apiKey: string,
+  request: Request,
+  config: ProviderConfig,
+  path: string,
+  log: Log
+): Promise<Response> {
+  const url = `${config.baseUrl}/${path}`
 
   const headers = new Headers(request.headers)
+
   // Replace auth token with OpenAI API key
-  headers.set('Authorization', `Bearer ${env.OPENAI_API_KEY}`)
-  // Authenticate to Cloudflare AI Gateway
-  headers.set('cf-aig-authorization', `Bearer ${env.CF_AI_GATEWAY_TOKEN}`)
+  headers.set('Authorization', `Bearer ${apiKey}`)
+
+  // Set provider-config headers (e.g. cf-aig-authorization for gateway mode)
+  if (config.headers) {
+    for (const [key, value] of Object.entries(config.headers)) {
+      headers.set(key, value)
+    }
+  }
+
+  const body = await request.text()
+  log.debug(`[openai] url=${url}`)
+  log.debug('[openai] upstream headers', sanitizeHeaders(headers))
+  log.debug('[openai] request body', truncateBody(body))
 
   return fetch(url, {
     method: request.method,
     headers,
-    body: request.body,
+    body,
   })
 }

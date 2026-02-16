@@ -14,4 +14,4 @@ fi
 source "$CONFIG_FILE"
 
 printf "\033[32mSSH'ing into OpenClaw VPS as ${SSH_USER} \033[0m\n"
-ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}"
+ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}"

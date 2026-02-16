@@ -30,12 +30,23 @@ sudo reboot
 Wait 1-2 minutes for VPS-1 to come back online, then verify SSH access:
 
 ```bash
-ssh -i <SSH_KEY_PATH> -p 222 adminclaw@<VPS1_IP> "echo 'VPS-1 online'"
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> -o ConnectTimeout=10 adminclaw@<VPS1_IP> "echo 'VPS-1 online'"
 ```
+
+**If VPS doesn't come back after 3-4 minutes:**
+
+> "The VPS hasn't come back online after reboot. This is usually just slow boot.
+> Try again in another minute. If it still doesn't respond after 5 minutes:
+>
+> - Check the VPS status in the host provider dashboard — it may be stuck in reboot
+> - Use the provider's console/KVM to check boot progress
+> - As a last resort, use the provider's dashboard to force a hard reboot"
 
 ---
 
 ## 7.1 Verify OpenClaw (VPS-1)
+
+> **Batch:** Steps 7.1-7.2 run on VPS via SSH; step 7.3 runs locally. Execute VPS checks in one SSH session and worker checks in parallel from the local machine.
 
 ```bash
 # Check containers are running
@@ -49,6 +60,16 @@ curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
 ```
 
 **Expected:** All containers running, endpoint returns the Control UI HTML.
+
+**If containers are not running after reboot:**
+
+> "Containers didn't auto-start after reboot. Start them manually:"
+
+```bash
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+```
+
+> If they fail to start, check `sudo docker logs openclaw-gateway` for errors.
 
 ---
 
@@ -75,16 +96,23 @@ sudo ls -la /home/openclaw/openclaw/data/vector/
 
 ```bash
 # Health check (no auth required)
-curl -s https://<LOG_WORKER_URL>/health
+# NOTE: LOG_WORKER_URL contains /logs suffix — strip it for the base URL health check
+curl -s https://<LOG_WORKER_BASE_URL>/health
 
-# Test log ingestion (replace with your actual URL and token)
-curl -X POST https://<LOG_WORKER_URL>/logs \
+# Test log ingestion (use the full LOG_WORKER_URL which includes /logs)
+curl -X POST https://<LOG_WORKER_URL> \
   -H "Authorization: Bearer <LOG_WORKER_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"container_name":"test","message":"verification test","stream":"stdout","timestamp":"2026-01-01T00:00:00Z"}'
 ```
 
 **Expected:** Health returns `{"status":"ok"}`, log ingestion returns `{"status":"ok","count":1}`.
+
+**If health check fails:**
+
+> "The Log Receiver Worker isn't responding. Check that the worker is deployed
+> and the URL is correct in `openclaw-config.env`. You can verify the worker
+> status in the Cloudflare Dashboard under Workers & Pages."
 
 ### AI Gateway Worker
 
@@ -94,6 +122,15 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 ```
 
 **Expected:** Returns `{"status":"ok"}`.
+
+> **Note:** The health check passing confirms the worker is deployed and reachable. It does NOT verify that provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured — that is tested during post-deploy (`08-post-deploy.md` § 8.1). On a fresh deploy, the worker is healthy but won't proxy LLM requests until keys are added.
+
+**If either worker health check fails:**
+
+> "A Cloudflare Worker isn't responding. Check that it's deployed and the URL
+> is correct in `openclaw-config.env`. Verify the worker status in the
+> Cloudflare Dashboard under Workers & Pages. If not deployed, run
+> `01-workers.md` to deploy it."
 
 ### Verify Logs in Cloudflare Dashboard
 
@@ -121,22 +158,85 @@ curl -sk --connect-timeout 5 https://<VPS1_IP>/ || echo "Direct access blocked (
 
 **Expected:** cloudflared active, no auth errors in logs, port 443 closed, direct IP blocked.
 
-> **Note:** External access via the domain (`curl https://<OPENCLAW_DOMAIN>`) is tested in `08-post-deploy.md` after the user configures Cloudflare Access and the published hostname route.
+### Verify domain routing (run from LOCAL machine)
+
+```bash
+# Both should return 302/403 (Cloudflare Access redirect)
+curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | head -5
+curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/ 2>&1 | head -5
+```
+
+**Expected:** 302 or 403 with `Location` header pointing to Cloudflare Access.
+
+**If unprotected (200) or failing (timeout/DNS error):** See `00-fresh-deploy-setup.md` § 0.5 for the full Cloudflare Access verification and troubleshooting procedure.
 
 ---
 
-## 7.5 Verify Host Alerter
+## 7.5 Verify Host Alerter & Maintenance Checker
 
 ```bash
 # Test the alerter script manually (should not send alerts if everything is healthy)
 sudo /home/openclaw/scripts/host-alert.sh
 echo $?  # Should be 0
 
-# Check cron job is installed
+# Verify health.json was written (even without Telegram)
+cat /home/openclaw/.openclaw/workspace/host-status/health.json
+
+# Test the maintenance checker
+sudo /home/openclaw/scripts/host-maintenance-check.sh
+echo $?  # Should be 0
+
+# Verify maintenance.json was written
+cat /home/openclaw/.openclaw/workspace/host-status/maintenance.json
+
+# Check host cron jobs are installed
 cat /etc/cron.d/openclaw-alerts
+cat /etc/cron.d/openclaw-maintenance
+
+# Check OpenClaw cron job is registered
+openclaw cron list
 ```
 
-**Expected:** Script exits 0 with no errors, cron entry exists.
+**Expected:** Both scripts exit 0 with no errors. `health.json` and `maintenance.json` contain valid JSON with current timestamps. Workspace copies exist. Both host cron entries exist. `openclaw cron list` shows "Daily VPS Health Check" with status `ok`.
+
+### Telegram Delivery Test
+
+```bash
+# Test Telegram delivery (if configured)
+TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' /home/openclaw/openclaw/.env)
+TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' /home/openclaw/openclaw/.env)
+
+if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT" ]]; then
+  RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+    -d "chat_id=${TELEGRAM_CHAT}" \
+    -d "text=✅ OpenClaw host alerter verified on $(hostname)")
+  if echo "$RESPONSE" | grep -q '"ok":true'; then
+    echo "Telegram delivery: OK"
+  else
+    echo "Telegram delivery: FAILED"
+    echo "$RESPONSE"
+  fi
+else
+  echo "Telegram not configured — skipping delivery test"
+fi
+```
+
+**Expected:** If Telegram is configured, a test message arrives in the chat and the script prints `Telegram delivery: OK`. If not configured, this check is skipped.
+
+**If Telegram test fails:**
+
+- `"chat not found"` — the chat ID is wrong. See `docs/TELEGRAM.md` for getting the correct ID.
+- `"Unauthorized"` — the bot token is wrong. Create a new bot via @BotFather.
+- `"bot was blocked by the user"` — unblock the bot in Telegram.
+
+### Daily Report Cron
+
+```bash
+# Verify daily report cron entry (if Telegram configured)
+grep 'host-alert.sh --report' /etc/cron.d/openclaw-alerts || echo "No daily report cron (Telegram not configured)"
+```
+
+**Expected:** If Telegram is configured, the daily report cron line should be present. If not configured, the line is absent (expected).
 
 ---
 
@@ -171,7 +271,7 @@ openclaw devices list
 
 **If it fails with "pairing required":**
 
-Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.9:
+Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.16:
 
 ```bash
 GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
@@ -183,185 +283,118 @@ sudo docker exec --user node openclaw-gateway \
 
 ## 7.5c Verify Resource Limits
 
-Verify that the deployed gateway container resource limits match the actual VPS hardware.
-
-### Query VPS Resources
+Verify deployed gateway resource limits match VPS hardware. See `00-fresh-deploy-setup.md` § 0.4 for the full resource check procedure and expected values.
 
 ```bash
-# On VPS: get CPU count and total memory in bytes
-nproc && free -b | awk '/^Mem:/{print $2}'
-```
-
-This returns two lines: CPU count (e.g., `6`) and total memory in bytes (e.g., `11811160064`).
-
-### Read Deployed Limits
-
-```bash
-# On VPS: read gateway resource limits from the deployed override
+# On VPS: query hardware and deployed limits in one command
+nproc && free -b | awk '/^Mem:/{print $2}' && \
 sudo docker inspect openclaw-gateway --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'
 ```
 
-NanoCpus is CPUs × 1e9 (e.g., `6000000000` = 6 CPUs). Memory is in bytes (e.g., `11811160064`).
+Compare: CPUs should equal `nproc`, memory should be total minus 500M–1GB. NanoCpus = CPUs × 1e9.
 
-### Compare
+**If match:** Report correctly sized and continue.
 
-- **CPUs:** `limits.cpus` should equal the VPS CPU count from `nproc`
-- **Memory:** `limits.memory` should be total VPS memory minus 500M–1GB
-  - Vector uses ~128M, system/kernel needs ~500M
-  - Acceptable range: `total - 1G` to `total - 500M`
-- **Reservations:** `reservations.cpus` must not exceed `limits.cpus`
+**If mismatch during fresh deploy:** Auto-apply recommended values (CPUs = nproc, memory = total - 750M) without prompting.
 
-**If values match:** Report that resource limits are correctly sized and continue.
-
-**If mismatch detected:** Show the user a comparison:
-
-```
-VPS Resources:
-  CPUs:   <nproc result>
-  Memory: <total from free, human-readable>
-
-Deployed gateway limits (docker-compose.override.yml):
-  CPUs:   <current cpus value>
-  Memory: <current memory value>
-
-Recommended gateway limits:
-  CPUs:   <nproc result>
-  Memory: <total - 750M, rounded to nearest 0.5G>
-```
-
-Ask the user if they want to adjust the limits. If confirmed, update the **local** `deploy/docker-compose.override.yml`, then re-deploy the file to the VPS and restart the gateway:
+**If mismatch outside fresh deploy:** Show comparison and ask user. If confirmed, update local `deploy/docker-compose.override.yml`, then:
 
 ```bash
-# After updating the local file, copy to VPS and restart
+# NOTE: scp uses -P (uppercase) for port, unlike ssh's -p (lowercase)
 scp -i <SSH_KEY_PATH> -P <SSH_PORT> deploy/docker-compose.override.yml <SSH_USER>@<VPS1_IP>:/home/openclaw/openclaw/docker-compose.override.yml
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "sudo chown openclaw:openclaw /home/openclaw/openclaw/docker-compose.override.yml && sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'"
 ```
 
 ---
 
-## 7.6 Security Checklist
+## 7.6 Security Verification
 
-### VPS-1
+Comprehensive security check: system hardening, port exposure, and built-in audit.
 
-- [ ] SSH on port 222 only (port 22 removed from UFW)
-- [ ] SSH key-only authentication (password disabled)
-- [ ] Only `adminclaw` user can SSH (AllowUsers directive)
-- [ ] UFW enabled with minimal rules (SSH only)
-- [ ] Fail2ban running
-- [ ] Cloudflare Tunnel running (cloudflared service active)
-- [ ] Port 443 closed
+### System Hardening (on VPS)
 
 ```bash
-# Verify on VPS-1
+# SSH, firewall, intrusion prevention, tunnel
 sudo ufw status
 sudo systemctl status fail2ban
 sudo systemctl status cloudflared
-ss -tlnp | grep 222
-```
+ss -tlnp | grep <SSH_PORT>
 
-### VPS-1 Services
-
-- [ ] OpenClaw gateway running
-- [ ] Sysbox runtime available
-- [ ] Vector shipping logs
-- [ ] Backup cron job configured
-- [ ] Host alerter cron job configured
-- [ ] Container ports bound to localhost only (not 0.0.0.0)
-- [ ] Gateway resource limits match VPS hardware (CPUs = nproc, memory = total - 500M–1G)
-- [ ] Gateway pids_limit set
-
-```bash
+# Services and cron jobs
 sudo systemctl status sysbox
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
 sudo docker logs --tail 5 vector
 cat /etc/cron.d/openclaw-backup
 cat /etc/cron.d/openclaw-alerts
+```
 
-# Verify gateway and bridge ports bind to localhost only (not 0.0.0.0)
-# Docker bypasses UFW, so 0.0.0.0 binding exposes ports to the internet
+**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
+
+### Port Binding & External Reachability
+
+```bash
+# On VPS: verify gateway ports bind to localhost only (Docker bypasses UFW)
 sudo ss -tlnp | grep -E '187(89|90)'
 # Expected: 127.0.0.1:18789 and 127.0.0.1:18790 (NOT 0.0.0.0)
 
-# Verify gateway has pids_limit set (prevents fork bombs)
+# Full port audit — only <SSH_PORT> should be on 0.0.0.0 or [::]
+sudo ss -tlnp
+
+# Verify pids_limit set (prevents fork bombs)
 sudo docker inspect openclaw-gateway --format '{{.HostConfig.PidsLimit}}'
 # Expected: 512
 ```
 
-### Cloudflare Workers
+```bash
+# From LOCAL machine: confirm gateway ports aren't externally reachable
+nc -zv -w 5 <VPS1_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
+nc -zv -w 5 <VPS1_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
+```
 
-- [ ] AI Gateway Worker responding
-- [ ] Log Receiver Worker responding
-- [ ] Logs appearing in Cloudflare Workers dashboard
+**Expected:** Both connections fail. If either succeeds, Docker daemon.json localhost binding is misconfigured — see `03-docker.md`.
+
+### OpenClaw Security Audit & Doctor (on VPS)
+
+```bash
+# Security scanner (no device pairing needed — local HTTP probes)
+openclaw security audit --deep
+
+# Diagnostic checker
+openclaw doctor --deep
+```
+
+**Security audit expected:** 0 critical, 0 warnings. 1 info finding is normal. If ECONNREFUSED on unexpected port, check `OPENCLAW_GATEWAY_PORT` in `.env` is `18789` (port only, not `IP:port`).
+
+**Doctor expected:** Only the `lan` binding warning (safe — required for Docker/Tunnel). No State integrity or Sandbox warnings.
+
+**If you see other doctor warnings:**
+
+- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.8 (OpenClaw Configuration). If missing, recreate: `sudo mkdir -p /home/openclaw/.openclaw/agents/main/sessions && echo '{}' | sudo tee /home/openclaw/.openclaw/agents/main/sessions/sessions.json > /dev/null && sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main`
+- **Sandbox: base image missing** — restart gateway to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
+
+### Checklist
+
+- [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
+- [ ] UFW enabled (SSH only), port 443 closed
+- [ ] Fail2ban running, cloudflared active
+- [ ] Gateway + Vector + Sysbox running
+- [ ] Backup + host alerter + maintenance checker cron jobs configured
+- [ ] Host status JSON files written and readable from agent sandbox
+- [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
+- [ ] AI Gateway + Log Receiver Workers responding
+- [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
 
 ---
 
 ## 7.7 End-to-End Test
 
-> **Note:** Steps 1-3 below require authenticating through Cloudflare Access, which Claude cannot do via curl. These are user-driven steps. For automated browser E2E testing, see [`docs/TESTING.md`](../docs/TESTING.md) (Phase 2) where the user authenticates via Chrome DevTools.
+> **Note:** Steps 1-3 require authenticating through Cloudflare Access (user-driven). For automated browser E2E testing, see [`docs/TESTING.md`](../docs/TESTING.md) (Phase 2).
 
 1. **User: Access OpenClaw** via configured domain (authenticate through Cloudflare Access)
 2. **User: Send a test message** via webchat
-3. **User: Verify LLM response** comes back (confirms AI Gateway Worker routing)
-4. **Check Cloudflare AI Gateway dashboard** for the request (Workers & Pages -> AI Gateway)
+3. **User: Verify LLM response** comes back (confirms AI Gateway Worker is routing to a provider). May fail until provider API keys are configured — see `08-post-deploy.md` § 8.1.
+4. **(CF AI Gateway mode only)** Check Cloudflare AI Gateway dashboard for the request
 5. **Check Cloudflare Workers logs** for container log entries (Workers & Pages -> log-receiver -> Logs)
-
----
-
-## 7.8 Security Verification
-
-Confirm gateway ports aren't externally reachable and the built-in security audit passes.
-
-### External Port Reachability (run from LOCAL machine)
-
-Attempt to connect to gateway ports directly via the VPS public IP. Both should fail/timeout, confirming they're only bound to localhost.
-
-```bash
-# Run from LOCAL machine (not on VPS)
-nc -zv -w 5 <VPS1_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
-nc -zv -w 5 <VPS1_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
-```
-
-**Expected:** Both connections fail with timeout or connection refused. If either succeeds, the Docker daemon.json localhost binding is misconfigured — see `playbooks/03-docker.md` for the fix.
-
-### Full Listening Port Audit (run on VPS)
-
-Verify the only externally-bound port is SSH (222). All other listening ports should be on `127.0.0.1` only.
-
-```bash
-# On VPS-1: list all listening ports — only 222 should be on 0.0.0.0 or [::]
-sudo ss -tlnp
-```
-
-**Expected:** Only port 222 (sshd) is bound to `0.0.0.0` or `[::]`. All other ports (18789, 18790, dockerd, etc.) should show `127.0.0.1` only. Any unexpected `0.0.0.0` binding is a security issue.
-
-### OpenClaw Security Audit (run on VPS)
-
-Run OpenClaw's built-in security scanner. This does NOT need device pairing — it performs local HTTP probes inside the container.
-
-```bash
-openclaw security audit --deep
-```
-
-**Expected:** 0 critical, 0 warnings. 1 info finding is normal. If the audit reports ECONNREFUSED on an unexpected port, check that `OPENCLAW_GATEWAY_PORT` in the container's `.env` is set to `18789` (port only, not `IP:port`).
-
-### OpenClaw Doctor (run on VPS)
-
-Run OpenClaw's diagnostic checker inside the container.
-
-```bash
-openclaw doctor --deep
-```
-
-**Expected:** Only finding should be the Security warning about `lan` binding. No State integrity or Sandbox warnings.
-
-**Expected warning (safe to ignore):**
-
-- **Security: Gateway bound to "lan" (0.0.0.0)** — required for Docker deployments for Cloudflare Tunnel to reach the OpenClaw Gateway. See [REQUIREMENTS.md § 3.7](../REQUIREMENTS.md#37-openclawjson-configuration) for rationale.
-
-**If you see other warnings:**
-
-- **State integrity: missing transcripts** — stale session entries from heartbeat. Clear with: `sudo docker exec --user node openclaw-gateway bash -c 'echo {} > /home/node/.openclaw/agents/main/sessions/sessions.json'`
-- **Sandbox: base image missing** — the common sandbox build failed. The entrypoint uses a `BASE_IMAGE` override to work around the upstream `USER sandbox` bug (builds a rooted intermediate, passes it to the upstream script). Restart the gateway to retry, then run the sandbox verification in `04-vps1-openclaw.md` to confirm images were built.
 
 ---
 
@@ -383,10 +416,11 @@ free -h
 sudo docker logs --tail 50 vector
 
 # Restart Vector
+# Restart Vector (use `up -d vector` instead if .env values changed)
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
 
-# Check if Worker endpoint is reachable
-curl -s https://<LOG_WORKER_URL>/health
+# Check if Worker endpoint is reachable (strip /logs suffix for base URL)
+curl -s https://<LOG_WORKER_BASE_URL>/health
 ```
 
 ### Networking Issues
@@ -428,15 +462,15 @@ sudo journalctl -u <service> -f
 
 Deployment is complete when:
 
-1. VPS-1 accessible via SSH on port 222
+1. VPS-1 accessible via SSH on port `<SSH_PORT>`
 2. OpenClaw gateway responding on localhost (internal health check)
 3. Vector running and shipping logs
 4. Cloudflare Workers responding to health checks
 5. Container logs appearing in Cloudflare Workers dashboard
 6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
-8. Host alerter cron job configured on VPS-1
+8. Host alerter and maintenance checker cron jobs configured on VPS-1
 9. Gateway ports (18789, 18790) not reachable from external network
 10. Security audit passes with no critical or warning findings
 
-> **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages, verifying LLM routing) is covered in `08-post-deploy.md` (user-driven) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).
+> **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages) is covered in `08-post-deploy.md` (device pairing) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).

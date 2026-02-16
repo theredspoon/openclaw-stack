@@ -72,8 +72,8 @@ Move cloudflared from a systemd service into the Sysbox gateway container. cloud
 | `playbooks/04-vps1-openclaw.md` § 4.5 | `.env`: change `OPENCLAW_GATEWAY_BIND=loopback`, add `CF_TUNNEL_TOKEN` |
 | `playbooks/04-vps1-openclaw.md` § 4.6 | Compose override: `--bind loopback`, add `CF_TUNNEL_TOKEN` env var |
 | `playbooks/04-vps1-openclaw.md` § 4.8 | `openclaw.json`: `bind: "loopback"`, `trustedProxies: ["127.0.0.1"]` |
-| `playbooks/04-vps1-openclaw.md` § 4.8a | Build script: add cloudflared install as Dockerfile patch |
-| `playbooks/04-vps1-openclaw.md` § 4.8c | Entrypoint: start cloudflared before gosu drop |
+| `playbooks/04-vps1-openclaw.md` § 4.9 | Build script: add cloudflared install as Dockerfile patch |
+| `playbooks/04-vps1-openclaw.md` § 4.10 | Entrypoint: start cloudflared before gosu drop |
 | `playbooks/05-cloudflare-tunnel.md` | Rewrite: cloudflared is containerized, not systemd. Keep Dashboard setup, remove systemd install steps, add compose env/entrypoint reference |
 | `playbooks/07-verification.md` § 7.4 | Check cloudflared via `docker exec pgrep` instead of `systemctl status` |
 | `REQUIREMENTS.md` | Update networking sections (3.4, 3.7), trustedProxies rationale |

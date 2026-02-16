@@ -14,7 +14,7 @@ All secrets should be rotated on a regular cadence. If a token is suspected comp
 | `AI_GATEWAY_AUTH_TOKEN` | VPS `.env` + AI Gateway Worker secret | 90 days |
 | `LOG_WORKER_TOKEN` | VPS `.env` + Log Receiver Worker secret | 90 days |
 | Provider API keys (Anthropic, OpenAI, etc.) | AI Gateway Worker secrets (Cloudflare Dashboard) | Per provider policy |
-| `TELEGRAM_BOT_TOKEN` | VPS `.env` | As needed |
+| `HOSTALERT_TELEGRAM_BOT_TOKEN` | VPS `.env` | As needed |
 | SSH keys (`~/.ssh/vps1_openclaw_ed25519`) | Local machine + VPS `authorized_keys` | Annual |
 
 ### Rotation Procedures
@@ -28,13 +28,13 @@ NEW_TOKEN=$(openssl rand -hex 32)
 # 2. Update .env on VPS
 # Edit /home/openclaw/openclaw/.env — change OPENCLAW_GATEWAY_TOKEN value
 
-# 3. Rebuild image (token is baked into /app/.env at build time)
-sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
+# 3. Update openclaw.json on VPS
+# Edit /home/openclaw/.openclaw/openclaw.json — update gateway.auth.token and gateway.remote.token
 
-# 4. Restart gateway
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+# 4. Recreate gateway to pick up new .env values (see CLAUDE.md: restart vs up -d)
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d openclaw-gateway'
 
-# 5. Update all paired devices with new token
+# 5. Update all paired devices with new token (existing browser URLs will need the new token parameter)
 ```
 
 #### AI Gateway Auth Token
@@ -48,11 +48,9 @@ cd workers/ai-gateway
 echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 
 # 3. Update VPS .env — change AI_GATEWAY_AUTH_TOKEN value
-# This also updates ANTHROPIC_API_KEY, OPENAI_API_KEY, etc. via compose environment mapping
 
-# 4. Rebuild image and restart
-sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+# 4. Recreate gateway to pick up new .env values (no rebuild needed — token is an env var)
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d openclaw-gateway'
 ```
 
 #### Log Worker Token
@@ -67,21 +65,30 @@ echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 
 # 3. Update VPS .env — change LOG_WORKER_TOKEN value
 
-# 4. Restart Vector to pick up new token
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
+# 4. Recreate Vector to pick up new .env values (see CLAUDE.md: restart vs up -d)
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d vector'
 ```
 
 #### Provider API Keys
 
 Provider API keys are stored as Cloudflare Worker secrets in the AI Gateway Worker. They never touch the VPS.
 
+**Direct API mode** (default):
+
 ```bash
 # From local machine
 cd workers/ai-gateway
 echo "new-key-value" | npx wrangler secret put ANTHROPIC_API_KEY
 echo "new-key-value" | npx wrangler secret put OPENAI_API_KEY
-# etc.
 ```
+
+**CF AI Gateway mode** (optional): If using Cloudflare AI Gateway, also rotate the gateway token:
+
+```bash
+echo "new-token" | npx wrangler secret put CF_AI_GATEWAY_TOKEN
+```
+
+See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for details on both modes.
 
 #### SSH Keys
 
@@ -90,11 +97,11 @@ echo "new-key-value" | npx wrangler secret put OPENAI_API_KEY
 ssh-keygen -t ed25519 -f ~/.ssh/vps1_openclaw_ed25519_new
 
 # 2. Add new public key to VPS (while old key still works)
-ssh -i ~/.ssh/vps1_openclaw_ed25519 -p 222 adminclaw@<VPS1_IP> \
+ssh -i ~/.ssh/vps1_openclaw_ed25519 -p <SSH_PORT> adminclaw@<VPS1_IP> \
   "echo 'NEW_PUBLIC_KEY' >> ~/.ssh/authorized_keys"
 
 # 3. Test new key
-ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p 222 adminclaw@<VPS1_IP> echo "OK"
+ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS1_IP> echo "OK"
 
 # 4. Remove old key from VPS authorized_keys
 # 5. Update openclaw-config.env with new SSH_KEY_PATH
@@ -143,7 +150,7 @@ Several deploy files are bind-mounted read-only into the gateway container. Thes
 
 ```bash
 # From local machine
-scp -i <SSH_KEY_PATH> -P 222 deploy/<file> adminclaw@<VPS1_IP>:/tmp/<file>
+scp -i <SSH_KEY_PATH> -P <SSH_PORT> deploy/<file> adminclaw@<VPS1_IP>:/tmp/<file>
 
 # On VPS (or via ssh)
 sudo cp /tmp/<file> /home/openclaw/openclaw/deploy/<file>
@@ -151,6 +158,7 @@ sudo chown 1000:1000 /home/openclaw/openclaw/deploy/<file>
 rm /tmp/<file>
 
 # Restart gateway to pick up changes (service name is "openclaw-gateway")
+# `restart` is correct here — bind-mounted files are read from disk at startup, no env var changes
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'
 ```
 

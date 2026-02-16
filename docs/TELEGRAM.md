@@ -1,32 +1,47 @@
 # Telegram Setup
 
-Telegram is used for two things:
+OpenClaw uses Telegram in two ways:
 
-1. Host Alerter - sends messages about VPS health
-2. OpenClaw channel - configures OpenClaw to communicate over telegram
+1. **OpenClaw channel** — chat with your AI agent via a Telegram bot (required)
+2. **Host alerter** — VPS health alerts sent to Telegram (optional)
 
-The host alerter script sends VPS health alerts (disk, memory, container crashes) to Telegram. This requires a bot `token` and a `chat ID`.
-
-Both values are optional — if left empty in `openclaw-config.env`, the alerter silently skips Telegram notifications.
+Both can use the same bot, or you can create separate bots.
 
 ## 1. Create a Telegram Bot
 
 1. Open Telegram and message [@BotFather](https://t.me/BotFather)
 2. Send `/newbot`
-3. Choose a display name (e.g., "OpenClaw Alerts")
-4. Choose a username ending in `bot` (e.g., `openclaw_alerts_bot`)
+3. Choose a display name (e.g., "OpenClaw")
+4. Choose a username ending in `bot` (e.g., `openclaw_bot`)
 5. BotFather replies with your **bot token** — a string like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
-6. Copy the token into `openclaw-config.env`:
 
-   ```bash
-   TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-   ```
+## 2. Get Your Telegram User ID
 
-## 2. Get Your Chat ID
+Send any message to [@userinfobot](https://t.me/userinfobot) — it replies with your numeric user ID.
 
-### Option A: Personal DMs (simplest)
+## 3. Configure
 
-1. Open Telegram and send any message to your bot
+Add both values to `openclaw-config.env`:
+
+```bash
+YOUR_TELEGRAM_ID=123456789
+OPENCLAW_TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+```
+
+- `YOUR_TELEGRAM_ID` gates elevated mode — only this Telegram user can activate `/elevated` commands
+- `OPENCLAW_TELEGRAM_BOT_TOKEN` connects the gateway to Telegram as a messaging channel
+
+After deployment, the gateway connects to Telegram automatically. Message your bot to start chatting — the gateway may prompt you to approve the device via `openclaw devices approve` (same flow as browser pairing).
+
+## 4. Host Alerter (Optional)
+
+The host alerter sends disk/memory/CPU alerts via Telegram. You can reuse the same bot or create a separate one.
+
+### Get Your Chat ID
+
+#### Option A: Personal DMs (simplest)
+
+1. Send any message to your bot
 2. Open this URL in a browser (replace `<TOKEN>` with your bot token):
 
    ```
@@ -35,24 +50,28 @@ Both values are optional — if left empty in `openclaw-config.env`, the alerter
 
 3. Find `"chat":{"id":123456789}` in the JSON — that number is your chat ID
 
-### Option B: Group Chat
+#### Option B: Group Chat
 
-1. In Telegram, add your bot to a group - can be a new group or existing one
-2. Send a **slash command** in the group (e.g., `/start` or `/hello`) — bots have privacy mode enabled by default and only see slash commands in groups
+1. Add your bot to a group
+2. Send a **slash command** in the group (e.g., `/start`)
+
+   — bots have privacy mode enabled by default and only see slash commands in groups
+
 3. Check `getUpdates` as above — the group chat ID will be a negative number (e.g., `-1001234567890`)
 
-> **Tip:** If slash commands don't appear in `getUpdates`, disable privacy mode: message `@BotFather`, send `/setprivacy`, select your bot, choose `Disable`, then **remove and re-add** the bot to the group (the change only takes effect on rejoin).
+> **Tip:** If slash commands don't appear in `getUpdates`, disable privacy mode: message `@BotFather`, send `/setprivacy`, select your bot, choose `Disable`, then **remove and re-add** the bot to the group.
 
-### Save the Chat ID
+### Save the Config
 
 ```bash
 # openclaw-config.env
-TELEGRAM_CHAT_ID=123456789
+HOSTALERT_TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+HOSTALERT_TELEGRAM_CHAT_ID=123456789
 ```
 
-## 3. Test It
+> Can be the same token as `OPENCLAW_TELEGRAM_BOT_TOKEN`. The chat ID is often your personal ID or a group ID (negative number).
 
-Send a test message locally:
+### Test It
 
 ```bash
 ./scripts/telegram-test.sh
@@ -64,8 +83,6 @@ Or with a custom message:
 ./scripts/telegram-test.sh "Hello from OpenClaw"
 ```
 
-You should receive the message in Telegram from your bot.
-
 ## How Alerts Work
 
 The host alerter (`/home/openclaw/scripts/host-alert.sh`) runs via cron every 15 minutes and checks:
@@ -76,3 +93,10 @@ The host alerter (`/home/openclaw/scripts/host-alert.sh`) runs via cron every 15
 - Container crash/restart detection
 
 Alerts are only sent on **state changes** — you won't get repeated messages for the same ongoing issue. A recovery message is sent when all checks pass again.
+
+## Updating Configs
+
+See [deploy/host-alert.sh](../deploy/host-alert.sh) for threshold configs.
+
+Ask claude to `redeploy host alert` after you've made any changes to host-alert.sh
+or the Telegram settings in openclaw-config.env.
