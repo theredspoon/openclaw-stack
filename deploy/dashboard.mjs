@@ -443,7 +443,8 @@ function isPortOpen(port, timeoutMs = 1000) {
 
 const CSS = `
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #e0e0e0; background: #1a1a2e; }
-    h1 { color: #f0f0f0; }
+    h1 { color: #f0f0f0; margin-bottom: 4px; }
+    h2 { color: #ccc; font-size: 1.1em; margin-top: 28px; margin-bottom: 0; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #333; }
     th { color: #aaa; font-weight: 600; }
@@ -474,10 +475,15 @@ function htmlPage(title, body) {
 
 async function indexPage() {
   const entries = readBrowsers();
+  // Control UI is at the parent path (e.g., /dashboard → /) or root if no base path
+  const controlUiUrl = effectiveBP ? effectiveBP.replace(/\/[^/]+$/, '/') || '/' : '/';
+  const intro = `<p class="note">Agent tools, browser sessions, and media files. <a href="${controlUiUrl}">Control UI</a> · <a href="https://docs.openclaw.ai/">Docs</a></p>`;
   const mediaLink = `<p style="margin-top: 16px;"><a href="${effectiveBP}/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>`;
   if (entries.length === 0) {
     return htmlPage('OpenClaw Dashboard',
       `<h1>OpenClaw Dashboard</h1>
+       ${intro}
+       <h2>Agent Browsers</h2>
        <p class="empty">No active browser sessions. Browser containers are created on-demand when agents use the browser tool.</p>
        ${mediaLink}`);
   }
@@ -500,6 +506,8 @@ async function indexPage() {
 
   return htmlPage('OpenClaw Dashboard',
     `<h1>OpenClaw Dashboard</h1>
+     ${intro}
+     <h2>Agent Browsers</h2>
      <table>
        <thead><tr><th>Agent</th><th>Container</th><th>Status</th></tr></thead>
        <tbody>${rows.join('\n')}</tbody>
