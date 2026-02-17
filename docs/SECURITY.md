@@ -8,7 +8,7 @@ End-to-end security architecture for the OpenClaw single-VPS deployment. Covers 
 
 Three defense layers protect the system. Each layer must pass before the next is evaluated:
 
-```
+```text
 Internet
     |
     v
@@ -46,10 +46,10 @@ Internet
 
 The VPS has **zero exposed ports** beyond SSH. All HTTP/WebSocket traffic enters through a Cloudflare Tunnel, which makes outbound-only connections from the VPS to Cloudflare's edge.
 
-```
+```text
 User Browser                    Cloudflare Edge                         VPS
      |                               |                                   |
-     |──── HTTPS request ──────────>|                                   |
+     |──── HTTPS request ───────────>|                                   |
      |                               |                                   |
      |                               |     cloudflared (outbound conn)   |
      |                               |<──────────────────────────────────|
@@ -57,7 +57,7 @@ User Browser                    Cloudflare Edge                         VPS
      |                               |──── Forward via tunnel ────────>  |
      |                               |     (172.30.0.1 Docker bridge)    |
      |                               |                                   |
-     |<──── HTTPS response ─────────|<────────────────────────────────  |
+     |<──── HTTPS response ──────────|<────────────────────────────────  |
 ```
 
 - **Port 443**: Not open. Cloudflare terminates TLS at the edge; `cloudflared` connects outbound.
@@ -69,27 +69,28 @@ User Browser                    Cloudflare Edge                         VPS
 
 Every request to the gateway or dashboard domain passes through Cloudflare Access, which enforces identity verification before the request reaches the VPS.
 
-```
+```text
 User                    Cloudflare Access                    VPS
  |                            |                               |
- |── GET /dashboard/ ───────>|                               |
+ |── GET /dashboard/ ────────>|                               |
  |                            |                               |
  |  Not authenticated?        |                               |
- |<── Redirect to IdP ───────|                               |
+ |<── Redirect to IdP ────────|                               |
  |                            |                               |
- |── IdP login ─────────────>|                               |
+ |── IdP login ──────────────>|                               |
  |                            |                               |
  |  Authenticated:            |                               |
  |  Set CF_Authorization      |                               |
  |  cookie + inject           |                               |
  |  Cf-Access-Jwt-Assertion   |                               |
  |  header                    |                               |
- |                            |── Forward with JWT header ──>|
+ |                            |── Forward with JWT header ───>|
  |                            |                               |
- |<─── Response ─────────────|<───────────────────────────── |
+ |<─── Response ──────────────|<───────────────────────────── |
 ```
 
 **JWT claims verified by the dashboard:**
+
 - `exp` — Token not expired
 - `iss` — Issuer contains `.cloudflareaccess.com`
 - `aud` — Matches `CF_ACCESS_AUD` (if configured)
@@ -103,8 +104,8 @@ The gateway uses a cryptographic device identity system to authenticate clients 
 
 ### Device Identity Creation
 
-```
-┌─ Browser (first visit) ────────────────────────────────────┐
+```text
+┌─ Browser (first visit) ─────────────────────────────────────┐
 │                                                             │
 │  1. Generate Ed25519 keypair                                │
 │     privateKey = randomSecretKey()        (32 bytes)        │
@@ -129,7 +130,7 @@ The gateway uses a cryptographic device identity system to authenticate clients 
 
 Every Control UI or CLI connection to the gateway follows this challenge-response handshake:
 
-```
+```text
 Browser                                          Gateway
    |                                                |
    |════ WebSocket connect ════════════════════════>|
@@ -156,7 +157,7 @@ Browser                                          Gateway
    |  └──────────────────────────────────────┘      |
    |                                                |
    |  Sign payload with Ed25519 private key         |
-   |  signature = Ed25519.sign(payload, privateKey)  |
+   |  signature = Ed25519.sign(payload, privateKey) |
    |                                                |
    |          ┌─────────────────────────────────┐   |
    |──────────│ method: "connect"               │──>|
@@ -179,13 +180,13 @@ Browser                                          Gateway
 
 The gateway performs these checks in order:
 
-```
-┌─ Gateway: Verify Connect ───────────────────────────────────────────┐
+```text
+┌─ Gateway: Verify Connect ────────────────────────────────────────────┐
 │                                                                      │
 │  1. IDENTITY CHECK                                                   │
 │     derivedId = SHA-256(device.publicKey)                            │
 │     assert derivedId === device.id                                   │
-│     → Reject: "device identity mismatch"                            │
+│     → Reject: "device identity mismatch"                             │
 │                                                                      │
 │  2. TIMESTAMP CHECK                                                  │
 │     skew = |now - device.signedAt|                                   │
@@ -204,7 +205,7 @@ The gateway performs these checks in order:
 │  5. SHARED SECRET CHECK                                              │
 │     safeEqualSecret(auth.token, GATEWAY_TOKEN)                       │
 │     Uses constant-time comparison (no timing attacks)                │
-│     → Reject: "token_mismatch"                                      │
+│     → Reject: "token_mismatch"                                       │
 │                                                                      │
 │  6. PAIRING CHECK                                                    │
 │     Look up device.id in paired.json                                 │
@@ -224,68 +225,68 @@ The gateway performs these checks in order:
 
 ### Pairing Lifecycle
 
-```
+```text
 ┌─ New Device ──────────────────────────────────────────────────────────┐
 │                                                                       │
-│  STEP 1: Device connects for the first time                          │
+│  STEP 1: Device connects for the first time                           │
 │                                                                       │
 │    Browser ──── WebSocket ────> Gateway                               │
 │    (new keypair, no token)      "pairing required" ──> disconnect     │
 │                                                                       │
-│  STEP 2: Pairing request created                                     │
+│  STEP 2: Pairing request created                                      │
 │                                                                       │
 │    Gateway stores pending request:                                    │
 │    {                                                                  │
 │      requestId: "<uuid>",                                             │
-│      deviceId:  "<sha256-of-pubkey>",                                │
-│      publicKey: "<full-public-key>",                                 │
-│      platform:  "macos",                                             │
-│      clientId:  "control-ui",                                        │
-│      role:      "operator",                                          │
-│      scopes:    ["operator.admin", "operator.approvals", ...],       │
-│      remoteIp:  "203.0.113.42",                                     │
-│      ts:        1707123456789                                        │
+│      deviceId:  "<sha256-of-pubkey>",                                 │
+│      publicKey: "<full-public-key>",                                  │
+│      platform:  "macos",                                              │
+│      clientId:  "control-ui",                                         │
+│      role:      "operator",                                           │
+│      scopes:    ["operator.admin", "operator.approvals", ...],        │
+│      remoteIp:  "203.0.113.42",                                       │
+│      ts:        1707123456789                                         │
 │    }                                                                  │
 │    TTL: 5 minutes (request expires if not approved)                   │
 │                                                                       │
-│  STEP 3: Admin approves via CLI or Control UI                        │
+│  STEP 3: Admin approves via CLI or Control UI                         │
 │                                                                       │
 │    $ openclaw devices approve <requestId>                             │
 │                                                                       │
 │    Gateway generates role token:                                      │
-│      token = randomBytes(32).toString("base64url")                   │
+│      token = randomBytes(32).toString("base64url")                    │
 │                                                                       │
 │    Writes to paired.json:                                             │
 │    {                                                                  │
-│      "<deviceId>": {                                                 │
-│        deviceId, publicKey, role, roles, scopes,                     │
+│      "<deviceId>": {                                                  │
+│        deviceId, publicKey, role, roles, scopes,                      │
 │        tokens: {                                                      │
 │          "operator": {                                                │
-│            token: "<44-char-base64url>",                             │
-│            role: "operator",                                         │
-│            scopes: ["operator.admin", ...],                          │
-│            createdAtMs: 1707123456789                                │
+│            token: "<44-char-base64url>",                              │
+│            role: "operator",                                          │
+│            scopes: ["operator.admin", ...],                           │
+│            createdAtMs: 1707123456789                                 │
 │          }                                                            │
 │        }                                                              │
 │      }                                                                │
 │    }                                                                  │
 │                                                                       │
-│  STEP 4: Device reconnects, receives token                           │
+│  STEP 4: Device reconnects, receives token                            │
 │                                                                       │
 │    Browser ──── WebSocket ────> Gateway                               │
 │    (same keypair, no token)     Paired! Issue token in hello-ok       │
 │                                                                       │
 │    Browser stores token in localStorage:                              │
-│    key: "openclaw.device.auth.v1"                                    │
+│    key: "openclaw.device.auth.v1"                                     │
 │    val: {                                                             │
 │      version: 1,                                                      │
-│      deviceId: "<sha256>",                                           │
+│      deviceId: "<sha256>",                                            │
 │      tokens: {                                                        │
 │        "operator": { token: "<44-chars>", role, scopes, updatedAtMs } │
 │      }                                                                │
 │    }                                                                  │
 │                                                                       │
-│  STEP 5: Subsequent connections use stored token                     │
+│  STEP 5: Subsequent connections use stored token                      │
 │                                                                       │
 │    Browser ──── WebSocket ────> Gateway                               │
 │    (keypair + token in payload) Verified! Full access granted         │
@@ -311,17 +312,17 @@ The dashboard (`deploy/dashboard.mjs`) serves browser session UIs (noVNC), media
 
 ### Request Flow
 
-```
+```text
 Browser                     CF Edge                  Dashboard Server
    |                           |                           |
-   |── GET /dashboard/ ──────>|                           |
+   |── GET /dashboard/ ───────>|                           |
    |                           |                           |
    |   CF Access check:        |                           |
    |   - IdP login if needed   |                           |
    |   - Set JWT cookie        |                           |
    |   - Inject JWT header     |                           |
    |                           |                           |
-   |                           |── Forward + JWT ────────>|
+   |                           |── Forward + JWT ─────────>|
    |                           |                           |
    |                           |   LAYER 1: Verify JWT     |
    |                           |   - Check exp, iss, aud   |
@@ -330,68 +331,68 @@ Browser                     CF Edge                  Dashboard Server
    |                           |   ❌ fail → 403           |
    |                           |                           |
    |                           |   LAYER 2: Device pairing |
-   |                           |   - Check session cookie   |
-   |                           |   ❌ no cookie → auth gate |
+   |                           |   - Check session cookie  |
+   |                           |   ❌ no cookie → auth gate|
    |                           |   ✅ valid → serve page   |
    |                           |                           |
-   |<── Dashboard HTML ───────|<──────────────────────────|
+   |<── Dashboard HTML ────────|<──────────────────────────|
 ```
 
 ### Auth Gate Flow (First Visit)
 
 When a user has no valid session cookie, the dashboard serves an auth gate page that automatically authenticates using the device token stored by the gateway Control UI:
 
-```
+```text
 Browser                              Dashboard Server
    |                                       |
    |── GET /dashboard/ ─────────────────>  |
    |                                       |
    |   No session cookie found             |
    |                                       |
-   |  <──── Auth gate HTML+JS ────────────|
+   |  <──── Auth gate HTML+JS ─────────────|
    |                                       |
    |  JS executes:                         |
    |  1. Read localStorage                 |
    |     "openclaw.device.auth.v1"         |
    |                                       |
-   |  ┌─ No token found? ──────────┐      |
-   |  │ Show "Not Paired" message  │      |
-   |  │ Link to Gateway Control UI │      |
-   |  └────────────────────────────┘      |
+   |  ┌─ No token found? ──────────┐       |
+   |  │ Show "Not Paired" message  │       |
+   |  │ Link to Gateway Control UI │       |
+   |  └────────────────────────────┘       |
    |                                       |
-   |  ┌─ Token found? ─────────────┐      |
-   |  │ Extract first role token   │      |
-   |  │ from tokens object         │      |
-   |  └──────────────┬─────────────┘      |
+   |  ┌─ Token found? ─────────────┐       |
+   |  │ Extract first role token   │       |
+   |  │ from tokens object         │       |
+   |  └──────────────┬─────────────┘       |
    |                 |                     |
-   |── POST /_auth ──┘                    |
+   |── POST /_auth ──┘                     |
    |   { deviceId: "6ead...",              |
-   |     token: "hM81Mf..." }             |
+   |     token: "hM81Mf..." }              |
    |                                ──────>|
    |                                       |
-   |                 Validate token against |
-   |                 paired.json in-memory  |
-   |                 cache                  |
+   |                 Validate token against|
+   |                 paired.json in-memory |
+   |                 cache                 |
    |                                       |
-   |  ┌─ 403: Token invalid ───────┐      |
-   |  │ Show "Device Not           │      |
-   |  │ Recognized" error          │<─────|
-   |  └────────────────────────────┘      |
+   |  ┌─ 403: Token invalid ───────┐       |
+   |  │ Show "Device Not           │       |
+   |  │ Recognized" error          │<──────|
+   |  └────────────────────────────┘       |
    |                                       |
-   |  ┌─ 200: Token valid ─────────┐      |
-   |  │ Set-Cookie:                │      |
-   |  │   openclaw-dashboard=      │<─────|
-   |  │   <deviceId>.<ts>.<hmac>;  │      |
-   |  │   HttpOnly; SameSite=Strict│      |
-   |  │                            │      |
-   |  │ JS reloads page            │      |
-   |  └──────────────┬─────────────┘      |
+   |  ┌─ 200: Token valid ─────────┐       |
+   |  │ Set-Cookie:                │       |
+   |  │   openclaw-dashboard=      │<──────|
+   |  │   <deviceId>.<ts>.<hmac>;  │       |
+   |  │   HttpOnly; SameSite=Strict│       |
+   |  │                            │       |
+   |  │ JS reloads page            │       |
+   |  └──────────────┬─────────────┘       |
    |                 |                     |
-   |── GET /dashboard/ (with cookie) ───> |
+   |── GET /dashboard/ (with cookie) ────> |
    |                                       |
    |   Cookie verified ✅                  |
    |                                       |
-   |  <──── Dashboard page ───────────────|
+   |  <──── Dashboard page ────────────────|
 ```
 
 ### Session Cookie
@@ -399,11 +400,13 @@ Browser                              Dashboard Server
 The dashboard uses stateless HMAC-signed cookies — no server-side session storage needed.
 
 **Cookie format:**
+
 ```
 <deviceId>.<timestampMs>.<hmac-sha256-hex>
 ```
 
 **Signing:**
+
 ```
 HMAC-SHA256(
   key:  OPENCLAW_GATEWAY_TOKEN,
@@ -412,8 +415,9 @@ HMAC-SHA256(
 ```
 
 **Verification:**
-```
-┌─ verifySessionCookie(cookieValue) ──────────────────────┐
+
+```text
+┌─ verifySessionCookie(cookieValue) ───────────────────────┐
 │                                                          │
 │  1. Split by "." → [deviceId, ts, hmac]                  │
 │     Reject if not exactly 3 parts                        │
@@ -427,7 +431,7 @@ HMAC-SHA256(
 │     expected = HMAC-SHA256(GATEWAY_TOKEN, deviceId.ts)   │
 │                                                          │
 │  4. Constant-time compare                                │
-│     timingSafeEqual(expected, hmac)                       │
+│     timingSafeEqual(expected, hmac)                      │
 │     Reject if mismatch                                   │
 │                                                          │
 │  5. Return { deviceId } on success                       │
@@ -436,6 +440,7 @@ HMAC-SHA256(
 ```
 
 **Cookie attributes:**
+
 | Attribute | Value | Purpose |
 |-----------|-------|---------|
 | `HttpOnly` | Yes | Not accessible to JavaScript (XSS protection) |
@@ -447,13 +452,13 @@ HMAC-SHA256(
 
 The dashboard watches `paired.json` for real-time changes when devices are paired or revoked:
 
-```
+```text
 Gateway                          paired.json                    Dashboard
    |                                  |                             |
    |  Admin approves device           |                             |
-   |──── Write new entry ──────────> |                             |
+   |──── Write new entry ───────────> |                             |
    |                                  |                             |
-   |                                  |──── inotify/poll ────────> |
+   |                                  |──── inotify/poll ─────────> |
    |                                  |                             |
    |                                  |     loadPairedDevices()     |
    |                                  |     - Read file             |
@@ -462,9 +467,9 @@ Gateway                          paired.json                    Dashboard
    |                                  |     - Build Map<id, tokens> |
    |                                  |                             |
    |  Admin revokes device            |                             |
-   |──── Remove entry ─────────────> |                             |
+   |──── Remove entry ──────────────> |                             |
    |                                  |                             |
-   |                                  |──── inotify/poll ────────> |
+   |                                  |──── inotify/poll ─────────> |
    |                                  |                             |
    |                                  |     Device removed from map |
    |                                  |     New auth attempts fail  |
@@ -475,6 +480,7 @@ Gateway                          paired.json                    Dashboard
 ```
 
 **Two watchers for reliability:**
+
 - `fs.watch()` — inotify-based, immediate but may miss events on some filesystems
 - `fs.watchFile()` — stat-based polling every 5 seconds, always reliable
 - Both debounced at 500ms to coalesce rapid writes
@@ -533,40 +539,40 @@ If `openclaw` is compromised, the attacker cannot escalate to root. All Docker c
 
 ### Container Isolation
 
-```
-┌─ VPS Host ──────────────────────────────────────────────┐
-│                                                          │
-│  adminclaw (admin)        openclaw (runtime)             │
-│       |                        |                         │
-│       |                  ┌─────┴──────────┐              │
-│       |                  │ Sysbox Runtime │              │
-│       |                  │ (uid remapping) │              │
-│       |                  └─────┬──────────┘              │
-│       |                        |                         │
-│       |              ┌─────────┴─────────────┐           │
-│       |              │ Gateway Container      │           │
-│       |              │ (root inside = uid     │           │
-│       |              │  1002 on host via      │           │
-│       |              │  Sysbox remap)         │           │
-│       |              │                        │           │
-│       |              │  ┌──────────────────┐  │           │
-│       |              │  │ Nested Docker     │  │           │
-│       |              │  │                   │  │           │
-│       |              │  │ ┌──────────────┐  │  │           │
-│       |              │  │ │ Sandbox      │  │  │           │
-│       |              │  │ │ - read-only  │  │  │           │
-│       |              │  │ │ - cap DROP   │  │  │           │
-│       |              │  │ │ - no network │  │  │           │
-│       |              │  │ │ - tmpfs home │  │  │           │
-│       |              │  │ └──────────────┘  │  │           │
-│       |              │  │ ┌──────────────┐  │  │           │
-│       |              │  │ │ Browser      │  │  │           │
-│       |              │  │ │ Sandbox      │  │  │           │
-│       |              │  │ │ - bridge net │  │  │           │
-│       |              │  │ └──────────────┘  │  │           │
-│       |              │  └──────────────────┘  │           │
-│       |              └────────────────────────┘           │
-└──────────────────────────────────────────────────────────┘
+```text
+┌─ VPS Host ──────────────────────────────────────────────────┐
+│                                                             │
+│  adminclaw (admin)        openclaw (runtime)                │
+│       |                        |                            │
+│       |                  ┌─────┴──────────┐                 │
+│       |                  │ Sysbox Runtime │                 │
+│       |                  │ (uid remapping)│                 │
+│       |                  └─────┬──────────┘                 │
+│       |                        |                            │
+│       |              ┌─────────┴──────────────┐             │
+│       |              │ Gateway Container      │             │
+│       |              │ (root inside = uid     │             │
+│       |              │  1002 on host via      │             │
+│       |              │  Sysbox remap)         │             │
+│       |              │                        │             │
+│       |              │  ┌──────────────────┐  │             │
+│       |              │  │ Nested Docker    │  │             │
+│       |              │  │                  │  │             │
+│       |              │  │ ┌──────────────┐ │  │             │
+│       |              │  │ │ Sandbox      │ │  │             │
+│       |              │  │ │ - read-only  │ │  │             │
+│       |              │  │ │ - cap DROP   │ │  │             │
+│       |              │  │ │ - no network │ │  │             │
+│       |              │  │ │ - tmpfs home │ │  │             │
+│       |              │  │ └──────────────┘ │  │             │
+│       |              │  │ ┌──────────────┐ │  │             │
+│       |              │  │ │ Browser      │ │  │             │
+│       |              │  │ │ Sandbox      │ │  │             │
+│       |              │  │ │ - bridge net │ │  │             │
+│       |              │  │ └──────────────┘ │  │             │
+│       |              │  └──────────────────┘  │             │
+│       |              └────────────────────────┘             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Sandbox Security Properties
