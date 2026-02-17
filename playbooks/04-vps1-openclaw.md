@@ -28,15 +28,15 @@ From `../openclaw-config.env`:
 - `VPS1_IP` - Required, public IP of VPS-1
 - `AI_GATEWAY_WORKER_URL` - Required, AI Gateway Worker URL
 - `AI_GATEWAY_AUTH_TOKEN` - Required, AI Gateway auth token
-- `LOG_WORKER_URL` - Required, Log Receiver Worker URL
-- `LOG_WORKER_TOKEN` - Required, Log Receiver auth token
+- `LOG_WORKER_URL` - Optional, Log Receiver Worker URL (for Vector log shipping)
+- `LOG_WORKER_TOKEN` - Optional, Log Receiver auth token (for Vector log shipping)
 - `YOUR_TELEGRAM_ID` - Required, numeric Telegram user ID (for `tools.elevated` access gating)
 - `OPENCLAW_TELEGRAM_BOT_TOKEN` - Required, Telegram bot token for OpenClaw channel (see `docs/TELEGRAM.md`)
 - `HOSTALERT_TELEGRAM_BOT_TOKEN` - Optional (for host alerter; can reuse `OPENCLAW_TELEGRAM_BOT_TOKEN`)
 - `HOSTALERT_TELEGRAM_CHAT_ID` - Optional (for host alerter)
 - `HOSTALERT_DAILY_REPORT_TIME` - Optional, daily health report time (default: `9:00 AM UTC`)
 - `OPENCLAW_DOMAIN_PATH` - URL subpath for the gateway UI (default: `/_openclaw`)
-- `OPENCLAW_BROWSER_DOMAIN_PATH` - Base path for the noVNC proxy (e.g., `/browser`), empty if using a separate subdomain
+- `OPENCLAW_DASHBOARD_DOMAIN_PATH` - Base path for the dashboard server (e.g., `/dashboard`), empty if using a separate subdomain
 
 ---
 
@@ -172,9 +172,8 @@ sudo -u openclaw bash << 'EOF'
 cd /home/openclaw
 git clone https://github.com/openclaw/openclaw.git openclaw
 
-# Create data directories for bind mounts (not tracked by git)
+# Create data directory for bind mounts (not tracked by git)
 mkdir -p /home/openclaw/openclaw/data/docker
-mkdir -p /home/openclaw/openclaw/data/vector
 EOF
 ```
 
@@ -204,8 +203,8 @@ EOF
 # Generate gateway token
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 
-# noVNC proxy base path — direct from config, no parsing needed
-NOVNC_BASE_PATH="${OPENCLAW_BROWSER_DOMAIN_PATH:-}"
+# Dashboard base path — direct from config, no parsing needed
+DASHBOARD_BASE_PATH="${OPENCLAW_DASHBOARD_DOMAIN_PATH:-}"
 
 sudo -u openclaw tee /home/openclaw/openclaw/.env << EOF
 # Gateway authentication
@@ -221,14 +220,10 @@ OPENCLAW_TELEGRAM_BOT_TOKEN=${OPENCLAW_TELEGRAM_BOT_TOKEN:-}
 # Host alerter (Telegram notifications — see docs/TELEGRAM.md)
 HOSTALERT_TELEGRAM_BOT_TOKEN=${HOSTALERT_TELEGRAM_BOT_TOKEN:-}
 HOSTALERT_TELEGRAM_CHAT_ID=${HOSTALERT_TELEGRAM_CHAT_ID:-}
-# Log shipping to Cloudflare Worker
-LOG_WORKER_URL=${LOG_WORKER_URL}
-LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
-VPS1_IP=${VPS1_IP}
 
-# noVNC proxy base path — from OPENCLAW_BROWSER_DOMAIN_PATH
-# Empty = proxy serves at root (e.g., browser on a separate subdomain)
-NOVNC_BASE_PATH=${NOVNC_BASE_PATH}
+# Dashboard base path — from OPENCLAW_DASHBOARD_DOMAIN_PATH
+# Empty = dashboard serves at root (e.g., dashboard on a separate subdomain)
+DASHBOARD_BASE_PATH=${DASHBOARD_BASE_PATH}
 
 # Gateway Control UI subpath — must match gateway.controlUi.basePath in openclaw.json.
 # Used by Docker healthcheck and playbook verification commands.
@@ -256,8 +251,8 @@ echo ""
 echo "========================================="
 echo "Generated Credentials (save these):"
 echo "  Gateway Token: ${GATEWAY_TOKEN}"
-if [ -n "${NOVNC_BASE_PATH}" ]; then
-  echo "  noVNC Base Path: ${NOVNC_BASE_PATH}"
+if [ -n "${DASHBOARD_BASE_PATH}" ]; then
+  echo "  Dashboard Base Path: ${DASHBOARD_BASE_PATH}"
 fi
 echo "========================================="
 ```
@@ -288,21 +283,36 @@ EOF
 
 ---
 
-## 4.7 Create Vector Config
+## 4.7 Set Up Vector Log Shipper (Standalone Project)
 
-Ships Docker container logs to the Cloudflare Log Receiver Worker.
+Ships Docker container logs to the Cloudflare Log Receiver Worker. Vector runs as a separate Docker Compose project — independent of the gateway lifecycle.
 
-Vector Alpine image defaults to `vector.yaml`, so we use YAML format to avoid needing a `command` override in compose.
+> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false` in `openclaw-config.env`.
 
 ```bash
 #!/bin/bash
-# SOURCE: deploy/vector.yaml → /home/openclaw/openclaw/vector.yaml
-sudo -u openclaw tee /home/openclaw/openclaw/vector.yaml << 'EOF'
-# <<< deploy/vector.yaml >>>
+# Create Vector project directory
+sudo -u openclaw mkdir -p /home/openclaw/vector/data
+
+# SOURCE: deploy/vector/docker-compose.yml → /home/openclaw/vector/docker-compose.yml
+sudo -u openclaw tee /home/openclaw/vector/docker-compose.yml << 'EOF'
+# <<< deploy/vector/docker-compose.yml >>>
 EOF
 
-# Create data directory for Vector state
-sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
+# SOURCE: deploy/vector/vector.yaml → /home/openclaw/vector/vector.yaml
+sudo -u openclaw tee /home/openclaw/vector/vector.yaml << 'EOF'
+# <<< deploy/vector/vector.yaml >>>
+EOF
+
+# Create Vector .env with log shipping credentials
+sudo -u openclaw tee /home/openclaw/vector/.env << EOF
+# Vector log shipping — Cloudflare Log Receiver Worker
+LOG_WORKER_URL=${LOG_WORKER_URL}
+LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
+VPS1_IP=${VPS1_IP}
+EOF
+
+sudo chmod 600 /home/openclaw/vector/.env
 ```
 
 ---
@@ -324,9 +334,9 @@ sudo -u openclaw mkdir -p /home/openclaw/openclaw/data/vector
 #
 # Tiered sandbox architecture (config-driven via deploy/sandbox-toolkit.yaml):
 #   defaults → base sandbox (openclaw-sandbox:bookworm-slim), no network — used for non-operator sessions (group chats, spawned sessions)
-#   "skills" agent → common sandbox (openclaw-sandbox-common:bookworm-slim), bridge network — runs skill binaries
-#   "code" agent → common sandbox (openclaw-sandbox-common:bookworm-slim), bridge network, Claude Code CLI
-#   All tools (gifgrep, claude-code, ffmpeg, etc.) are installed in sandbox-common via sandbox-toolkit.yaml.
+#   "skills" agent → toolkit sandbox (openclaw-sandbox-toolkit:bookworm-slim), bridge network — runs skill binaries
+#   "code" agent → toolkit sandbox (openclaw-sandbox-toolkit:bookworm-slim), bridge network, Claude Code CLI
+#   All tools (gifgrep, claude-code, ffmpeg, etc.) are installed in sandbox-toolkit via sandbox-toolkit.yaml.
 #   Main agent delegates to skills agent for skills needing network (gifgrep, weather, etc.)
 #   Main agent delegates to code agent via sessions_spawn for coding tasks.
 #   /opt/skill-bins is auto-shimmed from sandbox-toolkit.yaml (see entrypoint §1g).
@@ -336,6 +346,8 @@ GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | 
 
 # SOURCE: deploy/openclaw.json (template) → /home/openclaw/.openclaw/openclaw.json
 # VARS: GATEWAY_TOKEN (from .env on VPS), OPENCLAW_DOMAIN_PATH (from openclaw-config.env), YOUR_TELEGRAM_ID (from openclaw-config.env)
+# IMPORTANT: ALL {{VAR}} placeholders must be substituted — including empty strings.
+# OPENCLAW_DOMAIN_PATH="" is valid (serves UI at root). Never leave literal {{...}} in output.
 sudo tee /home/openclaw/.openclaw/openclaw.json << 'JSONEOF'
 # <<< deploy/openclaw.json (template) >>>
 JSONEOF
@@ -629,8 +641,13 @@ To add a new hook: create `deploy/hooks/<name>/` with HOOK.md + handler.js, add 
 # Build image with auto-patching
 sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 
-# Start services
+# Start gateway
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+
+# Start Vector (separate compose project — skip if disabled)
+if [ "${ENABLE_VECTOR_LOG_SHIPPING}" = "true" ]; then
+  sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'
+fi
 
 # Check status
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
@@ -851,8 +868,8 @@ sudo docker logs --tail 50 openclaw-gateway
 # Test internal endpoint (must include basePath if controlUi.basePath is set)
 curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
 
-# Check Vector is running
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps vector'
+# Check Vector is running (separate compose project)
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
 
 # Check Vector logs
 sudo docker logs --tail 10 vector
@@ -871,8 +888,8 @@ timeout 600 bash -c 'until sudo docker logs openclaw-gateway 2>&1 | grep -q "Exe
 echo "=== Checking sandbox images ==="
 FAILED=0
 
-# 1. Check all 3 images exist (claude sandbox removed — tools are in common via sandbox-toolkit.yaml)
-for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-common:bookworm-slim \
+# 1. Check all 3 images exist (tools are in toolkit image via sandbox-toolkit.yaml)
+for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-toolkit:bookworm-slim \
            openclaw-sandbox-browser:bookworm-slim; do
   if sudo docker exec openclaw-gateway docker image inspect "$img" > /dev/null 2>&1; then
     echo "  $img: EXISTS"
@@ -882,8 +899,8 @@ for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-common:bookworm-slim 
   fi
 done
 
-# 2. Security check: verify USER is 1000 (not root) on common image
-for img in openclaw-sandbox-common:bookworm-slim; do
+# 2. Security check: verify USER is 1000 (not root) on toolkit image
+for img in openclaw-sandbox-toolkit:bookworm-slim; do
   USER=$(sudo docker exec openclaw-gateway docker image inspect "$img" 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['Config']['User'])" 2>/dev/null)
   if [ "$USER" = "1000" ]; then
@@ -894,12 +911,12 @@ for img in openclaw-sandbox-common:bookworm-slim; do
   fi
 done
 
-# 3. Test key binaries in common sandbox (all tools from sandbox-toolkit.yaml)
+# 3. Test key binaries in toolkit sandbox (all tools from sandbox-toolkit.yaml)
 for bin in go rustc bun brew node npm pnpm git curl wget jq ffmpeg convert claude gifgrep; do
-  if sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-common:bookworm-slim which "$bin" > /dev/null 2>&1; then
-    echo "  common/$bin: OK"
+  if sudo docker exec openclaw-gateway docker run --rm openclaw-sandbox-toolkit:bookworm-slim which "$bin" > /dev/null 2>&1; then
+    echo "  toolkit/$bin: OK"
   else
-    echo "  common/$bin: MISSING"
+    echo "  toolkit/$bin: MISSING"
     FAILED=1
   fi
 done
@@ -912,7 +929,7 @@ fi
 # 6. Check image age (staleness)
 echo ""
 echo "=== Image age ==="
-for img in openclaw-sandbox-common:bookworm-slim openclaw-sandbox-browser:bookworm-slim; do
+for img in openclaw-sandbox-toolkit:bookworm-slim openclaw-sandbox-browser:bookworm-slim; do
   BUILD_DATE=$(sudo docker exec openclaw-gateway docker image inspect "$img" \
     --format '{{index .Config.Labels "openclaw.build-date"}}' 2>/dev/null)
   if [ -n "$BUILD_DATE" ] && [ "$BUILD_DATE" != "<no value>" ]; then
@@ -934,7 +951,7 @@ if [ "$FAILED" -eq 1 ]; then
 fi
 ```
 
-**Expected:** All 3 images exist (base, common, browser), USER is 1000 on common, all binaries present including custom tools from `sandbox-toolkit.yaml` (claude, gifgrep). Images should have `openclaw.build-date` labels and be less than 30 days old. If verification fails, check entrypoint logs for ERROR messages.
+**Expected:** All 3 images exist (base, toolkit, browser), USER is 1000 on toolkit, all binaries present including custom tools from `sandbox-toolkit.yaml` (claude, gifgrep). Images should have `openclaw.build-date` labels and be less than 30 days old. If verification fails, check entrypoint logs for ERROR messages.
 
 ---
 
@@ -991,9 +1008,8 @@ sudo docker exec vector ls -la /etc/vector/
 # Test the Worker endpoint is reachable from within the container
 sudo docker exec vector wget -q -O- <LOG_WORKER_URL_WITHOUT_PATH>/health
 
-# Restart Vector after fixing
-# Restart Vector (use `up -d vector` instead if .env values changed)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
+# Restart Vector after fixing (use `up -d` instead if .env values changed)
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose restart'
 ```
 
 ### CLI Pairing Lost

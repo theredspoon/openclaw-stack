@@ -133,6 +133,7 @@ If you want more control, see [scripts/](scripts/) dir for CLI helper scripts wi
 - **[Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)** - details on Cloudflare Access & Tunnel setup
 - **[Telegram](docs/TELEGRAM.md)** - guide for setting up Telegram bots to use with OpenClaw
 - **[Claude Subscription](docs/CLAUDE-SUBSCRIPTION.md)** - info on using OpenClaw with a claude subscription
+- **[Security](docs/SECURITY.md)** - in depth details on the security layers
 - See [docs/](docs/) for more guides
 
 ## What happens during deploy
@@ -142,7 +143,7 @@ Claude reads the [playbooks](playbooks/) and executes them step-by-step over SSH
 1. **Cloudflare Workers** — deploys the AI Gateway proxy and Log Receiver (~2 min)
 2. **VPS hardening** — creates users, hardens SSH, configures firewall and fail2ban (~3 min)
 3. **Docker + Sysbox** — installs the container runtime with security hardening (~3 min)
-4. **OpenClaw deployment** — builds the Docker image, starts the gateway and Vector log shipper, builds three sandbox images (base, common with 25+ tools, browser with noVNC) (~15 min on first boot)
+4. **OpenClaw deployment** — builds the Docker image, starts the gateway and Vector log shipper, builds sandbox images (base, packages, toolkit with 25+ tools, browser with noVNC) (~15 min on first boot)
 5. **Backups** — configures automated backup scripts (~1 min)
 6. **Reboot + verification** — reboots to confirm everything auto-starts, runs security audit (~3 min)
 7. **Post-deploy** — helps you configure Cloudflare Tunnel routes and pair your first device
@@ -204,7 +205,7 @@ Each agent runs tools inside an isolated Docker container (via Sysbox for secure
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Gateway | VPS (Sysbox container) | OpenClaw runtime — manages agents, makes LLM calls, runs tools in sandboxes |
-| Vector | VPS (container) | Ships container logs to Cloudflare Log Receiver Worker |
+| Vector | VPS (separate compose project) | Ships container logs to Cloudflare Log Receiver Worker (optional) |
 | AI Gateway Worker | Cloudflare | Proxies LLM requests, injects API keys, provides analytics |
 | Log Receiver Worker | Cloudflare | Captures and stores container logs |
 | Cloudflare Tunnel | VPS -> Cloudflare | Outbound-only connection — no exposed ports, hidden origin IP |
@@ -374,12 +375,12 @@ openclaw doctor --deep
 # Expect 5-10 seconds of downtime for the gateway and agent sandboxes
 ./scripts/update-openclaw.sh
 
-# Update sandbox-toolkit bins to latest versions for sandboxes
-# Equivalent to running `apt-get upgrade` or `npm update`
-# See deploy/sandbox-toolkit.yaml for bins config
-# Does not resync deploy/sandbox-toolkit.yaml to VPS
-# Only runs update for version already on VPS
-./scripts/update-sandbox-toolkit.sh
+# Update sandbox toolkit — sync config, rebuild images
+# Default: detects new/changed tools and quick-layers them (seconds)
+# Use --full for a complete rebuild with proper layer ordering
+# See deploy/sandbox-toolkit.yaml for tool config
+./scripts/update-sandbox-toolkit.sh          # quick (default)
+./scripts/update-sandbox-toolkit.sh --full   # full rebuild
 
 # Update and rebuild sandbox containers
 ./scripts/update-sandboxes.sh
@@ -407,7 +408,7 @@ Claude will pull the latest code, rebuild the Docker image with auto-patching, a
 ### Managing sandbox tools
 
 The tools available inside agent sandboxes are defined in `deploy/sandbox-toolkit.yaml`.
-See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for how to add, update, or remove tools.
+Adding a tool is a one-line YAML edit + `scripts/update-sandbox-toolkit.sh` — the default quick mode layers the new tool in seconds. See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for details.
 
 ---
 
@@ -489,12 +490,14 @@ openclaw-vps/
 │   ├── openclaw.json                 # Gateway config (agents, plugins, security)
 │   ├── models.json                   # AI provider routing (baseUrl overrides)
 │   ├── sandbox-toolkit.yaml          # Sandbox tool definitions
-│   ├── vector.yaml                   # Log shipper config
+│   ├── vector/                        # Vector log shipper (standalone compose project)
+│   │   ├── docker-compose.yml        # Independent of gateway — start/stop separately
+│   │   └── vector.yaml               # Log shipper config
 │   ├── build-openclaw.sh             # Docker image builder with auto-patching
 │   ├── entrypoint-gateway.sh         # Container init (dockerd, sandboxes, privilege drop)
-│   ├── rebuild-sandboxes.sh          # Sandbox image builder with config detection
+│   ├── rebuild-sandboxes.sh          # Layered sandbox image builder with split config detection
 │   ├── host-alert.sh                 # Host monitoring + Telegram alerts
-│   ├── novnc-proxy.mjs              # Browser session reverse proxy
+│   ├── dashboard.mjs                # Dashboard server — browser sessions, media, logs
 │   └── logrotate-openclaw            # Log rotation config
 │
 ├── workers/                          # Cloudflare Workers (deployed via wrangler)

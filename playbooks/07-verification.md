@@ -73,17 +73,90 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
 ---
 
-## 7.2 Verify Vector (Log Shipping)
+## 7.1a Verify Sandbox Toolkit
+
+Verify all tool binaries from `deploy/sandbox-toolkit.yaml` are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
+
+> **Why docker exec into the gateway first?** Sandbox containers run as nested Docker inside the gateway container (Sysbox). To inspect them, you must first enter the gateway, then exec into the sandbox.
 
 ```bash
-# Check Vector is running
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps vector'
+# Get the list of all tool binaries from sandbox-toolkit.yaml
+BINS=$(sudo docker exec --user node openclaw-gateway \
+  node /app/deploy/parse-toolkit.mjs /app/deploy/sandbox-toolkit.yaml \
+  | jq -r '.allBins[]')
+echo "Bins to test: $BINS"
+
+# Find a running sandbox-toolkit container (code or skills agent)
+SANDBOX=$(sudo docker exec --user node openclaw-gateway \
+  docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
+
+# If no sandbox is running, trigger one via the openclaw CLI.
+# This creates the container with correct env (PATH, etc.) from openclaw.json.
+if [ -z "$SANDBOX" ]; then
+  echo "No sandbox running — triggering skills agent sandbox..."
+  sudo docker exec --user node openclaw-gateway \
+    openclaw agent --agent skills --message ping --timeout 60 >/dev/null 2>&1 &
+  AGENT_PID=$!
+
+  # Wait for the sandbox container to appear
+  for i in $(seq 1 20); do
+    sleep 3
+    SANDBOX=$(sudo docker exec --user node openclaw-gateway \
+      docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
+    [ -n "$SANDBOX" ] && break
+    echo "  waiting... ($((i*3))s)"
+  done
+  kill $AGENT_PID 2>/dev/null; wait $AGENT_PID 2>/dev/null || true
+
+  if [ -z "$SANDBOX" ]; then
+    echo "FAILED — sandbox did not appear after 60s. Check gateway logs."
+    exit 1
+  fi
+fi
+
+echo "Testing sandbox: $SANDBOX"
+
+# Test each binary inside the sandbox — use `which` to verify it's on PATH
+PASS=0; FAIL=0; TOTAL=0
+for bin in $BINS; do
+  TOTAL=$((TOTAL+1))
+  if sudo docker exec --user node openclaw-gateway \
+    docker exec "$SANDBOX" which "$bin" > /dev/null 2>&1; then
+    echo "  ✓ $bin"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ $bin — NOT FOUND"
+    FAIL=$((FAIL+1))
+  fi
+done
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
+[ "$FAIL" -eq 0 ] && echo "All sandbox toolkit binaries operational" || echo "FAILED — some binaries missing"
+```
+
+**Expected:** All binaries found on PATH. `0 failed`.
+
+**If tools are missing:**
+
+- Rebuild the sandbox image: `sudo docker exec --user node openclaw-gateway /app/deploy/rebuild-sandboxes.sh --force`
+- Then recreate containers: `sudo docker exec --user node openclaw-gateway openclaw sandbox recreate --all --force`
+
+---
+
+## 7.2 Verify Vector (Log Shipping)
+
+> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+
+```bash
+# Check Vector is running (separate compose project)
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
 
 # Check Vector logs for errors
 sudo docker logs --tail 20 vector
 
 # Check checkpoint data exists
-sudo ls -la /home/openclaw/openclaw/data/vector/
+sudo ls -la /home/openclaw/vector/data/
 ```
 
 **Expected:** Vector running, no errors in logs, checkpoint files present.
@@ -93,6 +166,8 @@ sudo ls -la /home/openclaw/openclaw/data/vector/
 ## 7.3 Verify Cloudflare Workers
 
 ### Log Receiver Worker
+
+> **Skip** Log Receiver verification if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
 
 ```bash
 # Health check (no auth required)
@@ -163,7 +238,7 @@ curl -sk --connect-timeout 5 https://<VPS1_IP>/ || echo "Direct access blocked (
 ```bash
 # Both should return 302/403 (Cloudflare Access redirect)
 curl -sI --connect-timeout 10 https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/ 2>&1 | head -5
-curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_BROWSER_DOMAIN_PATH>/ 2>&1 | head -5
+curl -sI --connect-timeout 10 https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>/ 2>&1 | head -5
 ```
 
 **Expected:** 302 or 403 with `Location` header pointing to Cloudflare Access.
@@ -377,11 +452,12 @@ openclaw doctor --deep
 - [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
 - [ ] UFW enabled (SSH only), port 443 closed
 - [ ] Fail2ban running, cloudflared active
-- [ ] Gateway + Vector + Sysbox running
+- [ ] Gateway + Sysbox running (+ Vector if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 - [ ] Backup + host alerter + maintenance checker cron jobs configured
 - [ ] Host status JSON files written and readable from agent sandbox
+- [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
 - [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
-- [ ] AI Gateway + Log Receiver Workers responding
+- [ ] AI Gateway Worker responding (+ Log Receiver if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 - [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
 
 ---
@@ -415,9 +491,8 @@ free -h
 # Check Vector logs
 sudo docker logs --tail 50 vector
 
-# Restart Vector
-# Restart Vector (use `up -d vector` instead if .env values changed)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart vector'
+# Restart Vector (use `up -d` instead if .env values changed)
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose restart'
 
 # Check if Worker endpoint is reachable (strip /logs suffix for base URL)
 curl -s https://<LOG_WORKER_BASE_URL>/health
@@ -464,13 +539,14 @@ Deployment is complete when:
 
 1. VPS-1 accessible via SSH on port `<SSH_PORT>`
 2. OpenClaw gateway responding on localhost (internal health check)
-3. Vector running and shipping logs
+3. Vector running and shipping logs (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 4. Cloudflare Workers responding to health checks
-5. Container logs appearing in Cloudflare Workers dashboard
+5. Container logs appearing in Cloudflare Workers dashboard (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
 8. Host alerter and maintenance checker cron jobs configured on VPS-1
 9. Gateway ports (18789, 18790) not reachable from external network
 10. Security audit passes with no critical or warning findings
+11. All sandbox toolkit binaries operational in sandbox container (7.1a)
 
 > **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages) is covered in `08-post-deploy.md` (device pairing) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).

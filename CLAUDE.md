@@ -39,6 +39,7 @@ See [playbooks/README.md](playbooks/README.md) for detailed playbook documentati
 - **Always use bind mounts, never named volumes.** All Docker container data must use bind mounts to directories under the service's working directory (e.g., `./data/<service>:/path`). Named volumes hide data inside `/var/lib/docker/volumes/` where it cannot be easily backed up with `rsync`. Bind mounts keep everything on the host filesystem under known paths.
 - **Use the `openclaw` CLI wrapper for OpenClaw commands.** VPS host: `openclaw <subcommand>` (wrapper at `/usr/local/bin/openclaw`). Inside container: `openclaw <subcommand>` (symlink). For explicit docker exec, always use `--user node`: `sudo docker exec --user node openclaw-gateway openclaw <subcommand>`.
 - **Single source of truth for deployed files.** Files deployed to the VPS live in `deploy/`. Playbooks reference them via `# SOURCE: deploy/<file>` comments with a `# <<< deploy/<file> >>>` sentinel in the heredoc body. When executing a playbook step with this pattern, read the referenced file from the local repo and use its contents in place of the sentinel. Template files are marked `(template)` and use `{{VAR}}` placeholders — substitute values from `openclaw-config.env` or as documented in the `# VARS:` comment. Never duplicate file contents inline in playbooks.
+- **Always substitute ALL `{{VAR}}` template placeholders.** When deploying a template file, replace every `{{VAR}}` with its actual value — including empty strings. A variable like `OPENCLAW_DOMAIN_PATH=` (blank) must still be substituted: `"basePath": "{{OPENCLAW_DOMAIN_PATH}}"` → `"basePath": ""`. Leaving a literal `{{...}}` in the deployed config will cause runtime failures. After writing a config with template variables, verify no `{{` remains in the output.
 
 ---
 
@@ -49,7 +50,7 @@ IMPORTANT: Read configuration from `openclaw-config.env`:
 ```bash
 # See openclaw-config.env.example for all fields and documentation.
 # VPS1_IP, CF_TUNNEL_TOKEN, and domain config are required to start a fresh deployment.
-# Domain config (OPENCLAW_DOMAIN, OPENCLAW_BROWSER_DOMAIN, OPENCLAW_BROWSER_DOMAIN_PATH, OPENCLAW_DOMAIN_PATH)
+# Domain config (OPENCLAW_DOMAIN, OPENCLAW_BROWSER_DOMAIN, OPENCLAW_DASHBOARD_DOMAIN_PATH, OPENCLAW_DOMAIN_PATH)
 # is validated during fresh deploy setup (00-fresh-deploy-setup.md).
 ```
 
@@ -115,12 +116,16 @@ sudo su - openclaw
 All docker compose commands run as openclaw (adminclaw can't cd into openclaw's home):
 
 ```bash
+# Gateway (main compose project):
 # Pattern: sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose <cmd>'
-# Examples:
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'       # Start all
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'       # Start gateway
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'           # Status
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'      # Follow logs
-# Per-service: append service name (e.g., restart openclaw-gateway, logs vector)
+
+# Vector (separate compose project — independent lifecycle):
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'       # Start Vector
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'          # Status
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose logs -f'     # Follow logs
 ```
 
 > **Note:** Docker Compose warns about unset `CLAUDE_AI_SESSION_KEY`/`CLAUDE_WEB_SESSION_KEY`/`CLAUDE_WEB_COOKIE` — harmless, these are optional.

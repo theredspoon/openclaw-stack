@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Sync sandbox toolkit files to VPS and rebuild sandbox images — no gateway restart.
 #
+# Default mode detects new/changed tools and quick-layers them on top of the
+# existing toolkit image. Use --full for a complete rebuild of all layers.
+#
 # Three steps:
 #   1. Sync local deploy files to VPS host (bind mounts make them visible in container)
 #   2. Regenerate gateway shims for any new tool binaries
-#   3. Rebuild sandbox images (--force)
+#   3. Rebuild sandbox images (quick by default, full with --full)
 #
 # Usage:
-#   scripts/update-sandbox-toolkit.sh              # sync + shims + rebuild common
-#   scripts/update-sandbox-toolkit.sh --all        # also rebuild browser sandbox
+#   scripts/update-sandbox-toolkit.sh              # sync + shims + detect changes + quick-layer
+#   scripts/update-sandbox-toolkit.sh --full       # sync + shims + full rebuild of toolkit layer
+#   scripts/update-sandbox-toolkit.sh --full --all # full rebuild including browser
 #   scripts/update-sandbox-toolkit.sh --sync-only  # sync + shims, skip image rebuild
 #   scripts/update-sandbox-toolkit.sh --dry-run    # show what would happen
 
@@ -28,20 +32,24 @@ source "$CONFIG_FILE"
 SYNC_ONLY=false
 DRY_RUN=false
 ALL=false
-REBUILD_FLAGS="--force"
+FULL=false
 
 for arg in "$@"; do
   case "$arg" in
-    --all)       ALL=true; REBUILD_FLAGS="$REBUILD_FLAGS --all" ;;
+    --all)       ALL=true ;;
+    --full)      FULL=true ;;
     --sync-only) SYNC_ONLY=true ;;
-    --dry-run)   DRY_RUN=true; REBUILD_FLAGS="$REBUILD_FLAGS --dry-run" ;;
+    --dry-run)   DRY_RUN=true ;;
     --help|-h)
-      echo "Usage: $(basename "$0") [--all] [--sync-only] [--dry-run]"
+      echo "Usage: $(basename "$0") [--full] [--all] [--sync-only] [--dry-run]"
       echo ""
       echo "Sync sandbox toolkit files to VPS and rebuild sandbox images."
       echo ""
+      echo "Default: detect new/changed tools and quick-layer them on the toolkit image."
+      echo ""
       echo "Options:"
-      echo "  --all         Also rebuild browser sandbox image"
+      echo "  --full        Full rebuild of packages + toolkit layers (slower, proper layer ordering)"
+      echo "  --all         Also rebuild browser sandbox image (requires --full)"
       echo "  --sync-only   Sync files + regenerate shims, skip image rebuild"
       echo "  --dry-run     Show what would be synced/rebuilt without executing"
       exit 0
@@ -165,8 +173,19 @@ fi
 STEP=3
 printf '\033[33m[%d/%d] Rebuilding sandbox images...\033[0m\n' "$STEP" "$TOTAL_STEPS"
 
+# Build rebuild flags based on mode
+REBUILD_FLAGS=""
+if [ "$FULL" = true ]; then
+  REBUILD_FLAGS="--force"
+  if [ "$ALL" = true ]; then
+    REBUILD_FLAGS="$REBUILD_FLAGS --all"
+  fi
+fi
 if [ "$DRY_RUN" = true ]; then
-  # Pass --dry-run to rebuild-sandboxes.sh so it shows what would be built
+  REBUILD_FLAGS="$REBUILD_FLAGS --dry-run"
+fi
+
+if [ "$DRY_RUN" = true ]; then
   ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
     "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $REBUILD_FLAGS"
 else
@@ -177,8 +196,14 @@ fi
 echo ""
 printf '\033[32mDone. Sandbox toolkit updated.\033[0m\n'
 
-# Skip restart prompt for dry-run
+# Skip restart prompt for dry-run or quick mode (new sandboxes auto-pick up the image)
 if [ "$DRY_RUN" = true ]; then
+  exit 0
+fi
+
+if [ "$FULL" = false ]; then
+  echo "New sandboxes will automatically use the updated image."
+  echo "Run scripts/restart-sandboxes.sh to update running sandboxes."
   exit 0
 fi
 

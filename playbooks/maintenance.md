@@ -55,6 +55,8 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d ope
 
 #### Log Worker Token
 
+> **Skip** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+
 ```bash
 # 1. Generate new token
 NEW_TOKEN=$(openssl rand -hex 32)
@@ -63,10 +65,10 @@ NEW_TOKEN=$(openssl rand -hex 32)
 cd workers/log-receiver
 echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 
-# 3. Update VPS .env — change LOG_WORKER_TOKEN value
+# 3. Update VPS vector/.env — change LOG_WORKER_TOKEN value
 
 # 4. Recreate Vector to pick up new .env values (see CLAUDE.md: restart vs up -d)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d vector'
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'
 ```
 
 #### Provider API Keys
@@ -146,7 +148,7 @@ No gateway restart needed — builds happen inside the running container's neste
 
 Several deploy files are bind-mounted read-only into the gateway container. These can be updated without a full image rebuild — just SCP the file and restart the gateway.
 
-**Bind-mounted files:** `novnc-proxy.mjs`, `entrypoint-gateway.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`, `hooks/`
+**Bind-mounted files:** `dashboard.mjs`, `entrypoint-gateway.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`, `hooks/`
 
 ```bash
 # From local machine

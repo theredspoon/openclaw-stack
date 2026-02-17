@@ -2,16 +2,28 @@
 # Sandbox image builder — runs inside the gateway container.
 # Called by entrypoint-gateway.sh on boot and by update-sandboxes.sh via docker exec.
 #
-# Handles: base image, common image (with toolkit config + labels), browser image.
-# Config change detection: rebuilds common image when sandbox-toolkit.yaml changes.
+# Image layer architecture:
+#   openclaw-sandbox:bookworm-slim                     (upstream base)
+#     -> openclaw-sandbox-base-root:bookworm-slim      (intermediate, cleaned up)
+#       -> openclaw-sandbox-packages:bookworm-slim     (apt + brew + bun + pnpm)
+#         -> openclaw-sandbox-toolkit:bookworm-slim    (tool installs from sandbox-toolkit.yaml)
+#   openclaw-sandbox-browser:bookworm-slim             (separate chain, FROM debian:bookworm-slim)
+#
+# Config change detection uses split hashing:
+#   - Packages hash (from packages array) -> label on packages image
+#   - Tools hash (from tools object) -> label on toolkit image
+#   Packages changed -> rebuild packages + toolkit
+#   Only tools changed -> skip packages, rebuild toolkit (Docker caches unchanged RUN layers)
+#
 # Integrity verification: stores/compares image digests to detect tampering.
 # Staleness: warns when images are older than 30 days.
 #
 # Usage:
-#   /app/deploy/rebuild-sandboxes.sh              # boot mode: build missing, detect config changes
-#   /app/deploy/rebuild-sandboxes.sh --force      # force rebuild common (+ base if needed)
-#   /app/deploy/rebuild-sandboxes.sh --force --all  # force rebuild all including browser
-#   /app/deploy/rebuild-sandboxes.sh --dry-run    # show what would be rebuilt
+#   /app/deploy/rebuild-sandboxes.sh                    # boot mode: build missing, detect config changes
+#   /app/deploy/rebuild-sandboxes.sh --force            # force rebuild toolkit (+ packages/base if needed)
+#   /app/deploy/rebuild-sandboxes.sh --force --all      # force rebuild all including browser
+#   /app/deploy/rebuild-sandboxes.sh --quick <toolname> # layer a single tool on top of toolkit image
+#   /app/deploy/rebuild-sandboxes.sh --dry-run          # show what would be rebuilt
 
 set -uo pipefail
 
@@ -23,13 +35,22 @@ STALENESS_DAYS=30
 FORCE=false
 ALL=false
 DRY_RUN=false
+QUICK_TOOL=""
 
 for arg in "$@"; do
   case "$arg" in
-    --force)  FORCE=true ;;
-    --all)    ALL=true ;;
+    --force)   FORCE=true ;;
+    --all)     ALL=true ;;
     --dry-run) DRY_RUN=true ;;
+    --quick)   ;; # next arg is the tool name
+    *)
+      # Capture tool name after --quick
+      if [ "${prev_arg:-}" = "--quick" ]; then
+        QUICK_TOOL="$arg"
+      fi
+      ;;
   esac
+  prev_arg="$arg"
 done
 
 log() { echo "[sandbox-builder] $*"; }
@@ -65,21 +86,60 @@ hash_config() {
   printf '%s' "$1" | sha256sum | cut -d' ' -f1
 }
 
-# Check if config has changed since last build.
-# Compares escaped forms since the label stores escaped content.
-config_changed() {
-  local current_config="$1"
-  if ! image_exists "openclaw-sandbox-common:bookworm-slim"; then
+# Extract just the packages array from toolkit JSON, hash it
+get_packages_hash() {
+  local toolkit_json="$1"
+  if [ -n "$toolkit_json" ]; then
+    echo "$toolkit_json" | node -e "
+      process.stdin.on('data', d => {
+        const cfg = JSON.parse(d);
+        process.stdout.write(require('crypto').createHash('sha256')
+          .update(JSON.stringify(cfg.packages)).digest('hex'));
+      });
+    "
+  fi
+}
+
+# Extract just the tools object from toolkit JSON, hash it
+get_tools_hash() {
+  local toolkit_json="$1"
+  if [ -n "$toolkit_json" ]; then
+    echo "$toolkit_json" | node -e "
+      process.stdin.on('data', d => {
+        const cfg = JSON.parse(d);
+        process.stdout.write(require('crypto').createHash('sha256')
+          .update(JSON.stringify(cfg.tools)).digest('hex'));
+      });
+    "
+  fi
+}
+
+# Check if packages config has changed since last build.
+packages_changed() {
+  local packages_hash="$1"
+  if ! image_exists "openclaw-sandbox-packages:bookworm-slim"; then
     return 0  # image missing, needs build
   fi
-  local stored_config
-  stored_config=$(get_image_label "openclaw-sandbox-common:bookworm-slim" "openclaw.toolkit-config")
-  if [ -z "$stored_config" ]; then
-    return 0  # no label (pre-label image), treat as changed
+  local stored_hash
+  stored_hash=$(get_image_label "openclaw-sandbox-packages:bookworm-slim" "openclaw.packages-config")
+  if [ -z "$stored_hash" ]; then
+    return 0  # no label, treat as changed
   fi
-  local current_hash
-  current_hash=$(hash_config "$current_config")
-  [ "$current_hash" != "$stored_config" ]
+  [ "$packages_hash" != "$stored_hash" ]
+}
+
+# Check if tools config has changed since last build.
+tools_changed() {
+  local tools_hash="$1"
+  if ! image_exists "openclaw-sandbox-toolkit:bookworm-slim"; then
+    return 0  # image missing, needs build
+  fi
+  local stored_hash
+  stored_hash=$(get_image_label "openclaw-sandbox-toolkit:bookworm-slim" "openclaw.toolkit-config")
+  if [ -z "$stored_hash" ]; then
+    return 0  # no label, treat as changed
+  fi
+  [ "$tools_hash" != "$stored_hash" ]
 }
 
 # ── Integrity verification ─────────────────────────────────────────────
@@ -87,8 +147,8 @@ config_changed() {
 save_digests() {
   local digests="{"
   local first=true
-  for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-common:bookworm-slim \
-             openclaw-sandbox-browser:bookworm-slim; do
+  for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-packages:bookworm-slim \
+             openclaw-sandbox-toolkit:bookworm-slim openclaw-sandbox-browser:bookworm-slim; do
     if image_exists "$img"; then
       local digest
       digest=$(docker image inspect "$img" --format '{{.Id}}' 2>/dev/null)
@@ -106,8 +166,8 @@ verify_digests() {
     return  # first boot, nothing to verify
   fi
 
-  for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-common:bookworm-slim \
-             openclaw-sandbox-browser:bookworm-slim; do
+  for img in openclaw-sandbox:bookworm-slim openclaw-sandbox-packages:bookworm-slim \
+             openclaw-sandbox-toolkit:bookworm-slim openclaw-sandbox-browser:bookworm-slim; do
     if image_exists "$img"; then
       local current_digest stored_digest
       current_digest=$(docker image inspect "$img" --format '{{.Id}}' 2>/dev/null)
@@ -153,6 +213,54 @@ check_staleness() {
   fi
 }
 
+# ── Generate tool install commands ────────────────────────────────────
+
+# Generates Dockerfile RUN instructions for tool installs.
+# Used by both build_toolkit() and quick_add_tool().
+# Args: $1 = toolkit_json, $2 = optional tool name filter (empty = all tools)
+generate_tool_installs() {
+  local toolkit_json="$1"
+  local filter_tool="${2:-}"
+  local bin_dir="/usr/local/bin"
+
+  if [ -z "$toolkit_json" ]; then
+    return
+  fi
+
+  echo "$toolkit_json" | node -e "
+    process.stdin.on('data', d => {
+      const t = JSON.parse(d).tools;
+      const filterTool = '$filter_tool';
+      const aptPkgs = [];
+      const installs = [];
+      for (const [name, cfg] of Object.entries(t)) {
+        if (filterTool && name !== filterTool) continue;
+        if (cfg.apt) aptPkgs.push(cfg.apt);
+        if (cfg.install) installs.push({ name, install: cfg.install, version: cfg.version || '' });
+      }
+      if (aptPkgs.length > 0) {
+        console.log('RUN apt-get update && apt-get install -y --no-install-recommends ' + aptPkgs.join(' ') + ' && rm -rf /var/lib/apt/lists/*');
+      }
+      for (const t of installs) {
+        let cmd = t.install;
+        if (t.version) cmd = cmd.replaceAll('\${VERSION}', t.version);
+        cmd = cmd.replaceAll('\${BIN_DIR}', '$bin_dir');
+        // Auto-wrap 'brew install ...' — brew refuses to run as root, so we
+        // switch to the linuxbrew user with the full brew path and suppress auto-update.
+        // Handles optional leading env vars: 'FOO=bar brew install pkg'
+        const brewMatch = cmd.match(/^((?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*)brew\s+install\s+(.*)/);
+        if (brewMatch) {
+          const envVars = brewMatch[1].trim();
+          const envPrefix = envVars ? envVars + ' ' : '';
+          const args = brewMatch[2];
+          cmd = \"su -s /bin/bash linuxbrew -c '\" + envPrefix + \"HOMEBREW_NO_AUTO_UPDATE=1 /home/linuxbrew/.linuxbrew/bin/brew install \" + args + \"'\";
+        }
+        console.log('RUN ' + cmd);
+      }
+    });
+  "
+}
+
 # ── Build: base sandbox ───────────────────────────────────────────────
 
 build_base() {
@@ -182,48 +290,43 @@ build_base() {
   fi
 }
 
-# ── Build: common sandbox ─────────────────────────────────────────────
+# ── Build: packages layer ────────────────────────────────────────────
 
-build_common() {
-  local current_config="$1"
-  local toolkit_json="$2"
+build_packages() {
+  local toolkit_json="$1"
+  local packages_hash="$2"
   local needs_build=false
   local reason=""
 
-  if ! image_exists "openclaw-sandbox-common:bookworm-slim"; then
+  if ! image_exists "openclaw-sandbox-packages:bookworm-slim"; then
     needs_build=true
     reason="image missing"
   elif [ "$FORCE" = true ]; then
     needs_build=true
     reason="forced rebuild"
-  elif config_changed "$current_config"; then
+  elif packages_changed "$packages_hash"; then
     needs_build=true
-    reason="config changed"
+    reason="packages changed"
   fi
 
   if [ "$needs_build" = false ]; then
-    check_staleness "openclaw-sandbox-common:bookworm-slim"
+    check_staleness "openclaw-sandbox-packages:bookworm-slim"
     return 0
   fi
 
   if [ "$DRY_RUN" = true ]; then
-    log "[dry-run] Would build openclaw-sandbox-common:bookworm-slim ($reason)"
+    log "[dry-run] Would build openclaw-sandbox-packages:bookworm-slim ($reason)"
     return 0
   fi
 
-  log "Building common sandbox image ($reason)..."
-
-  # Remove existing image if rebuilding (config change or force)
-  if image_exists "openclaw-sandbox-common:bookworm-slim"; then
-    docker rmi openclaw-sandbox-common:bookworm-slim > /dev/null 2>&1 || true
-  fi
+  log "Building packages image ($reason)..."
 
   if [ ! -f /app/scripts/sandbox-common-setup.sh ]; then
     log "WARNING: sandbox-common-setup.sh not found"
     return 1
   fi
 
-  # Ensure base image exists (common depends on it)
+  # Ensure base image exists (packages depends on it)
   if ! image_exists "openclaw-sandbox:bookworm-slim"; then
     build_base || return 1
   fi
@@ -249,74 +352,162 @@ build_common() {
     return 1
   fi
 
-  # Step 2: Run upstream script with BASE_IMAGE override + config-driven packages
-  BASE_IMAGE=openclaw-sandbox-base-root:bookworm-slim \
-  PACKAGES="$toolkit_packages" \
-  /app/scripts/sandbox-common-setup.sh || true
-
-  if ! image_exists "openclaw-sandbox-common:bookworm-slim"; then
-    log "ERROR: Common sandbox image build failed — upstream script did not produce image"
-    docker rmi openclaw-sandbox-base-root:bookworm-slim > /dev/null 2>&1 || true
-    return 1
-  fi
-
-  # Step 3: Layer custom tool installs from sandbox-toolkit.yaml + add metadata labels
-  local tool_dockerfile="FROM openclaw-sandbox-common:bookworm-slim\nUSER root\n"
-  local has_tool_installs=false
-
-  if [ -n "$toolkit_json" ]; then
-    local tool_installs install_count
-    local bin_dir="/usr/local/bin"
-    local install_cmds
-    install_cmds=$(echo "$toolkit_json" | node -e "
-      process.stdin.on('data', d => {
-        const t = JSON.parse(d).tools;
-        const aptPkgs = [];
-        const installs = [];
-        for (const [name, cfg] of Object.entries(t)) {
-          if (cfg.apt) aptPkgs.push(cfg.apt);
-          if (cfg.install) installs.push({ name, install: cfg.install, version: cfg.version || '' });
-        }
-        if (aptPkgs.length > 0) {
-          console.log('RUN apt-get update && apt-get install -y --no-install-recommends ' + aptPkgs.join(' ') + ' && rm -rf /var/lib/apt/lists/*');
-        }
-        for (const t of installs) {
-          let cmd = t.install;
-          if (t.version) cmd = cmd.replaceAll('\${VERSION}', t.version);
-          cmd = cmd.replaceAll('\${BIN_DIR}', '$bin_dir');
-          console.log('RUN ' + cmd);
-        }
-      });
-    ")
-    if [ -n "$install_cmds" ]; then
-      has_tool_installs=true
-      tool_dockerfile="${tool_dockerfile}ENV BIN_DIR=${bin_dir}\n${install_cmds}\n"
-    fi
-  fi
-
-  # Add metadata labels for config change detection and staleness tracking.
-  local config_hash
-  config_hash=$(hash_config "$current_config")
-  local build_date
-  build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  tool_dockerfile="${tool_dockerfile}LABEL openclaw.toolkit-config=\"${config_hash}\"\n"
-  tool_dockerfile="${tool_dockerfile}LABEL openclaw.build-date=\"${build_date}\"\n"
-  tool_dockerfile="${tool_dockerfile}USER 1000\n"
-
-  if [ "$has_tool_installs" = true ]; then
-    log "Installing custom tools into sandbox-common..."
-  fi
-  printf "%b" "$tool_dockerfile" \
-    | docker build -t openclaw-sandbox-common:bookworm-slim -
+  # Step 2: Run upstream script with BASE_IMAGE override + config-driven packages.
+  # TARGET_IMAGE tags the output as packages (not the default sandbox-common).
+  # Build from /tmp/sandbox-build to avoid /app/.env permission issue (Sysbox maps
+  # .env to nobody:600, Docker can't read it when scanning build context).
+  # The Dockerfile has no COPY instructions so the context dir doesn't matter.
+  mkdir -p /tmp/sandbox-build
+  ln -sf /app/Dockerfile.sandbox-common /tmp/sandbox-build/Dockerfile.sandbox-common
+  (cd /tmp/sandbox-build && \
+    BASE_IMAGE=openclaw-sandbox-base-root:bookworm-slim \
+    TARGET_IMAGE=openclaw-sandbox-packages:bookworm-slim \
+    PACKAGES="$toolkit_packages" \
+    /app/scripts/sandbox-common-setup.sh) || true
 
   # Cleanup intermediate image
   docker rmi openclaw-sandbox-base-root:bookworm-slim > /dev/null 2>&1 || true
 
-  if image_exists "openclaw-sandbox-common:bookworm-slim"; then
-    log "Common sandbox image built successfully"
+  if ! image_exists "openclaw-sandbox-packages:bookworm-slim"; then
+    log "ERROR: Packages image build failed — upstream script did not produce image"
+    return 1
+  fi
+
+  # Add metadata labels for config change detection and staleness tracking
+  local build_date
+  build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  printf 'FROM openclaw-sandbox-packages:bookworm-slim\nLABEL openclaw.packages-config="%s"\nLABEL openclaw.build-date="%s"\n' \
+    "$packages_hash" "$build_date" \
+    | docker build -t openclaw-sandbox-packages:bookworm-slim -
+
+  log "Packages image built successfully"
+  return 0
+}
+
+# ── Build: toolkit layer ─────────────────────────────────────────────
+
+build_toolkit() {
+  local toolkit_json="$1"
+  local tools_hash="$2"
+  local needs_build=false
+  local reason=""
+
+  if ! image_exists "openclaw-sandbox-toolkit:bookworm-slim"; then
+    needs_build=true
+    reason="image missing"
+  elif [ "$FORCE" = true ]; then
+    needs_build=true
+    reason="forced rebuild"
+  elif tools_changed "$tools_hash"; then
+    needs_build=true
+    reason="tools changed"
+  fi
+
+  if [ "$needs_build" = false ]; then
+    check_staleness "openclaw-sandbox-toolkit:bookworm-slim"
+    return 0
+  fi
+
+  if [ "$DRY_RUN" = true ]; then
+    log "[dry-run] Would build openclaw-sandbox-toolkit:bookworm-slim ($reason)"
+    return 0
+  fi
+
+  # Ensure packages image exists (toolkit depends on it)
+  if ! image_exists "openclaw-sandbox-packages:bookworm-slim"; then
+    log "ERROR: Packages image missing — cannot build toolkit without it"
+    return 1
+  fi
+
+  log "Building toolkit image ($reason)..."
+
+  # Build tool installs on top of packages image.
+  # Each tool is a separate RUN instruction — Docker caches unchanged ones.
+  # No docker rmi before build — keeping the old image lets Docker cache hit.
+  local bin_dir="/usr/local/bin"
+  local tool_dockerfile="FROM openclaw-sandbox-packages:bookworm-slim\nUSER root\n"
+  local has_tool_installs=false
+
+  local install_cmds
+  install_cmds=$(generate_tool_installs "$toolkit_json")
+  if [ -n "$install_cmds" ]; then
+    has_tool_installs=true
+    tool_dockerfile="${tool_dockerfile}ENV BIN_DIR=${bin_dir}\n${install_cmds}\n"
+  fi
+
+  # Add metadata labels for config change detection and staleness tracking.
+  local build_date
+  build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  tool_dockerfile="${tool_dockerfile}LABEL openclaw.toolkit-config=\"${tools_hash}\"\n"
+  tool_dockerfile="${tool_dockerfile}LABEL openclaw.build-date=\"${build_date}\"\n"
+  tool_dockerfile="${tool_dockerfile}USER 1000\n"
+
+  if [ "$has_tool_installs" = true ]; then
+    log "Installing custom tools into sandbox-toolkit..."
+  fi
+  printf "%b" "$tool_dockerfile" \
+    | docker build -t openclaw-sandbox-toolkit:bookworm-slim -
+
+  if image_exists "openclaw-sandbox-toolkit:bookworm-slim"; then
+    log "Toolkit image built successfully"
     return 0
   else
-    log "ERROR: Common sandbox image build failed"
+    log "ERROR: Toolkit image build failed"
+    return 1
+  fi
+}
+
+# ── Quick add: layer a single tool ────────────────────────────────────
+
+quick_add_tool() {
+  local tool_name="$1"
+  local toolkit_json="$2"
+
+  if [ "$DRY_RUN" = true ]; then
+    log "[dry-run] Would quick-add tool '$tool_name' on top of openclaw-sandbox-toolkit:bookworm-slim"
+    return 0
+  fi
+
+  if ! image_exists "openclaw-sandbox-toolkit:bookworm-slim"; then
+    log "ERROR: Toolkit image missing — run a full build first"
+    return 1
+  fi
+
+  # Verify the tool exists in config
+  local tool_exists
+  tool_exists=$(echo "$toolkit_json" | node -e "
+    process.stdin.on('data', d => {
+      const t = JSON.parse(d).tools;
+      process.stdout.write(t['$tool_name'] ? 'yes' : 'no');
+    });
+  ")
+
+  if [ "$tool_exists" != "yes" ]; then
+    log "ERROR: Tool '$tool_name' not found in sandbox-toolkit.yaml"
+    return 1
+  fi
+
+  log "Quick-adding tool '$tool_name'..."
+
+  local bin_dir="/usr/local/bin"
+  local install_cmds
+  install_cmds=$(generate_tool_installs "$toolkit_json" "$tool_name")
+
+  if [ -z "$install_cmds" ]; then
+    log "ERROR: No install commands generated for '$tool_name'"
+    return 1
+  fi
+
+  local dockerfile="FROM openclaw-sandbox-toolkit:bookworm-slim\nUSER root\nENV BIN_DIR=${bin_dir}\n${install_cmds}\nUSER 1000\n"
+  printf "%b" "$dockerfile" \
+    | docker build -t openclaw-sandbox-toolkit:bookworm-slim -
+
+  if image_exists "openclaw-sandbox-toolkit:bookworm-slim"; then
+    log "Tool '$tool_name' added successfully"
+    log "NOTE: Run --force rebuild to properly order layers"
+    return 0
+  else
+    log "ERROR: Quick-add failed for '$tool_name'"
     return 1
   fi
 }
@@ -449,17 +640,30 @@ fi
 verify_digests
 
 # Get current toolkit config
-CURRENT_CONFIG=$(get_stripped_config)
 TOOLKIT_JSON=$(get_toolkit_json)
+
+# ── Quick-add mode: layer a single tool and exit ──
+if [ -n "$QUICK_TOOL" ]; then
+  quick_add_tool "$QUICK_TOOL" "$TOOLKIT_JSON" || exit 1
+  if [ "$DRY_RUN" = false ]; then
+    save_digests
+  fi
+  exit 0
+fi
+
+# Compute split config hashes
+PACKAGES_HASH=$(get_packages_hash "$TOOLKIT_JSON")
+TOOLS_HASH=$(get_tools_hash "$TOOLKIT_JSON")
 
 # Build images
 FAILED=0
 
 build_base || FAILED=1
-build_common "$CURRENT_CONFIG" "$TOOLKIT_JSON" || FAILED=1
+build_packages "$TOOLKIT_JSON" "$PACKAGES_HASH" || FAILED=1
+build_toolkit "$TOOLKIT_JSON" "$TOOLS_HASH" || FAILED=1
 build_browser || FAILED=1
 
-# Seed persistent agent home directories (needs sandbox-common image)
+# Seed persistent agent home directories (needs sandbox-toolkit image)
 seed_agent_homes
 
 # Save digests after all builds complete

@@ -27,7 +27,7 @@ services:
           # Kernel handles CPU sharing & won't crash if over-provisioned
           cpus: "6"
           # IMPORTANT: Set memory to 500M-1GB less than total available: `free -h`
-          # vector needs ~128M, system needs ~500M
+          # System needs ~500M — Vector runs separately (see vector/docker-compose.yml)
           # This is the max memory openclaw can use for all agents, including browsers.
           # If container runs out of memory & swap, it will crash with OOM.
           memory: 10.5G
@@ -39,7 +39,7 @@ services:
           cpus: "4"
           memory: 4G
     ports:
-      - "127.0.0.1:6090:6090"  # noVNC reverse proxy — browser sandbox viewing via CF tunnel
+      - "127.0.0.1:6090:6090"  # Dashboard server — browser sessions, media, logs via CF tunnel
     volumes:
       # Entrypoint script: lock cleanup, start dockerd, sandbox bootstrap, gosu drop to node (from §4.10)
       - ./scripts/entrypoint-gateway.sh:/app/scripts/entrypoint-gateway.sh:ro
@@ -57,8 +57,8 @@ services:
       - ./deploy/parse-toolkit.mjs:/app/deploy/parse-toolkit.mjs:ro
       # Sandbox builder: extracted build logic called by entrypoint and update-sandboxes.sh
       - ./deploy/rebuild-sandboxes.sh:/app/deploy/rebuild-sandboxes.sh:ro
-      # noVNC reverse proxy: routes browser sandbox UIs through a fixed port
-      - ./deploy/novnc-proxy.mjs:/app/deploy/novnc-proxy.mjs:ro
+      # Dashboard server: browser sessions, media files, logs through a fixed port
+      - ./deploy/dashboard.mjs:/app/deploy/dashboard.mjs:ro
     # Entrypoint handles pre-start tasks before exec-ing the command
     entrypoint: ["/app/scripts/entrypoint-gateway.sh"]
     # Full gateway command (entrypoint passes it through via exec "$@")
@@ -92,9 +92,9 @@ services:
       # - CEREBRAS_API_KEY=${AI_GATEWAY_AUTH_TOKEN}
       # - MISTRAL_API_KEY=${AI_GATEWAY_AUTH_TOKEN}
       # - OPENROUTER_API_KEY=${AI_GATEWAY_AUTH_TOKEN}
-      # noVNC proxy base path — set when browser VNC is served under a URL subpath
-      # (e.g., /browser). Empty = serve at root. Set from OPENCLAW_BROWSER_DOMAIN_PATH.
-      - NOVNC_BASE_PATH=${NOVNC_BASE_PATH:-}
+      # Dashboard base path — set when dashboard is served under a URL subpath
+      # (e.g., /dashboard). Empty = serve at root. Set from OPENCLAW_DASHBOARD_DOMAIN_PATH.
+      - DASHBOARD_BASE_PATH=${DASHBOARD_BASE_PATH:-}
       # Telegram channel — enables chatting with OpenClaw via Telegram bot
       - TELEGRAM_BOT_TOKEN=${OPENCLAW_TELEGRAM_BOT_TOKEN:-}
       - TZ=UTC
@@ -121,26 +121,6 @@ services:
     # Same image as gateway, built by scripts/build-openclaw.sh
     image: openclaw:local
     runtime: sysbox-runc
-    networks:
-      - openclaw-gateway-net
-
-  vector:
-    image: timberio/vector:0.43.1-alpine
-    container_name: vector
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./vector.yaml:/etc/vector/vector.yaml:ro
-      - ./data/vector:/var/lib/vector
-    environment:
-      - LOG_WORKER_URL=${LOG_WORKER_URL}
-      - LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
-      - VPS1_IP=${VPS1_IP}
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128M
     networks:
       - openclaw-gateway-net
 

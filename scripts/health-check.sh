@@ -27,7 +27,7 @@ for arg in "$@"; do
       echo "Run health checks on the VPS."
       echo ""
       echo "Checks:"
-      echo "  - Docker container status (openclaw-gateway, vector)"
+      echo "  - Docker container status (openclaw-gateway, vector if enabled)"
       echo "  - Docker container health (healthcheck status)"
       echo "  - OpenClaw gateway health (openclaw health)"
       echo ""
@@ -79,7 +79,10 @@ pass "SSH connection OK"
 log ""
 log "Checking Docker containers..."
 
-CONTAINERS="openclaw-gateway vector"
+CONTAINERS="openclaw-gateway"
+if [ "${ENABLE_VECTOR_LOG_SHIPPING:-true}" = "true" ]; then
+  CONTAINERS="$CONTAINERS vector"
+fi
 for CONTAINER in $CONTAINERS; do
   STATUS=$($SSH_CMD "sudo docker inspect -f '{{.State.Status}}' $CONTAINER 2>/dev/null" 2>/dev/null || echo "not_found")
 

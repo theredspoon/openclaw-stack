@@ -36,7 +36,7 @@
     "mode": "local",
     "auth": {
       "mode": "token",
-      "token": "{{GATEWAY_TOKEN}}",
+      "token": "{{GATEWAY_TOKEN}}", // TEMPLATE: replace with 64-char hex token from VPS .env
       "rateLimit": {
         "maxAttempts": 10,
         "windowMs": 60000,
@@ -44,12 +44,14 @@
       }
     },
     "remote": {
-      "token": "{{GATEWAY_TOKEN}}"
+      "token": "{{GATEWAY_TOKEN}}" // TEMPLATE: same token as auth.token above
     },
     "trustedProxies": [
       "172.30.0.1"
     ],
     "controlUi": {
+      // TEMPLATE: replace with value from OPENCLAW_DOMAIN_PATH in openclaw-config.env
+      // Use "" (empty string) for root path, or "/subpath" for a subpath — never leave as {{...}}
       "basePath": "{{OPENCLAW_DOMAIN_PATH}}"
     }
   },
@@ -106,8 +108,7 @@
           "tmpfs": [
             "/tmp",
             "/var/tmp",
-            "/run",
-            "/home/linuxbrew:uid=1000,gid=1000" // Allow agents to update or install packages, does not persist
+            "/run"
           ],
           "network": "none", // Disable network access by default; each agent must enable
           "user": "1000:1000", // Gets mapped to sandbox user - don't change this unless you know what you're doing
@@ -124,26 +125,28 @@
             "LANG": "C.UTF-8",
             // Add /opt/skill-bins to PATH so gateway passes skill binary preflight checks.
             // Shims satisfy load-time checks; real binaries live in sandbox images.
-            "PATH": "/opt/skill-bins:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            "PATH": "/opt/skill-bins:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           },
           "pidsLimit": 512, // Add fork-bomb protection
           "memory": "2g", // Default agent container RAM - browser containers also inherit this setting
           "memorySwap": "4g",
           "cpus": 2, // Default agent container CPU
+          // Default sandbox bind mount
+          // Per agent bind REPLACES not merges with the defaults
+          // Be sure to duplicate each bind mount per agent as needed if agent has any custom bind mounts
           "binds": [
             // Skill bins shims — pass through to real binaries inside sandboxes,
-            // satisfy gateway preflight checks on the host
+            // satisfy gateway preflight checks on the host.
+            // Note: only truly needed when main runs in sandbox mode. Revisit in a second pass.
             "/opt/skill-bins:/opt/skill-bins:ro",
-            // OpenClaw docs — system prompt tells agents to read from <sandboxRoot>/docs (= /workspace/docs inside container)
-            "/app/docs:/workspace/docs:ro",
-            // Host health & maintenance data — written by host cron scripts, read-only for agents
-            "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
+            // OpenClaw docs — accessible via read tool at /workspace/docs/
+            "/app/docs:/workspace/docs:ro"
           ]
         },
         // Each agent has its browser container - requires the "browser" tool
         // Browsers are run in separate sandbox containers, not inside the agent sandbox
         // Move browser settings to individual agent to restrict browser use or enforce single browser container
-        // Browser sessions are accessible to users via the novnc-proxy at OPENCLAW_BROWSER_DOMAIN after deploy
+        // Browser sessions are accessible to users via the dashboard server at OPENCLAW_BROWSER_DOMAIN after deploy
         // Browser containers inherit the default CPU and memory settings of their associated agent
         "browser": {
           "enabled": true,
@@ -180,16 +183,25 @@
         // The coordinator plugin auto-discovers routes from agent configs and writes
         // a routing table to AGENTS.md (loaded into system prompt).
         // Per-agent skill filtering ("skills": []) ensures main sees no skill blocks.
-        // If you want a single fully-capable agent, set image: openclaw-sandbox-common:bookworm-slim,
+        // If you want a single fully-capable agent, set image: openclaw-sandbox-toolkit:bookworm-slim,
         // remove "skills": [], and disable the coordinator plugin.
         "id": "main",
         "default": true,
         "sandbox": {
           // Override default "all" — operator DM runs on host for full filesystem/docker access.
           // Group chats and subagent spawns still get sandboxed.
-          "mode": "non-main"
+          "mode": "non-main",
+          "docker": {
+            // Per-agent binds replace (not merge) defaults — repeat all needed binds
+            "binds": [
+              "/opt/skill-bins:/opt/skill-bins:ro",
+              "/app/docs:/workspace/docs:ro", // Needed for main sandbox to read docs without making extra exec tool call
+              // Make host-status reports available to any main agent sandbox tool
+              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
+            ]
+          }
         },
-        "skills": [],
+        "skills": [], // Intentionally empty, main delegates skills in this setup
         "tools": {
           // No allow list needed — main runs on host and gets all tools by default.
           // gateway is available because the sandbox deny doesn't apply to host sessions.
@@ -208,16 +220,15 @@
         "sandbox": {
           "workspaceAccess": "rw", // Code agent needs persistent read/write access to workspace
           "docker": {
-            "image": "openclaw-sandbox-common:bookworm-slim", // sandbox-common has the full sandbox-toolkit bins
+            "image": "openclaw-sandbox-toolkit:bookworm-slim", // sandbox-toolkit has the full toolkit bins
             "network": "bridge", // enable network access for claude code, codex, etc. to work
             "memory": "4g", // Coding tasks need more headroom (claude code, LSPs, builds)
             "memorySwap": "8g",
             "cpus": 4,
             "binds": [
-              // Repeat defaults — per-agent binds replace (not merge) the defaults array
+              // Per-agent binds replace (not merge) defaults — repeat all needed binds
               "/opt/skill-bins:/opt/skill-bins:ro",
               "/app/docs:/workspace/docs:ro",
-              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro",
               // Code agent specific - persistent home for tool configs, shell history, etc.
               "/home/node/sandboxes-home/code:/home/sandbox"
             ]
@@ -258,7 +269,7 @@
         },
         "sandbox": {
           "docker": {
-            "image": "openclaw-sandbox-common:bookworm-slim",
+            "image": "openclaw-sandbox-toolkit:bookworm-slim",
             "network": "bridge",
             "memory": "1g", // Most skills are API-based, lightweight
             "memorySwap": "2g",
@@ -273,7 +284,7 @@
     "enabled": true,
     "allow": [
       "coordinator", // Coordinator plugin — builds routing table from agent configs
-      "llm-logger"   // LLM logger plugin — logs prompts/responses to llm.log
+      "llm-logger" // LLM logger plugin — logs prompts/responses to llm.log
     ],
     "entries": {
       // Coordinator Plugin
@@ -308,7 +319,7 @@
     "elevated": {
       "enabled": true,
       "allowFrom": {
-        "telegram": ["{{YOUR_TELEGRAM_ID}}"]
+        "telegram": ["{{YOUR_TELEGRAM_ID}}"] // TEMPLATE: replace with numeric Telegram user ID from openclaw-config.env
         // Add other channels as needed:
         // "discord": ["your-discord-id"],
         // "whatsapp": ["+15555550123"]
