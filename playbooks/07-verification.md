@@ -73,6 +73,77 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
 ---
 
+## 7.1a Verify Sandbox Toolkit
+
+Verify all tool binaries from `deploy/sandbox-toolkit.yaml` are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
+
+> **Why docker exec into the gateway first?** Sandbox containers run as nested Docker inside the gateway container (Sysbox). To inspect them, you must first enter the gateway, then exec into the sandbox.
+
+```bash
+# Get the list of all tool binaries from sandbox-toolkit.yaml
+BINS=$(sudo docker exec --user node openclaw-gateway \
+  node /app/deploy/parse-toolkit.mjs /app/deploy/sandbox-toolkit.yaml \
+  | jq -r '.allBins[]')
+echo "Bins to test: $BINS"
+
+# Find a running sandbox-common container (code or skills agent)
+SANDBOX=$(sudo docker exec --user node openclaw-gateway \
+  docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format '{{.Names}}' | head -1)
+
+# If no sandbox is running, trigger one via the openclaw CLI.
+# This creates the container with correct env (PATH, etc.) from openclaw.json.
+if [ -z "$SANDBOX" ]; then
+  echo "No sandbox running — triggering skills agent sandbox..."
+  sudo docker exec --user node openclaw-gateway \
+    openclaw agent --agent skills --message ping --timeout 60 >/dev/null 2>&1 &
+  AGENT_PID=$!
+
+  # Wait for the sandbox container to appear
+  for i in $(seq 1 20); do
+    sleep 3
+    SANDBOX=$(sudo docker exec --user node openclaw-gateway \
+      docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format '{{.Names}}' | head -1)
+    [ -n "$SANDBOX" ] && break
+    echo "  waiting... ($((i*3))s)"
+  done
+  kill $AGENT_PID 2>/dev/null; wait $AGENT_PID 2>/dev/null || true
+
+  if [ -z "$SANDBOX" ]; then
+    echo "FAILED — sandbox did not appear after 60s. Check gateway logs."
+    exit 1
+  fi
+fi
+
+echo "Testing sandbox: $SANDBOX"
+
+# Test each binary inside the sandbox — use `which` to verify it's on PATH
+PASS=0; FAIL=0; TOTAL=0
+for bin in $BINS; do
+  TOTAL=$((TOTAL+1))
+  if sudo docker exec --user node openclaw-gateway \
+    docker exec "$SANDBOX" which "$bin" > /dev/null 2>&1; then
+    echo "  ✓ $bin"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ $bin — NOT FOUND"
+    FAIL=$((FAIL+1))
+  fi
+done
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
+[ "$FAIL" -eq 0 ] && echo "All sandbox toolkit binaries operational" || echo "FAILED — some binaries missing"
+```
+
+**Expected:** All binaries found on PATH. `0 failed`.
+
+**If tools are missing:**
+
+- Rebuild the sandbox image: `sudo docker exec --user node openclaw-gateway /app/deploy/rebuild-sandboxes.sh --force`
+- Then recreate containers: `sudo docker exec --user node openclaw-gateway openclaw sandbox recreate --all --force`
+
+---
+
 ## 7.2 Verify Vector (Log Shipping)
 
 ```bash
@@ -380,6 +451,7 @@ openclaw doctor --deep
 - [ ] Gateway + Vector + Sysbox running
 - [ ] Backup + host alerter + maintenance checker cron jobs configured
 - [ ] Host status JSON files written and readable from agent sandbox
+- [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
 - [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
 - [ ] AI Gateway + Log Receiver Workers responding
 - [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
@@ -472,5 +544,6 @@ Deployment is complete when:
 8. Host alerter and maintenance checker cron jobs configured on VPS-1
 9. Gateway ports (18789, 18790) not reachable from external network
 10. Security audit passes with no critical or warning findings
+11. All sandbox toolkit binaries operational in sandbox container (7.1a)
 
 > **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages) is covered in `08-post-deploy.md` (device pairing) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).
