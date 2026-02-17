@@ -55,6 +55,8 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d ope
 
 #### Log Worker Token
 
+> **Skip** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+
 ```bash
 # 1. Generate new token
 NEW_TOKEN=$(openssl rand -hex 32)

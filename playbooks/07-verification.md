@@ -146,6 +146,8 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 ## 7.2 Verify Vector (Log Shipping)
 
+> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+
 ```bash
 # Check Vector is running (separate compose project)
 sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
@@ -164,6 +166,8 @@ sudo ls -la /home/openclaw/vector/data/
 ## 7.3 Verify Cloudflare Workers
 
 ### Log Receiver Worker
+
+> **Skip** Log Receiver verification if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
 
 ```bash
 # Health check (no auth required)
@@ -448,12 +452,12 @@ openclaw doctor --deep
 - [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
 - [ ] UFW enabled (SSH only), port 443 closed
 - [ ] Fail2ban running, cloudflared active
-- [ ] Gateway + Vector + Sysbox running
+- [ ] Gateway + Sysbox running (+ Vector if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 - [ ] Backup + host alerter + maintenance checker cron jobs configured
 - [ ] Host status JSON files written and readable from agent sandbox
 - [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
 - [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
-- [ ] AI Gateway + Log Receiver Workers responding
+- [ ] AI Gateway Worker responding (+ Log Receiver if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 - [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
 
 ---
@@ -535,9 +539,9 @@ Deployment is complete when:
 
 1. VPS-1 accessible via SSH on port `<SSH_PORT>`
 2. OpenClaw gateway responding on localhost (internal health check)
-3. Vector running and shipping logs
+3. Vector running and shipping logs (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 4. Cloudflare Workers responding to health checks
-5. Container logs appearing in Cloudflare Workers dashboard
+5. Container logs appearing in Cloudflare Workers dashboard (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
 8. Host alerter and maintenance checker cron jobs configured on VPS-1

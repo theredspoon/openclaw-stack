@@ -287,7 +287,7 @@ EOF
 
 Ships Docker container logs to the Cloudflare Log Receiver Worker. Vector runs as a separate Docker Compose project — independent of the gateway lifecycle.
 
-> **Skip this section** if `LOG_WORKER_URL` and `LOG_WORKER_TOKEN` are not set in `openclaw-config.env`. Vector is optional.
+> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false` in `openclaw-config.env`.
 
 ```bash
 #!/bin/bash
@@ -644,8 +644,8 @@ sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 # Start gateway
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
 
-# Start Vector (separate compose project — skip if not configured)
-if [ -f /home/openclaw/vector/.env ]; then
+# Start Vector (separate compose project — skip if disabled)
+if [ "${ENABLE_VECTOR_LOG_SHIPPING}" = "true" ]; then
   sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'
 fi
 
