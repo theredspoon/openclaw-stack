@@ -68,7 +68,7 @@ for c in sandboxes.get('containers', []):
 for a in agents:
     aid = a['id']
     name = a.get('name', aid)
-    default = ' (default)' if a.get('isDefault') else ''
+    default = ' (main)' if a.get('isDefault') and name != 'main' else ''
     sbx = sandbox_map.get(aid)
     if sbx:
         sbx_status = sbx['status']

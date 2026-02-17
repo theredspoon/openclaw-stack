@@ -135,41 +135,6 @@ If you want more control, see [scripts/](scripts/) dir for CLI helper scripts wi
 - **[Claude Subscription](docs/CLAUDE-SUBSCRIPTION.md)** - info on using OpenClaw with a claude subscription
 - See [docs/](docs/) for more guides
 
-## Security
-
-**Host**
-
-- **Sysbox sandboxing**
-   — agent code executes in isolated Docker-in-Docker containers
-- **API key isolation**
-   — LLM provider keys stored as Cloudflare Worker secrets, not on the VPS
-- **Cloudflare Access**
-   — authentication layer in front of the tunnel
-- **No exposed ports**
-   — Cloudflare Tunnel uses outbound-only connections; SSH is the only public port
-- **SSH hardened**
-   — non-standard port (222), key-only auth, restricted ciphers, fail2ban
-- **Two-user model**
-   — `adminclaw` (SSH/sudo) and `openclaw` (app runtime, no SSH, no sudo)
-- **UFW firewall**
-   — only SSH allowed; all other inbound ports closed
-- **Docker localhost binding**
-   — daemon configured to bind container ports to 127.0.0.1 only, preventing Docker's iptables rules from bypassing UFW
-- **Kernel hardening**
-   — sysctl tuning and automatic security updates
-- **Security audit**
-   — built-in `openclaw security audit` checks for misconfigurations; claude runs comprehensive verifications & security checks during deploy
-
-**OpenClaw**
-
-- **Containerized gateway** — runs inside its own Sysbox container with no root access to the host
-- **Sandboxed agents** — all agent tools are `docker exec`'d into isolated containers with dropped capabilities
-- **Isolated browsers** — each agent's browser runs in a separate container
-- **No stored API keys** — the gateway only has an auth token for the LLM proxy, never the real provider keys
-- **Unprivileged processes** — no root user in the gateway or any agent sandbox
-- **Device pairing** - OpenClaw UI requires one-time per device pairing
-- **Double auth layer** - Cloudflare Access + OpenClaw device pairing
-
 ## What happens during deploy
 
 Claude reads the [playbooks](playbooks/) and executes them step-by-step over SSH:
@@ -441,7 +406,10 @@ Claude will pull the latest code, rebuild the Docker image with auto-patching, a
 
 ### Managing sandbox tools
 
-The tools available inside agent sandboxes are defined in `deploy/sandbox-toolkit.yaml`. See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for how to add, update, or remove tools.
+The tools available inside agent sandboxes are defined in `deploy/sandbox-toolkit.yaml`.
+See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for how to add, update, or remove tools.
+
+---
 
 ## Security
 
@@ -449,7 +417,8 @@ This deployment implements defense-in-depth with multiple independent security l
 
 ### Network isolation
 
-- **Cloudflare Tunnel** uses outbound-only connections from the VPS — no inbound ports exposed except SSH
+- **No Exposed Ports** - only SSH on non-standard port is reachable
+- **Cloudflare Tunnel** uses outbound-only connections
 - **UFW firewall** denies all incoming traffic except the SSH port
 - **Docker daemon** binds all container ports to `127.0.0.1` only, preventing Docker's iptables rules from bypassing UFW
 - **Gateway ports** (18789, 18790, 6090) are only reachable from localhost — external access goes through the Cloudflare Tunnel
@@ -472,9 +441,9 @@ This deployment implements defense-in-depth with multiple independent security l
 
 ### API key isolation
 
-- LLM provider API keys are stored as Cloudflare Worker secrets, never on the VPS
-- The AI Gateway Worker injects keys at the edge before forwarding to providers
-- The VPS only has an auth token for the Worker, not the actual API keys
+- **Keys stored at the edge**: LLM provider API keys are stored as Cloudflare Worker secrets, never on the VPS
+- **Injection at the edge**: the AI Gateway Worker injects keys before forwarding to providers
+- **VPS has no direct access**: the VPS only holds an auth token for the Worker, not the actual API keys
 
 ### Monitoring
 
@@ -483,7 +452,15 @@ This deployment implements defense-in-depth with multiple independent security l
 - **Automatic security updates** via unattended-upgrades
 - **Kernel hardening**: sysctl tuning for IP spoofing protection, SYN flood mitigation, ASLR, restricted dmesg/kptr access
 
----
+### OpenClaw Security
+
+- **Containerized gateway** — runs inside its own Sysbox container with no root access to the host
+- **Sandboxed agents** — all agent tools are `docker exec`'d into isolated containers with dropped capabilities
+- **Isolated browsers** — each agent's browser runs in a separate container
+- **No stored API keys** — the gateway only has an auth token for the LLM proxy, never the real provider keys
+- **Unprivileged processes** — no root user in the gateway or any agent sandbox
+- **Device pairing** - OpenClaw UI requires one-time per device pairing
+- **Double auth layer** - Cloudflare Access + OpenClaw device pairing
 
 ## Troubleshooting
 
@@ -491,9 +468,12 @@ In general, just chat with claude to troubleshoot. Claude is fully context-aware
 
 See also [scripts/](./scripts/) for bash utils for SSHing, showing logs, etc.
 
+If you're running into OpenClaw specific bugs, clone the openclaw repo into `./openclaw`.
+Then tell claude to scan through the local openclaw code to help you debug.
+
 ---
 
-## File Structure Highlights
+## Repo Files Highlights
 
 ```
 
