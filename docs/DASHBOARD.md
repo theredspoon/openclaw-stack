@@ -43,7 +43,7 @@ The dashboard URL is configured via two variables in `openclaw-config.env`:
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
-| `OPENCLAW_BROWSER_DOMAIN` | Dashboard hostname | `openclaw.example.com` |
+| `OPENCLAW_DASHBOARD_DOMAIN` | Dashboard hostname | `openclaw.example.com` |
 | `OPENCLAW_DASHBOARD_DOMAIN_PATH` | Dashboard base path | `/dashboard` (or empty for subdomain) |
 
 | Setup | Domain | Path | `DASHBOARD_BASE_PATH` |
@@ -112,7 +112,7 @@ Add a route on the existing `openclaw` tunnel. Two approaches:
 |-----------|--------|------|---------|
 | `dashboard-openclaw` | `yourdomain.com` | *(empty)* | `http://localhost:6090` |
 
-Set `OPENCLAW_BROWSER_DOMAIN=dashboard-openclaw.yourdomain.com` and `OPENCLAW_DASHBOARD_DOMAIN_PATH=` (empty → `DASHBOARD_BASE_PATH` is empty).
+Set `OPENCLAW_DASHBOARD_DOMAIN=dashboard-openclaw.yourdomain.com` and `OPENCLAW_DASHBOARD_DOMAIN_PATH=` (empty → `DASHBOARD_BASE_PATH` is empty).
 
 **Option B: Subpath on main domain** (e.g., `openclaw.yourdomain.com/dashboard`)
 
@@ -120,7 +120,7 @@ Set `OPENCLAW_BROWSER_DOMAIN=dashboard-openclaw.yourdomain.com` and `OPENCLAW_DA
 |-----------|--------|------|---------|
 | `openclaw` | `yourdomain.com` | `/dashboard` | `http://localhost:6090` |
 
-Set `OPENCLAW_BROWSER_DOMAIN=openclaw.yourdomain.com` and `OPENCLAW_DASHBOARD_DOMAIN_PATH=/dashboard` (→ `DASHBOARD_BASE_PATH=/dashboard`).
+Set `OPENCLAW_DASHBOARD_DOMAIN=openclaw.yourdomain.com` and `OPENCLAW_DASHBOARD_DOMAIN_PATH=/dashboard` (→ `DASHBOARD_BASE_PATH=/dashboard`).
 
 No new tunnel needed — just add a public hostname to the existing tunnel in the Dashboard.
 
@@ -188,7 +188,7 @@ This avoids the concurrency problems of a shared browser sidecar approach.
 2. Click your tunnel → **Configure** → **Public Hostname** tab
 3. Add a new public hostname pointing to `http://localhost:6090` (see "Cloudflare Tunnel Route" above for subdomain vs subpath options)
 4. Add a Cloudflare Access policy to restrict who can view browser sessions
-5. Set `OPENCLAW_BROWSER_DOMAIN` and `OPENCLAW_DASHBOARD_DOMAIN_PATH` in `openclaw-config.env` to match your chosen URL
+5. Set `OPENCLAW_DASHBOARD_DOMAIN` and `OPENCLAW_DASHBOARD_DOMAIN_PATH` in `openclaw-config.env` to match your chosen URL
 
 ### Verification
 
@@ -205,7 +205,7 @@ sudo docker logs openclaw-gateway 2>&1 | grep 'dashboard'
 sudo docker exec openclaw-gateway curl -s http://127.0.0.1:6090/dashboard/main/vnc.html
 
 # External access via tunnel
-curl -s https://<OPENCLAW_BROWSER_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>/
+curl -s https://<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>/
 ```
 
 ## Troubleshooting
