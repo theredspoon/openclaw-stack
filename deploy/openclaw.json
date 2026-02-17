@@ -94,9 +94,9 @@
     // Agent sandbox default settings - all agents inherit these settings & can override per agent
     "defaults": {
       "sandbox": {
-        // non-main: operator DM session runs on host (gateway restart, docker mgmt, full filesystem).
-        // All other sessions (group chats, channel sessions, subagent spawns) stay sandboxed.
-        "mode": "non-main",
+        // all: every agent session runs sandboxed by default.
+        // Main agent overrides to "non-main" so operator DMs run on host.
+        "mode": "all",
         "scope": "agent",
         "docker": {
           "image": "openclaw-sandbox:bookworm-slim",
@@ -169,7 +169,7 @@
     },
     // List of agents
     // Agents inherit the default sandbox settings above - the configs in list are the overrides
-    // With mode:non-main, main operator DM runs on host; all other sessions are sandboxed
+    // Default mode:all sandboxes every session; main overrides to non-main for host access
     // All other agents should be customized as needed - the default list config is just to get you started with examples
     "list": [
       // MAIN AGENT
@@ -184,6 +184,11 @@
         // remove "skills": [], and disable the coordinator plugin.
         "id": "main",
         "default": true,
+        "sandbox": {
+          // Override default "all" — operator DM runs on host for full filesystem/docker access.
+          // Group chats and subagent spawns still get sandboxed.
+          "mode": "non-main"
+        },
         "skills": [],
         "tools": {
           // No allow list needed — main runs on host and gets all tools by default.
