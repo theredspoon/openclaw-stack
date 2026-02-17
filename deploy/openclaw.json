@@ -181,7 +181,7 @@
         // The coordinator plugin auto-discovers routes from agent configs and writes
         // a routing table to AGENTS.md (loaded into system prompt).
         // Per-agent skill filtering ("skills": []) ensures main sees no skill blocks.
-        // If you want a single fully-capable agent, set image: openclaw-sandbox-common:bookworm-slim,
+        // If you want a single fully-capable agent, set image: openclaw-sandbox-toolkit:bookworm-slim,
         // remove "skills": [], and disable the coordinator plugin.
         "id": "main",
         "default": true,
@@ -218,7 +218,7 @@
         "sandbox": {
           "workspaceAccess": "rw", // Code agent needs persistent read/write access to workspace
           "docker": {
-            "image": "openclaw-sandbox-common:bookworm-slim", // sandbox-common has the full sandbox-toolkit bins
+            "image": "openclaw-sandbox-toolkit:bookworm-slim", // sandbox-toolkit has the full toolkit bins
             "network": "bridge", // enable network access for claude code, codex, etc. to work
             "memory": "4g", // Coding tasks need more headroom (claude code, LSPs, builds)
             "memorySwap": "8g",
@@ -267,7 +267,7 @@
         },
         "sandbox": {
           "docker": {
-            "image": "openclaw-sandbox-common:bookworm-slim",
+            "image": "openclaw-sandbox-toolkit:bookworm-slim",
             "network": "bridge",
             "memory": "1g", // Most skills are API-based, lightweight
             "memorySwap": "2g",

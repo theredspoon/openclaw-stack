@@ -142,7 +142,7 @@ Claude reads the [playbooks](playbooks/) and executes them step-by-step over SSH
 1. **Cloudflare Workers** — deploys the AI Gateway proxy and Log Receiver (~2 min)
 2. **VPS hardening** — creates users, hardens SSH, configures firewall and fail2ban (~3 min)
 3. **Docker + Sysbox** — installs the container runtime with security hardening (~3 min)
-4. **OpenClaw deployment** — builds the Docker image, starts the gateway and Vector log shipper, builds three sandbox images (base, common with 25+ tools, browser with noVNC) (~15 min on first boot)
+4. **OpenClaw deployment** — builds the Docker image, starts the gateway and Vector log shipper, builds sandbox images (base, packages, toolkit with 25+ tools, browser with noVNC) (~15 min on first boot)
 5. **Backups** — configures automated backup scripts (~1 min)
 6. **Reboot + verification** — reboots to confirm everything auto-starts, runs security audit (~3 min)
 7. **Post-deploy** — helps you configure Cloudflare Tunnel routes and pair your first device
@@ -374,12 +374,12 @@ openclaw doctor --deep
 # Expect 5-10 seconds of downtime for the gateway and agent sandboxes
 ./scripts/update-openclaw.sh
 
-# Update sandbox-toolkit bins to latest versions for sandboxes
-# Equivalent to running `apt-get upgrade` or `npm update`
-# See deploy/sandbox-toolkit.yaml for bins config
-# Does not resync deploy/sandbox-toolkit.yaml to VPS
-# Only runs update for version already on VPS
-./scripts/update-sandbox-toolkit.sh
+# Update sandbox toolkit — sync config, rebuild images
+# Default: detects new/changed tools and quick-layers them (seconds)
+# Use --full for a complete rebuild with proper layer ordering
+# See deploy/sandbox-toolkit.yaml for tool config
+./scripts/update-sandbox-toolkit.sh          # quick (default)
+./scripts/update-sandbox-toolkit.sh --full   # full rebuild
 
 # Update and rebuild sandbox containers
 ./scripts/update-sandboxes.sh
@@ -407,7 +407,7 @@ Claude will pull the latest code, rebuild the Docker image with auto-patching, a
 ### Managing sandbox tools
 
 The tools available inside agent sandboxes are defined in `deploy/sandbox-toolkit.yaml`.
-See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for how to add, update, or remove tools.
+Adding a tool is a one-line YAML edit + `scripts/update-sandbox-toolkit.sh` — the default quick mode layers the new tool in seconds. See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for details.
 
 ---
 
@@ -492,7 +492,7 @@ openclaw-vps/
 │   ├── vector.yaml                   # Log shipper config
 │   ├── build-openclaw.sh             # Docker image builder with auto-patching
 │   ├── entrypoint-gateway.sh         # Container init (dockerd, sandboxes, privilege drop)
-│   ├── rebuild-sandboxes.sh          # Sandbox image builder with config detection
+│   ├── rebuild-sandboxes.sh          # Layered sandbox image builder with split config detection
 │   ├── host-alert.sh                 # Host monitoring + Telegram alerts
 │   ├── novnc-proxy.mjs              # Browser session reverse proxy
 │   └── logrotate-openclaw            # Log rotation config

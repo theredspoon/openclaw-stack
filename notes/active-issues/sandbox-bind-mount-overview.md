@@ -51,9 +51,9 @@ Complete Sandbox Filesystem Layer Map
   │ Minimal Debian + bash │ Base OS                           │ Upstream  │
   └───────────────────────┴───────────────────────────────────┴───────────┘
 
-  Common Sandbox (openclaw-sandbox-common:bookworm-slim)
+  Toolbox Sandbox (openclaw-sandbox-toolkit:bookworm-slim)
 
-  Built by: Upstream sandbox-common-setup.sh + our rebuild-sandboxes.sh layering
+  Built by: Upstream sandbox-toolkit-setup.sh + our rebuild-sandboxes.sh layering
 
   Path: All base image contents
   Contents: Inherited
@@ -120,7 +120,7 @@ Complete Sandbox Filesystem Layer Map
   │ Persistent home │ /home/node/sandboxes-home/code │ /home/sandbox │ rw   │ bind │
   └─────────────────┴────────────────────────────────┴───────────────┴──────┴──────┘
 
-  Plus overrides: network: "bridge", image: openclaw-sandbox-common:bookworm-slim
+  Plus overrides: network: "bridge", image: openclaw-sandbox-toolkit:bookworm-slim
 
   From openclaw.json config — Env Vars (via our docker.ts patch)
 

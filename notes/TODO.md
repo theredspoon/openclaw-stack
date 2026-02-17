@@ -2,24 +2,22 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
-- Sandbox Config optimization: <https://docs.openclaw.ai/gateway/sandboxing#sandboxing>
-  - See also <https://docs.openclaw.ai/gateway/configuration-reference>
-  - [ ] Change sandbox mode to "non-main" - "all" is overly restrictive and main agent cannot make openclaw rpc/cli calls
-  - [ ] Change agents.defaults.sandbox.workspaceAccess to "ro"? - currently defaulting to "none"
-  - [ ] Set alerts channel for telegram if telegram config is provided
-    - <https://docs.openclaw.ai/gateway/configuration-reference#multi-account-all-channels>
+- [ ] After fresh deploy, try starting agent sandbox via CLI then accessing /browser after CF Access
+  - Does noVNC block access since it's not paired?
 
-- [ ] Mess around with the config in the UI then check the openclaw.json
-  - Use the changes to update 04 playbook - e.g.
+- [x] Add tagging to sandbox common builds to allow for layered builds instead of full rebuilds
 
-  ```json
-   "logging": {
-    "consoleStyle": "json",
-    "redactSensitive": "tools"
-  },
-  ```
+- [x] Rename sandbox-common to sandbox-toolkit
 
-- [ ] Add cron to openclaw to analyze the vps status reports added daily to its workspace
+- [x] Add sandbox-toolkit bin test to verification step
+
+- [ ] Try deploying without skill-bin shims to see if it's been fixed
+  - Upstream might have better support for routing
+  - Coordinator might be solving the issue without shimming
+  - At a minimum, needs to be renamed to tool-bin to avoid confusion
+
+- [ ] Rename novnc-proxy to something more generic - it will end up doing more like showing logs, etc
+  - [ ] Add pairing test
 
 - [ ] Verify if the health cron in log worker can reach the VPS over the tunnel, if not, remove from README
 
@@ -54,16 +52,11 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 
 ## Next Steps
 
-- [ ] Deploy the AI Gateway worker & test end-to-end
-- [ ] Deploy the Log Receiver worker & test with Vector
-- [ ] Deploy single-VPS architecture on VPS-1
-- [ ] Test AI Gateway routing end-to-end (all provider keys via AI_GATEWAY_AUTH_TOKEN)
 - [ ] Configure Cloudflare Health Check in dashboard
 
 ## Future
 
 - [ ] Add R2 sync of config & workspace for backups
 - [ ] Add optional sidecar proxy to capture and inspect sandbox traffic
-- [ ] Test if OpenClaw can use claude code effectively in sandboxes
 - [ ] Harden openclaw gateway container further (after testing sandbox stability)
 - [ ] Add Logpush to R2 for long-term log storage

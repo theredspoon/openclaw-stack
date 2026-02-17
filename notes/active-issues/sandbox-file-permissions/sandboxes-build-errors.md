@@ -24,7 +24,7 @@ Sandbox images are built **lazily** – not at startup, but when the first sandb
 1. **sandbox-setup.sh** → `docker build -t openclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .`
    - Builds from debian:bookworm-slim + bash, curl, git, jq, python3, ripgrep
    - Sets USER sandbox (non-root user)
-2. **sandbox-common-setup.sh** → `docker build -t openclaw-sandbox-common:bookworm-slim` (heredoc Dockerfile)
+2. **sandbox-common-setup.sh** → `docker build -t openclaw-sandbox-toolkit:bookworm-slim` (heredoc Dockerfile)
    - `FROM openclaw-sandbox:bookworm-slim`– **inherits USER sandbox**
    - Runs apt-get update && apt-get install (Node.js, npm, pnpm, Bun, Go, Rust, Homebrew, build-essential)
    - ==**This is where the bug is.**== The heredoc Dockerfile doesn't add USER root before apt-get. Since the base image's default user is sandbox, apt-get fails with Permission denied on `/var/lib/apt/lists/partial`.
@@ -103,9 +103,9 @@ This is where the two entrypoint versions diverge:
 - If missing: `docker build -t openclaw-sandbox /app/sandbox/` (uses `/app/sandbox/Dockerfile` from upstream)
 - This builds successfully – it's FROM debian:bookworm-slim and sets USER sandbox at the end
 
-**Image 2: openclaw-sandbox-common:bookworm-slim** (dev tools)
+**Image 2: openclaw-sandbox-toolkit:bookworm-slim** (dev tools)
 
-- Checks: `docker image inspect openclaw-sandbox-common:bookworm-slim`
+- Checks: `docker image inspect openclaw-sandbox-toolkit:bookworm-slim`
 - If missing: calls `/app/scripts/sandbox-common-setup.sh` (upstream script)
 - ==**The upstream script fails**== because it builds FROM openclaw-sandbox:bookworm-slim which has USER sandbox, and the heredoc Dockerfile runs apt-get **without switching to root first**
 - **04 entrypoint:** just logs "build successfully" (incorrectly – it doesn't verify the image exists)
@@ -118,8 +118,8 @@ This is where the two entrypoint versions diverge:
 
 **Image 4: openclaw-sandbox-claude:bookworm-slim** (our custom layer)
 
-- If missing AND openclaw-sandbox-common:bookworm-slim exists: builds via inline Dockerfile
-- FROM openclaw-sandbox-common:bookworm-slim + USER root + apt-get install ffmpeg imagemagick + npm install -g @anthropic-ai/claude-code + USER 1000
+- If missing AND openclaw-sandbox-toolkit:bookworm-slim exists: builds via inline Dockerfile
+- FROM openclaw-sandbox-toolkit:bookworm-slim + USER root + apt-get install ffmpeg imagemagick + npm install -g @anthropic-ai/claude-code + USER 1000
 - ==**If common image failed to build,**== this is skipped entirely (no base to layer on)
 
 ### Phase 4 – Privilege drop
@@ -140,7 +140,7 @@ sandbox-setup.sh builds openclaw-sandbox:bookworm-slim
               └── RUN apt-get update → runs as sandbox_user
                   └── Permission denied on /var/lib/apt/lists/partial
                       └── Build fails silently (set +e)
-                          └── No openclaw-sandbox-common:bookworm-slim image
+                          └── No openclaw-sandbox-toolkit:bookworm-slim image
                               └── claude sandbox can't build (depends on common)
                                   └── Agents get no sandbox or only base sandbox
 ```
@@ -168,7 +168,7 @@ So to answer your original question: **the upstream script doesn't work anywhere
 
 1. Build rooted intermediate: `FROM openclaw-sandbox:bookworm-slim` + `USER root` → tag `openclaw-sandbox-base-root:bookworm-slim`
 2. Run upstream: `BASE_IMAGE=openclaw-sandbox-base-root:bookworm-slim PACKAGES="...+ffmpeg+imagemagick" /app/scripts/sandbox-common-setup.sh`
-3. Fix security: `FROM openclaw-sandbox-common:bookworm-slim` + `USER 1000` → re-tag
+3. Fix security: `FROM openclaw-sandbox-toolkit:bookworm-slim` + `USER 1000` → re-tag
 4. Cleanup: `docker rmi openclaw-sandbox-base-root:bookworm-slim`
 5. If any step fails → log ERROR, no fallback (surfaces during deployment verification)
 
@@ -177,8 +177,8 @@ So to answer your original question: **the upstream script doesn't work anywhere
 | Image | Adds | Inherits from |
 |-------|------|---------------|
 | `openclaw-sandbox` | bash, curl, git, jq, python3, ripgrep | debian:bookworm-slim |
-| `openclaw-sandbox-common` | node, npm, pnpm, bun, go, rust, build-essential, **ffmpeg, imagemagick**, brew | openclaw-sandbox |
-| `openclaw-sandbox-claude` | Claude Code CLI only | openclaw-sandbox-common |
+| `openclaw-sandbox-toolkit` | node, npm, pnpm, bun, go, rust, build-essential, **ffmpeg, imagemagick**, brew | openclaw-sandbox |
+| `openclaw-sandbox-claude` | Claude Code CLI only | openclaw-sandbox-toolkit |
 | `openclaw-sandbox-browser` | chromium, xvfb, novnc | debian:bookworm-slim |
 
 **Self-healing:** If upstream ever fixes the bug, the intermediate image becomes harmless — the script succeeds with or without it, and `USER 1000` at the end is a no-op if already set.

@@ -79,7 +79,7 @@
 │  │  └ Nested Docker (openclaw agent sandboxes) ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐         │   │  │
 │  │    │ sandbox-code (claude code, codex, etc. · net)            │         │   │  │
 │  │    │ sandbox-browser (chromium · playwright · net)            │         │   │  │
-│  │    │ sandbox-common (build tools · net · write)               │         │   │  │
+│  │    │ sandbox-toolkit (build tools · net · write)              │         │   │  │
 │  │    │ sandbox (base · no net · limited write)                  │         │   │  │
 │  │    └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┘         │   │  │
 │  │                                                                         │   │  │

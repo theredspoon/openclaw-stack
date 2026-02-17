@@ -72,7 +72,7 @@
           │       "--memory", "1g",
           │       "--pids-limit", "256",
           │       "--user", "1000:1000",
-          │       "openclaw-sandbox-common:bookworm-slim",
+          │       "openclaw-sandbox-toolkit:bookworm-slim",
           │       "sleep", "infinity"])
           │     then: spawn("docker", ["start", containerName])
           │
@@ -109,7 +109,7 @@
           └── debian:bookworm-slim + bash, curl, git, jq, python3, ripgrep
 
   scripts/sandbox-common-setup.sh
-    └── docker build -t openclaw-sandbox-common:bookworm-slim (heredoc Dockerfile)
+    └── docker build -t openclaw-sandbox-toolkit:bookworm-slim (heredoc Dockerfile)
           └── FROM openclaw-sandbox:bookworm-slim
               + Node.js, npm, pnpm, Bun, Python3, Go, Rust, Homebrew, build-essential
 
@@ -239,7 +239,7 @@
   │        • docker build -t openclaw-sandbox:bookworm-slim            │
   │          (from /app/Dockerfile.sandbox)                            │
   │        • /app/scripts/sandbox-common-setup.sh                      │
-  │          (builds openclaw-sandbox-common:bookworm-slim)            │
+  │          (builds openclaw-sandbox-toolkit:bookworm-slim)            │
   │        • /app/scripts/sandbox-browser-setup.sh                     │
   │          (builds openclaw-sandbox-browser:bookworm-slim)           │
   │     f. exec "$@" → start gateway                                   │
@@ -255,7 +255,7 @@
   │       │                                                            │
   │       ▼                                                            │
   │  spawn("docker", ["create", ...]) → inner dockerd creates nested   │
-  │  container from openclaw-sandbox-common:bookworm-slim              │
+  │  container from openclaw-sandbox-toolkit:bookworm-slim              │
   │       │                                                            │
   │       ▼                                                            │
   │  Agent tools (exec, read, write, etc.) run inside nested container │
@@ -286,7 +286,7 @@
   │  │   │  ┌─ Inner Docker Daemon (nested, via Sysbox) ───-─────┐     │   │
   │  │   │  │                                                    │     │   │
   │  │   │  │  openclaw-sbx-main-abc123  (sandbox container)     │     │   │
-  │  │   │  │  ├── image: openclaw-sandbox-common:bookworm-slim  │     │   │
+  │  │   │  │  ├── image: openclaw-sandbox-toolkit:bookworm-slim  │     │   │
   │  │   │  │  ├── network: none                                 │     │   │
   │  │   │  │  ├── read-only root, tmpfs /tmp                    │     │   │
   │  │   │  │  ├── cap-drop ALL                                  │     │   │

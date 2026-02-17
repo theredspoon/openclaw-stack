@@ -86,9 +86,9 @@ BINS=$(sudo docker exec --user node openclaw-gateway \
   | jq -r '.allBins[]')
 echo "Bins to test: $BINS"
 
-# Find a running sandbox-common container (code or skills agent)
+# Find a running sandbox-toolkit container (code or skills agent)
 SANDBOX=$(sudo docker exec --user node openclaw-gateway \
-  docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format '{{.Names}}' | head -1)
+  docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
 
 # If no sandbox is running, trigger one via the openclaw CLI.
 # This creates the container with correct env (PATH, etc.) from openclaw.json.
@@ -102,7 +102,7 @@ if [ -z "$SANDBOX" ]; then
   for i in $(seq 1 20); do
     sleep 3
     SANDBOX=$(sudo docker exec --user node openclaw-gateway \
-      docker ps --filter "ancestor=openclaw-sandbox-common:bookworm-slim" --format '{{.Names}}' | head -1)
+      docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
     [ -n "$SANDBOX" ] && break
     echo "  waiting... ($((i*3))s)"
   done

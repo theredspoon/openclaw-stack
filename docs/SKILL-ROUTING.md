@@ -11,8 +11,8 @@ See also [SANDBOX-TOOLKIT.md](SANDBOX-TOOLKIT.md)
 | Agent | Image | Role | Skills |
 |-------|-------|------|--------|
 | `main` | `openclaw-sandbox:bookworm-slim` (base) | Coordinator — routes tasks to sub-agents | `[]` (none) |
-| `code` | `openclaw-sandbox-common:bookworm-slim` | Coding, GitHub, tool creation | `coding-agent`, `github`, `clawhub`, `skill-creator` |
-| `skills` | `openclaw-sandbox-common:bookworm-slim` | All non-coding skills | `blogwatcher`, `gemini`, `himalaya`, etc. |
+| `code` | `openclaw-sandbox-toolkit:bookworm-slim` | Coding, GitHub, tool creation | `coding-agent`, `github`, `clawhub`, `skill-creator` |
+| `skills` | `openclaw-sandbox-toolkit:bookworm-slim` | All non-coding skills | `blogwatcher`, `gemini`, `himalaya`, etc. |
 
 The main agent runs in `non-main` sandbox mode: operator DMs execute on the gateway host (full docker/filesystem access), while group chats and subagent spawns are sandboxed.
 
@@ -38,7 +38,7 @@ When OpenClaw builds an agent's skill prompt, it filters skills through `shouldI
 
 `hasBinary()` (`src/shared/config-eval.ts`) scans `$PATH` directories using `fs.accessSync(candidate, X_OK)`. It runs **on the gateway process**, not inside sandbox containers. This creates a mismatch:
 
-- Real tool binaries (gh, uv, himalaya, etc.) are baked into `sandbox-common` at image build time
+- Real tool binaries (gh, uv, himalaya, etc.) are baked into `sandbox-toolkit` at image build time
 - The gateway process runs on the host, where those binaries don't exist
 - Without intervention, every skill with `requires.bins` would be filtered out on the gateway — even for agents whose sandboxes have the binaries
 
@@ -67,11 +67,11 @@ The main agent's `"skills": []` config prevents OpenClaw from including any skil
 - The coordinator plugin's routing table in `AGENTS.md` is the only skill context main needs
 - Setting `skills: []` keeps main's prompt clean and focused on coordination
 
-## Why Not Just Use sandbox-common for Main?
+## Why Not Just Use sandbox-toolkit for Main?
 
-If main used `sandbox-common`, all skills would have real binaries and pass `hasBinary()`. Skills would appear in main's prompt and main could execute them directly in its sandbox — no delegation needed.
+If main used `sandbox-toolkit`, all skills would have real binaries and pass `hasBinary()`. Skills would appear in main's prompt and main could execute them directly in its sandbox — no delegation needed.
 
-### Arguments for sandbox-common on main
+### Arguments for sandbox-toolkit on main
 
 - **Simpler setup**: no shim system, no coordinator routing, skills just work
 - **Lower latency**: direct execution vs spawn-wait-relay for every skill task
@@ -88,7 +88,7 @@ If main used `sandbox-common`, all skills would have real binaries and pass `has
 
 ### The pragmatic answer
 
-The coordinator + shim pattern is a **power-user feature**. For a general-purpose default setup, sandbox-common on main would be simpler and less error-prone. The split matters when you care about credential scoping, resource isolation, or limiting LLM capabilities per agent.
+The coordinator + shim pattern is a **power-user feature**. For a general-purpose default setup, sandbox-toolkit on main would be simpler and less error-prone. The split matters when you care about credential scoping, resource isolation, or limiting LLM capabilities per agent.
 
 ## Timing: When Checks Run
 
@@ -130,7 +130,7 @@ The gateway does NOT block on binary checks at startup. A missing binary doesn't
 
 ## Future Considerations
 
-- **Default to sandbox-common for all agents**: simplifies initial setup, removes shim dependency for basic deployments. Power users can still customize images per-agent
+- **Default to sandbox-toolkit for all agents**: simplifies initial setup, removes shim dependency for basic deployments. Power users can still customize images per-agent
 - **Upstream `skill_eligibility` hook**: would let the coordinator plugin directly control skill filtering instead of relying on shims + prompt injection
 - **Upstream `skipBinaryCheck` config option**: per-skill override to trust that the sandbox has the binary without needing a shim on the gateway
 - **Image-aware skill filtering**: OpenClaw could inspect the agent's configured sandbox image to determine available binaries, eliminating the gateway/sandbox mismatch entirely

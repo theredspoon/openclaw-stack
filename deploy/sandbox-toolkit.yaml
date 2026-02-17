@@ -5,7 +5,7 @@
 #
 # Adding a new tool = add entry here + rebuild sandbox images.
 
-# Apt packages installed in sandbox-common image.
+# Apt packages installed in sandbox-packages image.
 # These are system-level dependencies — compilers, libraries, CLI tools.
 # NOTE: Debian bookworm apt packages are often significantly behind upstream.
 # Prefer brew or direct installs for tools where version matters.
@@ -31,7 +31,7 @@ packages:
 #   apt      — apt package name; all apt tools are batched into one layer.
 #              Debian bookworm apt repo is significantly behind the latest versions for most bins.
 #              Use apt if latest version is not needed, otherwise use install.
-#   install  — shell command run as root in sandbox-common
+#   install  — shell command run as root in sandbox-toolkit
 #   version  — substituted as ${VERSION} in install script (optional)
 #   bins     — binary names this tool provides (default: [tool name])
 #
