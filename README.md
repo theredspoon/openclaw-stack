@@ -90,13 +90,17 @@ required config setup, git clone this repo, and automate the deploy.
    git clone git@github.com:simple10/openclaude.git openclaw-vps
    cd openclaw-vps
 
+   # Copy the config template
+   cp openclaw-config.env.example openclaw-config.env
+   # Edit required config vars or just start claude, it will help you gather requirements
+
    # Run claude with skip permissions if you want a more automated deploy
    claude --dangerously-skip-permissions "start"
 
    # Claude will deploy OpenClaw and test the VPS (20+ minutes)
    ```
 
-After successfully deploying OpenClaw to your VPS, claude assists you in OpenClaw device pairing.
+After successfully deploying OpenClaw, claude assists you in device pairing & accessing the webchat.
 
 ## Upgrading or Maintaining Your OpenClaw VPS
 
@@ -133,12 +137,14 @@ If you want more control, see [scripts/](scripts/) dir for CLI helper scripts wi
 
 ## Security
 
+**Host**
+
 - **Sysbox sandboxing**
    — agent code executes in isolated Docker-in-Docker containers
 - **API key isolation**
    — LLM provider keys stored as Cloudflare Worker secrets, not on the VPS
 - **Cloudflare Access**
-   — optional authentication layer in front of the tunnel
+   — authentication layer in front of the tunnel
 - **No exposed ports**
    — Cloudflare Tunnel uses outbound-only connections; SSH is the only public port
 - **SSH hardened**
@@ -153,6 +159,16 @@ If you want more control, see [scripts/](scripts/) dir for CLI helper scripts wi
    — sysctl tuning and automatic security updates
 - **Security audit**
    — built-in `openclaw security audit` checks for misconfigurations; claude runs comprehensive verifications & security checks during deploy
+
+**OpenClaw**
+
+- **Containerized gateway** — runs inside its own Sysbox container with no root access to the host
+- **Sandboxed agents** — all agent tools are `docker exec`'d into isolated containers with dropped capabilities
+- **Isolated browsers** — each agent's browser runs in a separate container
+- **No stored API keys** — the gateway only has an auth token for the LLM proxy, never the real provider keys
+- **Unprivileged processes** — no root user in the gateway or any agent sandbox
+- **Device pairing** - OpenClaw UI requires one-time per device pairing
+- **Double auth layer** - Cloudflare Access + OpenClaw device pairing
 
 ## What happens during deploy
 
