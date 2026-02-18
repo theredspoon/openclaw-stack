@@ -206,7 +206,11 @@
           // No allow list needed — main runs on host and gets all tools by default.
           // gateway is available because the sandbox deny doesn't apply to host sessions.
           // Deny tools main shouldn't use as a coordinator:
-          "deny": ["canvas", "nodes", "discord"]
+          // browser: no Chrome in gateway container; OpenClaw defaults to trying host browser relay when running in non-main mode
+          // Main delegates browser tasks to other sandboxed agents with their own browser containers
+          // If main is running in sandbox.mode:"all" then optionally remove "browser" from deny list to allow spawning it's own browser container
+          // non-main -> host browser behavior is currently non-configurable here - can be somewhat controlled with a custom instruction in AGENTS.md
+          "deny": ["browser", "canvas", "nodes", "discord"]
         },
         "subagents": {
           "allowAgents": ["code", "skills"]
@@ -336,7 +340,7 @@
           "write",
           "edit",
           "apply_patch", // Allow LLM to apply patches to files instead of individual edits
-          "browser", // Each agent can spawn a browser
+          "browser", // Each agent can spawn a browser unless it explicitly denies in agent's tools list
           "sessions_list",
           "sessions_history",
           "sessions_send",

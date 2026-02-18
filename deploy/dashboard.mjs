@@ -429,29 +429,51 @@ function findEntry(agentId) {
   return entries.find((e) => e.sessionKey === `agent:${agentId}`)
 }
 
-// ── Non-main agent detection ─────────────────────────────────────────
-// Agents with sandbox.mode: "non-main" run on the host for operator DMs
-// and can't use sandbox browsers. Hide their browser entry when stopped
-// to avoid confusing users (the sandbox browser container exists but is
-// unusable from host sessions).
+// ── Agent config detection ───────────────────────────────────────────
+// Reads openclaw.json to determine:
+// - nonMainAgents: sandbox.mode "non-main" — hide browser when stopped
+//   (can't use sandbox browsers from host sessions)
+// - browserDeniedAgents: "browser" in tools.deny — show "Disabled" instead
+//   of "Stopped" so users know the agent can't use browser at all
 let nonMainAgents = new Set()
+let browserDeniedAgents = new Set()
 
-function loadNonMainAgents() {
+function loadAgentConfig() {
   try {
     const raw = readFileSync(OPENCLAW_CONFIG, 'utf8')
     // Strip JSONC comments for JSON.parse (no // appears inside string values in our config)
     const json = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
     const config = JSON.parse(json)
     const agents = config?.agents?.list || []
-    const result = new Set()
+    const nonMain = new Set()
+    const denied = new Set()
     for (const agent of agents) {
       if (agent?.sandbox?.mode === 'non-main') {
-        result.add(agent.id)
+        nonMain.add(agent.id)
+      }
+      const deny = agent?.tools?.deny || []
+      if (deny.includes('browser')) {
+        denied.add(agent.id)
       }
     }
-    nonMainAgents = result
-    if (result.size > 0) {
-      console.log(`[dashboard] Non-main agents (browser hidden when stopped): ${[...result].join(', ')}`)
+    // Also check the top-level sandbox tools deny list (applies to all sandboxed agents)
+    const sandboxDeny = config?.tools?.sandbox?.tools?.deny || []
+    if (sandboxDeny.includes('browser')) {
+      for (const agent of agents) {
+        // Only add if agent doesn't have its own allow list overriding it
+        const agentAllow = agent?.tools?.allow || []
+        if (!agentAllow.includes('browser')) {
+          denied.add(agent.id)
+        }
+      }
+    }
+    nonMainAgents = nonMain
+    browserDeniedAgents = denied
+    if (nonMain.size > 0) {
+      console.log(`[dashboard] Non-main agents (browser hidden when stopped): ${[...nonMain].join(', ')}`)
+    }
+    if (denied.size > 0) {
+      console.log(`[dashboard] Browser-denied agents: ${[...denied].join(', ')}`)
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
@@ -460,11 +482,11 @@ function loadNonMainAgents() {
   }
 }
 
-function watchNonMainAgents() {
+function watchAgentConfig() {
   let debounceTimer = null
   const reload = () => {
     clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => loadNonMainAgents(), 500)
+    debounceTimer = setTimeout(() => loadAgentConfig(), 500)
   }
   try { watch(OPENCLAW_CONFIG, reload) } catch { /* file may not exist yet */ }
   watchFile(OPENCLAW_CONFIG, { interval: 30000 }, reload)
@@ -504,6 +526,7 @@ const CSS = `
     .status.up { background: #4caf50; }
     .status.down { background: #f44336; }
     .note { color: #888; font-size: 0.85em; margin-top: 16px; }
+    tr.disabled td { opacity: 0.4; }
     .dl { font-size: 1.2em; padding: 2px 6px; }
 `
 
@@ -561,10 +584,11 @@ async function indexPage() {
           wsPrefix ? wsPrefix + '/' : ''
         }browser/${id}/websockify">${id}</a>`
       : `${id}`
-    return `<tr>
+    const denied = !up && browserDeniedAgents.has(id)
+    return `<tr${denied ? ' class="disabled"' : ''}>
       <td>${statusDot}${link}</td>
       <td>${e.containerName}</td>
-      <td>${up ? 'Running' : 'Stopped'}</td>
+      <td>${up ? 'Running' : denied ? 'Disabled' : 'Stopped'}</td>
     </tr>`
   })
 
@@ -960,8 +984,8 @@ server.on('upgrade', async (req, socket, head) => {
 })
 
 // ── Startup ──────────────────────────────────────────────────────────
-loadNonMainAgents()
-watchNonMainAgents()
+loadAgentConfig()
+watchAgentConfig()
 
 if (PAIRING_AUTH_ENABLED) {
   loadPairedDevices()
