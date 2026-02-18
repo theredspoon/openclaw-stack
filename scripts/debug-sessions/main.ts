@@ -346,9 +346,9 @@ function rLlmCalls(w: number, h: number): string[] {
   L.push(st(
     `   ${"AGENT".padEnd(12)} ${"MODEL".padEnd(22)} ${"DATE".padEnd(17)} ` +
     `${"DUR".padStart(6)} ${"IN_TOK".padStart(7)} ${"OUT_TOK".padStart(7)} ` +
-    `${"CACHE_R".padStart(7)} ${"COST".padStart(8)}  ${"STOP".padEnd(8)}`, DIM,
+    `${"CACHE_R".padStart(7)} ${"CACHE_W".padStart(7)} ${"COST".padStart(8)}  ${"STOP".padEnd(8)}`, DIM,
   ))
-  L.push(st("  " + "\u2500".repeat(Math.min(w - 4, 108)), DIM))
+  L.push(st("  " + "\u2500".repeat(Math.min(w - 4, 116)), DIM))
 
   const headerH = L.length
   const footerH = 1
@@ -385,6 +385,7 @@ function llmCallRow(ci: LlmCallInfo, sel: boolean): string {
   const inTok = humanTokens(ci.inputTokens).padStart(7)
   const outTok = humanTokens(ci.outputTokens).padStart(7)
   const cacheR = humanTokens(ci.cacheReadTokens).padStart(7)
+  const cacheW = humanTokens(ci.cacheWriteTokens).padStart(7)
 
   const costVal = ci.cost ?? 0
   const costStr = fmtCost(costVal).padStart(8)
@@ -396,7 +397,7 @@ function llmCallRow(ci: LlmCallInfo, sel: boolean): string {
   const stopC = ci.stopReason === "stop" || ci.stopReason === "end_turn"
     ? st(stop, GREEN) : st(stop, RED)
 
-  return `${pfx}${agent} ${model} ${date} ${dur} ${inTok} ${outTok} ${cacheR} ${costC}  ${stopC}`
+  return `${pfx}${agent} ${model} ${date} ${dur} ${inTok} ${outTok} ${cacheR} ${cacheW} ${costC}  ${stopC}`
 }
 
 function rLlmActions(w: number, h: number): string[] {

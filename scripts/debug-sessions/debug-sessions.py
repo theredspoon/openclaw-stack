@@ -514,14 +514,14 @@ def analyze_session(records):
 # ─── LLM Log Parsing ────────────────────────────────────────────────────────
 
 # Per-million-token pricing (input, output, cache_read, cache_write)
-# cache_write is typically charged at input rate
+# cache_write is 25% more than base input price per Anthropic pricing
 MODEL_PRICING = {
-    "claude-opus-4": (15.0, 75.0, 1.5, 15.0),
-    "claude-sonnet-4": (3.0, 15.0, 0.3, 3.0),
-    "claude-haiku-4": (0.80, 4.0, 0.08, 0.80),
-    "claude-3-5-sonnet": (3.0, 15.0, 0.3, 3.0),
-    "claude-3-5-haiku": (0.80, 4.0, 0.08, 0.80),
-    "claude-3-opus": (15.0, 75.0, 1.5, 15.0),
+    "claude-opus-4": (15.0, 75.0, 1.50, 18.75),
+    "claude-sonnet-4": (3.0, 15.0, 0.30, 3.75),
+    "claude-haiku-4": (0.80, 4.0, 0.08, 1.00),
+    "claude-3-5-sonnet": (3.0, 15.0, 0.30, 3.75),
+    "claude-3-5-haiku": (0.80, 4.0, 0.08, 1.00),
+    "claude-3-opus": (15.0, 75.0, 1.50, 18.75),
 }
 
 DEFAULT_LLM_LOG_PATHS = [
@@ -1253,11 +1253,11 @@ def cmd_llm_list(args):
 
     hdr = (
         f"{'TIMESTAMP':21s} {'AGENT':12s} {'MODEL':24s} {'DUR':>6s} "
-        f"{'IN_TOK':>7s} {'OUT_TOK':>7s} {'CACHE_R':>7s} {'COST':>8s} "
+        f"{'IN_TOK':>7s} {'OUT_TOK':>7s} {'CACHE_R':>7s} {'CACHE_W':>7s} {'COST':>8s} "
         f"{'STOP':12s} {'TOOLS'}"
     )
     print(c(C.BOLD + C.CYAN, hdr))
-    print(c(C.DIM, "\u2500" * 130))
+    print(c(C.DIM, "\u2500" * 140))
 
     for call in calls:
         ts = ""
@@ -1297,6 +1297,7 @@ def cmd_llm_list(args):
             f"{human_tokens(call['inputTokens']):>7s} "
             f"{human_tokens(call['outputTokens']):>7s} "
             f"{human_tokens(call['cacheReadTokens']):>7s} "
+            f"{human_tokens(call['cacheWriteTokens']):>7s} "
             f"{cost_col} {stop_col} {c(C.DIM, tools)}"
         )
 
@@ -1379,10 +1380,12 @@ def cmd_llm_trace(args):
         else:
             cost_col = cost_str
 
-        cache_pct = ""
-        if in_tok > 0:
-            pct = call["cacheReadTokens"] / (in_tok + call["cacheReadTokens"]) * 100
-            cache_pct = f"cache {pct:.0f}%"
+        cache_parts = []
+        if call["cacheReadTokens"] > 0:
+            cache_parts.append(f"cr:{human_tokens(call['cacheReadTokens'])}")
+        if call["cacheWriteTokens"] > 0:
+            cache_parts.append(f"cw:{human_tokens(call['cacheWriteTokens'])}")
+        cache_str = "  ".join(cache_parts)
 
         print(
             c(C.BOLD + C.CYAN, f"  [{i:3d}]")
@@ -1390,7 +1393,7 @@ def cmd_llm_trace(args):
         )
         print(
             f"        in: {human_tokens(in_tok)}  out: {human_tokens(out_tok)}  "
-            f"{cache_pct}  cost: {cost_col}  "
+            f"{cache_str}  cost: {cost_col}  "
             + c(C.DIM, f"cumul: {fmt_cost(cumulative_cost)}")
         )
         if tools:
