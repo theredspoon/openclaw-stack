@@ -81,12 +81,13 @@ function formatHistory(messages) {
   }
 }
 
-function contextFields(ctx) {
+function contextFields(event, ctx) {
   return {
     agentId: ctx.agentId ?? undefined,
     sessionKey: ctx.sessionKey ?? undefined,
-    runId: ctx.runId ?? undefined,
-    sessionId: ctx.sessionId ?? undefined,
+    // runId is on the event object, not ctx
+    runId: event.runId ?? ctx.runId ?? undefined,
+    sessionId: event.sessionId ?? ctx.sessionId ?? undefined,
   }
 }
 
@@ -113,11 +114,13 @@ export default {
     }
 
     // ── llm_input handler ──────────────────────────────────────────
+    // Actual OpenClaw event fields: runId, sessionId, provider, model,
+    // systemPrompt, prompt, historyMessages, imagesCount
     api.on('llm_input', async (event, ctx) => {
       const entry = {
         timestamp: new Date().toISOString(),
         event: 'llm_input',
-        ...contextFields(ctx),
+        ...contextFields(event, ctx),
         provider: event.provider ?? undefined,
         model: event.model ?? undefined,
       }
@@ -127,21 +130,22 @@ export default {
         entry.systemPrompt = truncate(event.systemPrompt, LIMITS.SYSTEM_PROMPT)
       }
 
-      // Current prompt/messages
+      // Current prompt
       if (event.prompt !== undefined) {
         entry.prompt =
           typeof event.prompt === 'string' ? truncate(event.prompt, LIMITS.PROMPT) : event.prompt
       }
-      if (event.messages !== undefined) {
-        entry.messages = formatHistory(event.messages)
+
+      // History messages (OpenClaw uses historyMessages, not messages/history)
+      const history = event.historyMessages ?? event.messages ?? event.history
+      if (history !== undefined) {
+        entry.history = formatHistory(history)
       }
 
-      // History
-      if (event.history !== undefined) {
-        entry.history = formatHistory(event.history)
-      }
+      // Image count
+      if (event.imagesCount !== undefined) entry.imagesCount = event.imagesCount
 
-      // Tools
+      // Tools (if provided by future OpenClaw versions)
       if (event.tools !== undefined) {
         entry.toolCount = Array.isArray(event.tools) ? event.tools.length : undefined
         entry.toolNames = Array.isArray(event.tools)
@@ -157,58 +161,75 @@ export default {
     })
 
     // ── llm_output handler ─────────────────────────────────────────
+    // Actual OpenClaw event fields: runId, sessionId, provider, model,
+    // assistantTexts, lastAssistant, usage{input,output,cacheRead,cacheWrite,total}
     api.on('llm_output', async (event, ctx) => {
       const entry = {
         timestamp: new Date().toISOString(),
         event: 'llm_output',
-        ...contextFields(ctx),
+        ...contextFields(event, ctx),
         provider: event.provider ?? undefined,
         model: event.model ?? undefined,
       }
 
-      // Response content
-      if (event.response !== undefined) {
-        if (typeof event.response === 'string') {
-          entry.response = truncate(event.response, LIMITS.RESPONSE)
-        } else if (event.response?.content) {
+      // Response content — OpenClaw provides lastAssistant (message object)
+      // and assistantTexts (array of text strings)
+      const response = event.lastAssistant ?? event.response
+      if (response !== undefined) {
+        if (typeof response === 'string') {
+          entry.response = truncate(response, LIMITS.RESPONSE)
+        } else if (response?.content) {
           // Structured response — truncate text blocks
           entry.response = {
-            ...event.response,
-            content: Array.isArray(event.response.content)
-              ? event.response.content.map((block) => {
+            ...response,
+            content: Array.isArray(response.content)
+              ? response.content.map((block) => {
                   if (block.type === 'text' && typeof block.text === 'string') {
                     return { ...block, text: truncate(block.text, LIMITS.RESPONSE) }
                   }
                   return block
                 })
-              : event.response.content,
+              : response.content,
           }
         } else {
-          entry.response = event.response
+          entry.response = response
         }
       }
 
-      // Token usage
-      if (event.usage !== undefined) entry.usage = event.usage
+      // Token usage — OpenClaw uses {input, output, cacheRead, cacheWrite, total}
+      // Normalize to inputTokens/outputTokens for consistent log schema
+      if (event.usage !== undefined) {
+        entry.usage = event.usage
+        // Also write normalized top-level fields for easy parsing
+        entry.inputTokens = event.usage?.input ?? 0
+        entry.outputTokens = event.usage?.output ?? 0
+        entry.cacheReadTokens = event.usage?.cacheRead ?? 0
+        entry.cacheWriteTokens = event.usage?.cacheWrite ?? 0
+      }
+      // Fallback: check for top-level token fields (future-proofing)
       if (event.inputTokens !== undefined) entry.inputTokens = event.inputTokens
       if (event.outputTokens !== undefined) entry.outputTokens = event.outputTokens
       if (event.cacheReadTokens !== undefined) entry.cacheReadTokens = event.cacheReadTokens
       if (event.cacheWriteTokens !== undefined) entry.cacheWriteTokens = event.cacheWriteTokens
 
-      // Stop reason
-      if (event.stopReason !== undefined) entry.stopReason = event.stopReason
+      // Stop reason — extract from lastAssistant if available
+      const stopReason = event.stopReason ?? response?.stopReason ?? response?.stop_reason
+      if (stopReason !== undefined) entry.stopReason = stopReason
 
-      // Duration
+      // Duration (if provided by future OpenClaw versions)
       if (event.durationMs !== undefined) entry.durationMs = event.durationMs
 
-      // Tool use in response
+      // Tool calls — extract from lastAssistant content blocks
       if (event.toolCalls !== undefined) {
         entry.toolCalls = Array.isArray(event.toolCalls)
-          ? event.toolCalls.map((tc) => ({
-              name: tc.name || tc.function?.name,
-              id: tc.id,
-            }))
+          ? event.toolCalls.map((tc) => ({ name: tc.name || tc.function?.name, id: tc.id }))
           : event.toolCalls
+      } else if (response?.content && Array.isArray(response.content)) {
+        // Extract tool_use blocks from the assistant message
+        const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use')
+        if (toolUseBlocks.length > 0) {
+          entry.toolCalls = toolUseBlocks.map((b) => ({ name: b.name, id: b.id }))
+        }
       }
 
       await writeLine(entry)

@@ -577,12 +577,16 @@ def estimate_cost(model, input_tok, output_tok, cache_read=0, cache_write=0):
 
 
 def parse_llm_log(filepath):
-    """Parse LLM log JSONL, pair input/output by runId into call records.
+    """Parse LLM log JSONL, pair input/output into call records.
+
+    Pairing strategy:
+    - If entries have runId: pair by runId (future-proof)
+    - Otherwise: pair sequentially by sessionKey (last input matches next output)
 
     Returns list of dicts with merged fields from both input and output entries.
     Processes line-by-line to handle large files efficiently.
     """
-    inputs = {}  # runId -> entry
+    pending_inputs = {}  # runId or sessionKey -> entry
     calls = []
 
     with open(filepath, "r", errors="replace") as f:
@@ -596,21 +600,24 @@ def parse_llm_log(filepath):
                 continue
 
             event = entry.get("event")
-            run_id = entry.get("runId")
-            if not run_id:
+            if event not in ("llm_input", "llm_output"):
                 continue
 
-            if event == "llm_input":
-                inputs[run_id] = entry
-            elif event == "llm_output":
-                inp = inputs.pop(run_id, {})
+            # Use runId if available, otherwise fall back to sessionKey
+            run_id = entry.get("runId")
+            pair_key = run_id or entry.get("sessionKey") or entry.get("sessionId") or "_default"
 
-                # Normalize token usage — check both usage object and top-level fields
+            if event == "llm_input":
+                pending_inputs[pair_key] = entry
+            elif event == "llm_output":
+                inp = pending_inputs.pop(pair_key, {})
+
+                # Normalize token usage — check usage object (both naming conventions) and top-level fields
                 usage = entry.get("usage") or {}
-                input_tok = usage.get("inputTokens", 0) or entry.get("inputTokens", 0) or 0
-                output_tok = usage.get("outputTokens", 0) or entry.get("outputTokens", 0) or 0
-                cache_read = usage.get("cacheReadTokens", 0) or entry.get("cacheReadTokens", 0) or 0
-                cache_write = usage.get("cacheWriteTokens", 0) or entry.get("cacheWriteTokens", 0) or 0
+                input_tok = usage.get("inputTokens") or usage.get("input") or entry.get("inputTokens") or 0
+                output_tok = usage.get("outputTokens") or usage.get("output") or entry.get("outputTokens") or 0
+                cache_read = usage.get("cacheReadTokens") or usage.get("cacheRead") or entry.get("cacheReadTokens") or 0
+                cache_write = usage.get("cacheWriteTokens") or usage.get("cacheWrite") or entry.get("cacheWriteTokens") or 0
 
                 model = entry.get("model") or inp.get("model") or ""
                 cost = estimate_cost(model, input_tok, output_tok, cache_read, cache_write)
@@ -624,7 +631,7 @@ def parse_llm_log(filepath):
                     "agentId": entry.get("agentId") or inp.get("agentId") or "",
                     "sessionId": entry.get("sessionId") or inp.get("sessionId") or "",
                     "sessionKey": entry.get("sessionKey") or inp.get("sessionKey") or "",
-                    "runId": run_id,
+                    "runId": run_id or "",
                     "provider": entry.get("provider") or inp.get("provider") or "",
                     "model": model,
                     "inputTokens": input_tok,
