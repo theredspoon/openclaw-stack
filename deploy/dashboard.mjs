@@ -25,6 +25,7 @@
 
 import { createServer, request as httpRequest } from 'node:http'
 import { readFileSync, createReadStream, readdirSync, lstatSync, watch, watchFile } from 'node:fs'
+import { execFile } from 'node:child_process'
 import { connect } from 'node:net'
 import { resolve, extname, join } from 'node:path'
 import { createPublicKey, verify as cryptoVerify, createHmac, timingSafeEqual } from 'node:crypto'
@@ -435,8 +436,10 @@ function findEntry(agentId) {
 //   (can't use sandbox browsers from host sessions)
 // - browserDeniedAgents: "browser" in tools.deny — show "Disabled" instead
 //   of "Stopped" so users know the agent can't use browser at all
+let allAgentIds = [] // ordered list of agent IDs from config
 let nonMainAgents = new Set()
 let browserDeniedAgents = new Set()
+let agentNames = new Map() // id → display name
 
 function loadAgentConfig() {
   try {
@@ -447,7 +450,9 @@ function loadAgentConfig() {
     const agents = config?.agents?.list || []
     const nonMain = new Set()
     const denied = new Set()
+    const names = new Map()
     for (const agent of agents) {
+      if (agent.name) names.set(agent.id, agent.name)
       if (agent?.sandbox?.mode === 'non-main') {
         nonMain.add(agent.id)
       }
@@ -467,10 +472,14 @@ function loadAgentConfig() {
         }
       }
     }
+    allAgentIds = agents.map((a) => a.id).filter(Boolean)
     nonMainAgents = nonMain
     browserDeniedAgents = denied
+    agentNames = names
     if (nonMain.size > 0) {
-      console.log(`[dashboard] Non-main agents (browser hidden when stopped): ${[...nonMain].join(', ')}`)
+      console.log(
+        `[dashboard] Non-main agents (browser hidden when stopped): ${[...nonMain].join(', ')}`
+      )
     }
     if (denied.size > 0) {
       console.log(`[dashboard] Browser-denied agents: ${[...denied].join(', ')}`)
@@ -488,8 +497,38 @@ function watchAgentConfig() {
     clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => loadAgentConfig(), 500)
   }
-  try { watch(OPENCLAW_CONFIG, reload) } catch { /* file may not exist yet */ }
+  try {
+    watch(OPENCLAW_CONFIG, reload)
+  } catch {
+    /* file may not exist yet */
+  }
   watchFile(OPENCLAW_CONFIG, { interval: 30000 }, reload)
+}
+
+// Check if a container is running and get its real mapped noVNC port.
+// browsers.json ports are stale after restarts — Docker reassigns them.
+// Returns { running: true, noVncPort } or { running: false }.
+function getContainerStatus(containerName) {
+  return new Promise((res) => {
+    execFile(
+      'docker',
+      [
+        'inspect',
+        '--format',
+        '{{.State.Running}}|{{(index (index .NetworkSettings.Ports "6080/tcp") 0).HostPort}}',
+        containerName,
+      ],
+      { timeout: 3000 },
+      (err, stdout) => {
+        if (err) return res({ running: false })
+        const parts = stdout.trim().split('|')
+        if (parts[0] === 'true' && parts[1]) {
+          return res({ running: true, noVncPort: parseInt(parts[1], 10) })
+        }
+        res({ running: false })
+      }
+    )
+  })
 }
 
 // Quick TCP probe — resolves true if port accepts connections, false otherwise
@@ -547,22 +586,34 @@ function htmlPage(title, body) {
 
 async function indexPage() {
   const entries = readBrowsers()
+  const entryMap = new Map(entries.map((e) => [e.sessionKey.replace('agent:', ''), e]))
   // Control UI is at the parent path (e.g., /dashboard → /) or root if no base path
   const controlUiUrl = effectiveBP ? effectiveBP.replace(/\/[^/]+$/, '/') || '/' : '/'
   const intro = `<p class="note">Agent tools, browser sessions, and media files. <a href="${controlUiUrl}">Control UI</a> · <a href="https://docs.openclaw.ai/">Docs</a></p>`
   const mediaLink = `<p style="margin-top: 16px;"><a href="${effectiveBP}/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>`
 
-  // Resolve port status for all entries, then filter:
-  // Non-main agents (host mode) can't use sandbox browsers, so hide them when stopped.
-  // If someone starts the container manually (e.g., start-browser.sh), it still shows.
+  // Build unified agent list: all agents from config + any browser entries for unknown agents.
+  // Agents from config appear in config order; extra browser entries appended at the end.
+  const seenIds = new Set(allAgentIds)
+  const agentIds = [...allAgentIds]
+  for (const [id] of entryMap) {
+    if (!seenIds.has(id)) agentIds.push(id)
+  }
+
+  // Check actual container status via docker inspect (not port probes, which
+  // are unreliable due to Docker port reuse across stopped/running containers).
+  // Non-main agents with browser denied are always hidden.
   const checked = await Promise.all(
-    entries.map(async (e) => {
-      const id = e.sessionKey.replace('agent:', '')
-      const up = await isPortOpen(e.noVncPort)
-      return { entry: e, id, up }
-    })
+    agentIds
+      .filter((id) => !(nonMainAgents.has(id) && browserDeniedAgents.has(id)))
+      .map(async (id) => {
+        const entry = entryMap.get(id) || null
+        if (!entry) return { entry, id, up: false, realPort: 0 }
+        const status = await getContainerStatus(entry.containerName)
+        return { entry, id, up: status.running, realPort: status.noVncPort || 0 }
+      })
   )
-  const visible = checked.filter(({ id, up }) => !(nonMainAgents.has(id) && !up))
+  const visible = checked
 
   if (visible.length === 0) {
     return htmlPage(
@@ -577,17 +628,21 @@ async function indexPage() {
 
   // Strip leading / from effectiveBP for the WebSocket path param (noVNC expects a relative path)
   const wsPrefix = effectiveBP.startsWith('/') ? effectiveBP.slice(1) : effectiveBP
-  const rows = visible.map(({ entry: e, id, up }) => {
+  const rows = visible.map(({ entry, id, up }) => {
+    const displayName = agentNames.get(id) || id
     const statusDot = `<span class="status ${up ? 'up' : 'down'}"></span>`
     const link = up
       ? `<a href="${effectiveBP}/browser/${id}/vnc.html?path=${
           wsPrefix ? wsPrefix + '/' : ''
-        }browser/${id}/websockify">${id}</a>`
-      : `${id}`
+        }browser/${id}/websockify">${displayName}</a>`
+      : `${displayName}`
     const denied = !up && browserDeniedAgents.has(id)
+    const containerCol = entry
+      ? entry.containerName
+      : '<span style="opacity:0.4">Not yet started</span>'
     return `<tr${denied ? ' class="disabled"' : ''}>
       <td>${statusDot}${link}</td>
-      <td>${e.containerName}</td>
+      <td>${containerCol}</td>
       <td>${up ? 'Running' : denied ? 'Disabled' : 'Stopped'}</td>
     </tr>`
   })
@@ -598,10 +653,10 @@ async function indexPage() {
      ${intro}
      <h2>Agent Browsers</h2>
      <table>
-       <thead><tr><th>Agent</th><th>Container</th><th>Status</th></tr></thead>
+       <thead><tr><th>Agent</th><th>Browser Container</th><th>Status</th></tr></thead>
        <tbody>${rows.join('\n')}</tbody>
      </table>
-     <p class="note">To start a browser container, <a href="${controlUiUrl}">chat with OpenClaw</a> - e.g. "open the browser and go to google.com".</p>
+     <p class="note">Browser containers are auto started by OpenClaw when an agent sandbox is first used.<br> <a href="${controlUiUrl}">Ask OpenClaw via chat</a>: "open browser for Work Agent and go to google.com"</p>
      <p class="note">Page auto-refreshes every 10 seconds.</p>
      ${mediaLink}`
   )
@@ -887,9 +942,9 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  // Check if container is reachable before proxying
-  const up = await isPortOpen(entry.noVncPort)
-  if (!up) {
+  // Get real container status + port (browsers.json ports are stale after restarts)
+  const containerStatus = await getContainerStatus(entry.containerName)
+  if (!containerStatus.running) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
     res.end(containerDownPage(agentId))
     return
@@ -899,7 +954,7 @@ const server = createServer(async (req, res) => {
   const proxyReq = httpRequest(
     {
       hostname: '127.0.0.1',
-      port: entry.noVncPort,
+      port: containerStatus.noVncPort,
       path: subPath + url.search,
       method: req.method,
       headers: req.headers,
@@ -965,8 +1020,15 @@ server.on('upgrade', async (req, socket, head) => {
     return
   }
 
+  // Get real port from running container (browsers.json ports are stale)
+  const containerStatus = await getContainerStatus(entry.containerName)
+  if (!containerStatus.running) {
+    socket.destroy()
+    return
+  }
+
   // Connect to backend noVNC WebSocket
-  const backend = connect(entry.noVncPort, '127.0.0.1', () => {
+  const backend = connect(containerStatus.noVncPort, '127.0.0.1', () => {
     // Forward the original HTTP upgrade request
     const reqLine = `${req.method} ${subPath + url.search} HTTP/${req.httpVersion}\r\n`
     const headers = Object.entries(req.headers)
