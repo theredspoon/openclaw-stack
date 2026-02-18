@@ -11,8 +11,8 @@ import {
   type Key,
 } from "./terminal"
 import {
-  loadConfig, uploadScript, fetchSessions, runCommand,
-  type SessionInfo, type Config,
+  loadConfig, uploadScript, fetchSessions, fetchLlmCalls, runCommand,
+  type SessionInfo, type LlmCallInfo, type Config,
 } from "./remote"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -22,18 +22,29 @@ const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".split("")
 const MENU_ITEMS: [string, string][] = [
   ["Sessions", "Browse and explore session transcripts"],
   ["Agent Summary", "Aggregate stats across agents"],
+  ["LLM Calls", "Browse LLM API call logs"],
+  ["LLM Summary", "Aggregate LLM stats by agent/model"],
 ]
 
 const ACTIONS: [cmd: string, label: string, desc: string][] = [
   ["trace", "Trace", "Step-by-step execution trace"],
   ["metrics", "Metrics", "Token/cost breakdown and charts"],
   ["errors", "Errors", "Extract and categorize errors"],
+  ["llm-trace", "LLM Calls", "LLM API calls for this session"],
+]
+
+const LLM_ACTIONS: [cmd: string, label: string, desc: string][] = [
+  ["llm-trace", "LLM Trace", "Full LLM call details for parent session"],
 ]
 
 type Sort = "date" | "cost" | "errors" | "size" | "turns"
 const SORTS: Sort[] = ["date", "cost", "errors", "size", "turns"]
 
+type LlmSort = "date" | "cost" | "duration" | "tokens"
+const LLM_SORTS: LlmSort[] = ["date", "cost", "duration", "tokens"]
+
 type Screen = "menu" | "sessions" | "actions" | "output" | "agents"
+  | "llm-calls" | "llm-actions" | "models"
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +67,12 @@ let spinFrame = 0
 let spinTimer: ReturnType<typeof setInterval> | null = null
 let busy = false
 let selected: SessionInfo | null = null
+let llmCalls: LlmCallInfo[] = []
+let filteredLlmCalls: LlmCallInfo[] = []
+let modelFilter: string | null = null
+let llmSortKey: LlmSort = "date"
+let selectedLlmCall: LlmCallInfo | null = null
+let llmModels: string[] = []
 
 // ─── State helpers ───────────────────────────────────────────────────────────
 
@@ -90,6 +107,22 @@ function applyFilter() {
   cursor = Math.min(cursor, Math.max(0, list.length - 1))
 }
 
+function applyLlmFilter() {
+  let list = llmCalls
+  if (agentFilter) list = list.filter((c) => c.agentId === agentFilter)
+  if (modelFilter) list = list.filter((c) => c.model.toLowerCase().includes(modelFilter!.toLowerCase()))
+  list = [...list].sort((a, b) => {
+    switch (llmSortKey) {
+      case "date": return (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
+      case "cost": return (b.cost ?? 0) - (a.cost ?? 0)
+      case "duration": return (b.durationMs ?? 0) - (a.durationMs ?? 0)
+      case "tokens": return (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens)
+    }
+  })
+  filteredLlmCalls = list
+  cursor = Math.min(cursor, Math.max(0, list.length - 1))
+}
+
 function startSpinner(msg: string) {
   loadingMsg = msg
   busy = true
@@ -119,6 +152,17 @@ function fmtCost(c: number): string {
   return c === 0 ? "$0.00" : c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(2)}`
 }
 
+function humanTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
+  return String(n)
+}
+
+function fmtDuration(ms: number | null): string {
+  if (ms == null) return ""
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 function hbar(text: string, w: number) { return st(pad(` ${text}`, w), BOLD, INVERT) }
 function fbar(text: string, w: number) { return st(pad(` ${text}`, w), DIM, INVERT) }
 
@@ -128,11 +172,14 @@ function render() {
   const [cols, rows] = termSize()
   let lines: string[]
   switch (screen) {
-    case "menu":     lines = rMenu(cols, rows); break
-    case "sessions": lines = rSessions(cols, rows); break
-    case "actions":  lines = rActions(cols, rows); break
-    case "output":   lines = rOutput(cols, rows); break
-    case "agents":   lines = rAgents(cols, rows); break
+    case "menu":        lines = rMenu(cols, rows); break
+    case "sessions":    lines = rSessions(cols, rows); break
+    case "actions":     lines = rActions(cols, rows); break
+    case "output":      lines = rOutput(cols, rows); break
+    case "agents":      lines = rAgents(cols, rows); break
+    case "llm-calls":   lines = rLlmCalls(cols, rows); break
+    case "llm-actions": lines = rLlmActions(cols, rows); break
+    case "models":      lines = rModels(cols, rows); break
   }
   renderFrame(lines, cols, rows)
 }
@@ -287,6 +334,135 @@ function rAgents(w: number, h: number): string[] {
   return L
 }
 
+function rLlmCalls(w: number, h: number): string[] {
+  const L: string[] = []
+  const af = agentFilter ?? "all"
+  const mf = modelFilter ?? "all"
+  const rightInfo = `Agent: ${af} [A]  Model: ${mf} [M]  Sort: ${llmSortKey} [S]`
+  const leftInfo = `LLM Calls (${filteredLlmCalls.length})`
+  const gap = Math.max(2, w - leftInfo.length - rightInfo.length - 4)
+  L.push(hbar(`${leftInfo}${" ".repeat(gap)}${rightInfo}`, w))
+
+  L.push(st(
+    `   ${"AGENT".padEnd(12)} ${"MODEL".padEnd(22)} ${"DATE".padEnd(17)} ` +
+    `${"DUR".padStart(6)} ${"IN_TOK".padStart(7)} ${"OUT_TOK".padStart(7)} ` +
+    `${"CACHE_R".padStart(7)} ${"COST".padStart(8)}  ${"STOP".padEnd(8)}`, DIM,
+  ))
+  L.push(st("  " + "\u2500".repeat(Math.min(w - 4, 108)), DIM))
+
+  const headerH = L.length
+  const footerH = 1
+  const contentH = h - headerH - footerH
+
+  if (cursor < scroll) scroll = cursor
+  if (cursor >= scroll + contentH) scroll = cursor - contentH + 1
+
+  if (filteredLlmCalls.length === 0) {
+    L.push("")
+    L.push(st("  No LLM calls found.", DIM))
+  } else {
+    for (let i = scroll; i < Math.min(filteredLlmCalls.length, scroll + contentH); i++) {
+      L.push(llmCallRow(filteredLlmCalls[i], i === cursor))
+    }
+  }
+
+  if (loadingMsg) L.push(`  ${st(SPINNER[spinFrame], CYAN)} ${loadingMsg}`)
+
+  while (L.length < h - footerH) L.push("")
+  L.push(fbar("\u2191\u2193/jk Navigate  Enter Select  A Agent  M Model  S Sort  Esc Back  q Quit", w))
+  return L
+}
+
+function llmCallRow(ci: LlmCallInfo, sel: boolean): string {
+  const pfx = sel ? st("\u25b8 ", CYAN, BOLD) : "  "
+  const agent = (ci.agentId || "?").slice(0, 12).padEnd(12)
+  const model = (ci.model || "?").slice(0, 22).padEnd(22)
+  const dt = ci.timestamp
+    ? new Date(ci.timestamp).toISOString().slice(5, 16).replace("T", " ")
+    : "?"
+  const date = dt.padEnd(17)
+  const dur = fmtDuration(ci.durationMs).padStart(6)
+  const inTok = humanTokens(ci.inputTokens).padStart(7)
+  const outTok = humanTokens(ci.outputTokens).padStart(7)
+  const cacheR = humanTokens(ci.cacheReadTokens).padStart(7)
+
+  const costVal = ci.cost ?? 0
+  const costStr = fmtCost(costVal).padStart(8)
+  const costC = costVal > 1 ? st(costStr, RED, BOLD)
+    : costVal > 0.1 ? st(costStr, YELLOW)
+    : costStr
+
+  const stop = (ci.stopReason || "?").slice(0, 8).padEnd(8)
+  const stopC = ci.stopReason === "stop" || ci.stopReason === "end_turn"
+    ? st(stop, GREEN) : st(stop, RED)
+
+  return `${pfx}${agent} ${model} ${date} ${dur} ${inTok} ${outTok} ${cacheR} ${costC}  ${stopC}`
+}
+
+function rLlmActions(w: number, h: number): string[] {
+  const L: string[] = []
+  const ci = selectedLlmCall!
+  const costStr = ci.cost != null ? fmtCost(ci.cost) : "?"
+  const dur = ci.durationMs != null ? `${(ci.durationMs / 1000).toFixed(1)}s` : "?"
+  L.push(hbar(
+    `${ci.agentId}  ${ci.model}  \u2502  ${dur}  \u2502  ` +
+    `in:${humanTokens(ci.inputTokens)} out:${humanTokens(ci.outputTokens)}  \u2502  ${costStr}`, w,
+  ))
+  L.push("")
+
+  const actions = [...LLM_ACTIONS]
+  // Add "Jump to Session" if we have a sessionId
+  if (ci.sessionId) {
+    actions.push(["session-jump", "Session", "Jump to parent session transcript"])
+  }
+
+  for (let i = 0; i < actions.length; i++) {
+    const [, label, desc] = actions[i]
+    const sel = i === cursor
+    L.push(sel ? `  ${st("\u25b8", CYAN, BOLD)} ${st(label, BOLD, CYAN)}` : `    ${label}`)
+    L.push(`      ${st(desc, DIM)}`)
+    L.push("")
+  }
+
+  // Details
+  L.push(st("  Details:", BOLD))
+  L.push(`    Agent: ${ci.agentId}`)
+  L.push(`    Model: ${ci.model}`)
+  L.push(`    Provider: ${ci.provider}`)
+  if (ci.sessionId) L.push(`    Session: ${ci.sessionId.slice(0, 12)}...`)
+  L.push(`    Tokens: in=${humanTokens(ci.inputTokens)} out=${humanTokens(ci.outputTokens)} cache_r=${humanTokens(ci.cacheReadTokens)} cache_w=${humanTokens(ci.cacheWriteTokens)}`)
+  if (ci.toolNames.length > 0) L.push(`    Tools: ${ci.toolNames.join(", ")}`)
+  L.push(`    Stop: ${ci.stopReason || "?"}`)
+
+  if (loadingMsg) L.push(`  ${st(SPINNER[spinFrame], CYAN)} ${loadingMsg}`)
+  if (errorMsg) { L.push(""); L.push(st(`  ${errorMsg}`, RED)) }
+
+  while (L.length < h - 1) L.push("")
+  L.push(fbar("\u2191\u2193 Navigate  Enter Select  Esc Back  q Quit", w))
+  return L
+}
+
+function rModels(w: number, h: number): string[] {
+  const L: string[] = []
+  L.push(hbar("Filter by Model", w))
+  L.push("")
+
+  const items = ["All models", ...llmModels]
+  for (let i = 0; i < items.length; i++) {
+    const sel = i === cursor
+    const label = items[i]
+    const current = (i === 0 && !modelFilter) || (modelFilter === label) ? st(" \u2713", GREEN) : ""
+    L.push(sel
+      ? `  ${st("\u25b8", CYAN, BOLD)} ${st(label, BOLD, CYAN)}${current}`
+      : `    ${label}${current}`,
+    )
+  }
+
+  while (L.length < h - 1) L.push("")
+  L.push(fbar("\u2191\u2193 Navigate  Enter Select  Esc Back", w))
+  return L
+}
+
 // ─── Key handlers ────────────────────────────────────────────────────────────
 
 function onKey(key: Key) {
@@ -300,11 +476,14 @@ function onKey(key: Key) {
   errorMsg = ""
 
   switch (screen) {
-    case "menu":     return onMenuKey(key)
-    case "sessions": return onSessionsKey(key)
-    case "actions":  return onActionsKey(key)
-    case "output":   return onOutputKey(key)
-    case "agents":   return onAgentsKey(key)
+    case "menu":        return onMenuKey(key)
+    case "sessions":    return onSessionsKey(key)
+    case "actions":     return onActionsKey(key)
+    case "output":      return onOutputKey(key)
+    case "agents":      return onAgentsKey(key)
+    case "llm-calls":   return onLlmCallsKey(key)
+    case "llm-actions": return onLlmActionsKey(key)
+    case "models":      return onModelsKey(key)
   }
 }
 
@@ -316,6 +495,8 @@ function onMenuKey(key: Key) {
   else if (key.name === "enter") {
     if (cursor === 0) doLoadSessions()
     else if (cursor === 1) doRunGlobal("summary")
+    else if (cursor === 2) doLoadLlmCalls()
+    else if (cursor === 3) doRunGlobal("llm-summary")
   }
   else if (key.name === "char" && key.ch === "q") return cleanup()
   render()
@@ -361,6 +542,70 @@ function onActionsKey(key: Key) {
   render()
 }
 
+function onLlmCallsKey(key: Key) {
+  const len = filteredLlmCalls.length
+  if (key.name === "up" || (key.name === "char" && key.ch === "k"))
+    cursor = clamp(cursor - 1, len - 1)
+  else if (key.name === "down" || (key.name === "char" && key.ch === "j"))
+    cursor = clamp(cursor + 1, len - 1)
+  else if (key.name === "pageup") cursor = clamp(cursor - 10, len - 1)
+  else if (key.name === "pagedown") cursor = clamp(cursor + 10, len - 1)
+  else if (key.name === "home") cursor = 0
+  else if (key.name === "end") cursor = Math.max(0, len - 1)
+  else if (key.name === "enter" && len > 0) {
+    selectedLlmCall = filteredLlmCalls[cursor]
+    push("llm-actions")
+  }
+  else if (key.name === "char" && key.ch.toLowerCase() === "a") push("agents")
+  else if (key.name === "char" && key.ch.toLowerCase() === "m") push("models")
+  else if (key.name === "char" && key.ch.toLowerCase() === "s") {
+    const idx = (LLM_SORTS.indexOf(llmSortKey) + 1) % LLM_SORTS.length
+    llmSortKey = LLM_SORTS[idx]
+    applyLlmFilter()
+  }
+  else if (key.name === "char" && key.ch.toLowerCase() === "r") doLoadLlmCalls()
+  else if (key.name === "escape") pop()
+  else if (key.name === "char" && key.ch === "q") return cleanup()
+  render()
+}
+
+function onLlmActionsKey(key: Key) {
+  const ci = selectedLlmCall!
+  const actions = [...LLM_ACTIONS]
+  if (ci.sessionId) actions.push(["session-jump", "Session", "Jump to parent session transcript"])
+
+  if (key.name === "up" || (key.name === "char" && key.ch === "k"))
+    cursor = clamp(cursor - 1, actions.length - 1)
+  else if (key.name === "down" || (key.name === "char" && key.ch === "j"))
+    cursor = clamp(cursor + 1, actions.length - 1)
+  else if (key.name === "enter") {
+    const [cmd] = actions[cursor]
+    if (cmd === "llm-trace" && ci.sessionId) {
+      doRunLlmTrace(ci.sessionId, ci.agentId)
+    } else if (cmd === "session-jump" && ci.sessionId) {
+      doJumpToSession(ci.sessionId, ci.agentId)
+    }
+  }
+  else if (key.name === "escape") pop()
+  else if (key.name === "char" && key.ch === "q") return cleanup()
+  render()
+}
+
+function onModelsKey(key: Key) {
+  const items = ["All models", ...llmModels]
+  if (key.name === "up" || (key.name === "char" && key.ch === "k"))
+    cursor = clamp(cursor - 1, items.length - 1)
+  else if (key.name === "down" || (key.name === "char" && key.ch === "j"))
+    cursor = clamp(cursor + 1, items.length - 1)
+  else if (key.name === "enter") {
+    modelFilter = cursor === 0 ? null : items[cursor]
+    applyLlmFilter()
+    pop()
+  }
+  else if (key.name === "escape") pop()
+  render()
+}
+
 function onOutputKey(key: Key) {
   const maxScroll = Math.max(0, outputLines.length - (termSize()[1] - 2))
   if (key.name === "up" || (key.name === "char" && key.ch === "k"))
@@ -386,7 +631,10 @@ function onAgentsKey(key: Key) {
     cursor = clamp(cursor + 1, items.length - 1)
   else if (key.name === "enter") {
     agentFilter = cursor === 0 ? null : items[cursor]
-    applyFilter()
+    // Apply to whichever list the parent screen uses
+    const parent = screenStack[screenStack.length - 1]
+    if (parent === "llm-calls") applyLlmFilter()
+    else applyFilter()
     pop()
   }
   else if (key.name === "escape") pop()
@@ -442,6 +690,69 @@ async function doRunSession(subcmd: string, label: string) {
   } catch (e: any) {
     stopSpinner()
     errorMsg = e.message
+    render()
+  }
+}
+
+async function doLoadLlmCalls() {
+  startSpinner("Fetching LLM calls from VPS...")
+  try {
+    llmCalls = await fetchLlmCalls(cfg)
+    llmModels = [...new Set(llmCalls.map((c) => c.model).filter(Boolean))].sort()
+    // Also populate agents list if not loaded yet
+    const llmAgents = [...new Set(llmCalls.map((c) => c.agentId).filter(Boolean))].sort()
+    if (agents.length === 0) agents = llmAgents
+    applyLlmFilter()
+    stopSpinner()
+    if (screen === "menu") push("llm-calls")
+    render()
+  } catch (e: any) {
+    stopSpinner()
+    errorMsg = e.message
+    render()
+  }
+}
+
+async function doRunLlmTrace(sessionId: string, agent?: string) {
+  startSpinner(`Running LLM trace for ${sessionId.slice(0, 8)}...`)
+  try {
+    const out = await runCommand(cfg, "llm-trace", sessionId, agent || undefined)
+    stopSpinner()
+    outputLines = out.split("\n")
+    outputScroll = 0
+    outputTitle = `LLM Trace: ${sessionId.slice(0, 12)}`
+    push("output")
+    render()
+  } catch (e: any) {
+    stopSpinner()
+    errorMsg = e.message
+    render()
+  }
+}
+
+async function doJumpToSession(sessionId: string, agent: string) {
+  // Find the session in our loaded sessions list, or load sessions first
+  if (sessions.length === 0) {
+    startSpinner("Loading sessions...")
+    try {
+      sessions = await fetchSessions(cfg)
+      agents = [...new Set(sessions.map((s) => s.agent))].sort()
+    } catch (e: any) {
+      stopSpinner()
+      errorMsg = e.message
+      render()
+      return
+    }
+    stopSpinner()
+  }
+
+  const match = sessions.find((s) => s.session_id.startsWith(sessionId.slice(0, 8)))
+  if (match) {
+    selected = match
+    push("actions")
+    render()
+  } else {
+    errorMsg = `Session ${sessionId.slice(0, 8)} not found`
     render()
   }
 }

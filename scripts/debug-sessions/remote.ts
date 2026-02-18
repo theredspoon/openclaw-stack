@@ -20,6 +20,25 @@ export interface SessionInfo {
   first_message: string
 }
 
+export interface LlmCallInfo {
+  timestamp: string | null
+  agentId: string
+  sessionId: string
+  sessionKey: string
+  runId: string
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  cost: number | null
+  durationMs: number | null
+  stopReason: string
+  toolNames: string[]
+  toolCount: number | null
+}
+
 export interface Config {
   host: string
   port: string
@@ -27,6 +46,7 @@ export interface Config {
   keyPath: string
   pythonScript: string
   baseDir: string
+  llmLogPath: string
 }
 
 function expandHome(p: string): string {
@@ -63,6 +83,7 @@ export function loadConfig(): Config {
     keyPath: expandHome(env.SSH_KEY_PATH ?? "~/.ssh/vps1_openclaw_ed25519"),
     pythonScript: resolve(scriptDir, "debug-sessions.py"),
     baseDir: "/home/openclaw/.openclaw/agents",
+    llmLogPath: "/home/openclaw/.openclaw/logs/llm.log",
   }
 }
 
@@ -99,11 +120,18 @@ export async function uploadScript(cfg: Config): Promise<void> {
 }
 
 function pyCmd(cfg: Config, subcmd: string, opts: string = ""): string {
-  return `sudo python3 /tmp/debug-sessions.py ${subcmd} ${opts} --base-dir ${cfg.baseDir}`
+  let extra = `--base-dir ${cfg.baseDir}`
+  if (subcmd.startsWith("llm-")) extra += ` --llm-log ${cfg.llmLogPath}`
+  return `sudo python3 /tmp/debug-sessions.py ${subcmd} ${opts} ${extra}`
 }
 
 export async function fetchSessions(cfg: Config): Promise<SessionInfo[]> {
   const out = await sshExec(cfg, pyCmd(cfg, "list", "--json"))
+  return JSON.parse(out)
+}
+
+export async function fetchLlmCalls(cfg: Config): Promise<LlmCallInfo[]> {
+  const out = await sshExec(cfg, pyCmd(cfg, "llm-list", "--json"))
   return JSON.parse(out)
 }
 

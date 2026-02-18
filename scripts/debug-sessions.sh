@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# Debug & analyze OpenClaw session JSONL files on the VPS.
+# Debug & analyze OpenClaw session JSONL files and LLM logs on the VPS.
 #
 # No arguments: launches interactive TUI (requires bun)
 # With arguments: runs Python script directly via SSH
 #
 # Usage:
-#   scripts/debug-sessions.sh                         # Interactive TUI
-#   scripts/debug-sessions.sh list                    # Direct: list sessions
-#   scripts/debug-sessions.sh list --agent personal   # Direct: list filtered
-#   scripts/debug-sessions.sh trace 4e29832a          # Direct: trace session
-#   scripts/debug-sessions.sh metrics 4e29832a        # Direct: session metrics
-#   scripts/debug-sessions.sh errors 4e29832a         # Direct: session errors
-#   scripts/debug-sessions.sh summary                 # Direct: agent summary
+#   scripts/debug-sessions.sh                              # Interactive TUI
+#   scripts/debug-sessions.sh list                         # Direct: list sessions
+#   scripts/debug-sessions.sh list --agent personal        # Direct: list filtered
+#   scripts/debug-sessions.sh trace 4e29832a               # Direct: trace session
+#   scripts/debug-sessions.sh metrics 4e29832a             # Direct: session metrics
+#   scripts/debug-sessions.sh errors 4e29832a              # Direct: session errors
+#   scripts/debug-sessions.sh summary                      # Direct: agent summary
+#   scripts/debug-sessions.sh llm-list                     # Direct: list LLM calls
+#   scripts/debug-sessions.sh llm-list --agent personal    # Direct: filtered LLM calls
+#   scripts/debug-sessions.sh llm-trace 4e29832a           # Direct: LLM trace for session
+#   scripts/debug-sessions.sh llm-summary                  # Direct: LLM stats
 #
 # All flags (--full, --json, --no-color, --agent) are passed through in direct mode.
-# --base-dir is set automatically to the VPS agents directory.
+# --base-dir and --llm-log are set automatically to the VPS paths.
 
 set -euo pipefail
 
@@ -60,6 +64,7 @@ source "$CONFIG_FILE"
 PYTHON_SCRIPT="$SCRIPT_DIR/debug-sessions/debug-sessions.py"
 REMOTE_SCRIPT="/tmp/debug-sessions.py"
 BASE_DIR="/home/openclaw/.openclaw/agents"
+LLM_LOG="/home/openclaw/.openclaw/logs/llm.log"
 
 if [[ ! -f "$PYTHON_SCRIPT" ]]; then
   echo "Error: debug-sessions.py not found at $PYTHON_SCRIPT" >&2
@@ -69,12 +74,18 @@ fi
 # Copy script to VPS
 scp -q -i "${SSH_KEY_PATH}" -P "${SSH_PORT}" "$PYTHON_SCRIPT" "${SSH_USER}@${VPS1_IP}:${REMOTE_SCRIPT}" 2>/dev/null
 
-# Run on VPS — inject --base-dir, pass through all user args
+# Run on VPS — inject --base-dir and --llm-log, pass through all user args
 # Use -t for TTY (color support) only when stdout is a terminal
 SSH_TTY_FLAG=""
 if [[ -t 1 ]]; then
   SSH_TTY_FLAG="-t"
 fi
 
+# Inject --llm-log for llm-* subcommands
+EXTRA_ARGS="--base-dir ${BASE_DIR}"
+case "${1:-}" in
+  llm-*) EXTRA_ARGS="${EXTRA_ARGS} --llm-log ${LLM_LOG}" ;;
+esac
+
 ssh $SSH_TTY_FLAG -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
-  "sudo python3 ${REMOTE_SCRIPT} $* --base-dir ${BASE_DIR}"
+  "sudo python3 ${REMOTE_SCRIPT} $* ${EXTRA_ARGS}"

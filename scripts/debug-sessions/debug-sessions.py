@@ -8,17 +8,28 @@ Usage:
   debug-sessions.py metrics <session-id> [--agent <id>]
   debug-sessions.py errors <session-id> [--agent <id>]
   debug-sessions.py summary [--agent <id>]
+  debug-sessions.py llm-list [--agent <id>] [--model <model>] [--session <id>]
+  debug-sessions.py llm-trace <session-id> [--agent <id>]
+  debug-sessions.py llm-summary [--agent <id>]
 
 Global options:
-  --base-dir <path>  Override agents directory (default: auto-detect)
-  --no-color         Disable ANSI colors
-  --json             Machine-readable JSON output
+  --base-dir <path>   Override agents directory (default: auto-detect)
+  --llm-log <path>    Override LLM log file path (default: auto-detect)
+  --no-color          Disable ANSI colors
+  --json              Machine-readable JSON output
 
 Session JSONL schema (OpenClaw):
   Entry types: session, model_change, thinking_level_change, custom, message
   Message roles: user, assistant, toolResult
   Assistant content blocks: text, thinking, toolCall (arguments field, not input)
   Error detection: isError is always false — check details.status and content text
+
+LLM log schema (from llm-logger plugin):
+  Each LLM round-trip produces two JSONL entries paired by runId:
+  - llm_input: timestamp, agentId, sessionKey, runId, sessionId, provider, model, ...
+  - llm_output: timestamp, agentId, sessionKey, runId, sessionId, provider, model,
+                 usage{inputTokens,outputTokens,cacheReadTokens,cacheWriteTokens},
+                 stopReason, durationMs, toolCalls[{name,id}]
 """
 
 import argparse
@@ -498,6 +509,136 @@ def analyze_session(records):
                     )
 
     return result
+
+
+# ─── LLM Log Parsing ────────────────────────────────────────────────────────
+
+# Per-million-token pricing (input, output, cache_read, cache_write)
+# cache_write is typically charged at input rate
+MODEL_PRICING = {
+    "claude-opus-4": (15.0, 75.0, 1.5, 15.0),
+    "claude-sonnet-4": (3.0, 15.0, 0.3, 3.0),
+    "claude-haiku-4": (0.80, 4.0, 0.08, 0.80),
+    "claude-3-5-sonnet": (3.0, 15.0, 0.3, 3.0),
+    "claude-3-5-haiku": (0.80, 4.0, 0.08, 0.80),
+    "claude-3-opus": (15.0, 75.0, 1.5, 15.0),
+}
+
+DEFAULT_LLM_LOG_PATHS = [
+    "/home/node/.openclaw/logs/llm.log",
+    "/home/openclaw/.openclaw/logs/llm.log",
+]
+
+
+def find_llm_log(override=None):
+    if override:
+        if os.path.isfile(override):
+            return override
+        print(c(C.RED, f"Error: LLM log not found: {override}"), file=sys.stderr)
+        print(c(C.DIM, "Enable with: openclaw config set plugins.entries.llm-logger.enabled true"), file=sys.stderr)
+        sys.exit(1)
+    for path in DEFAULT_LLM_LOG_PATHS:
+        if os.path.isfile(path):
+            return path
+    print(c(C.RED, "Error: LLM log not found."), file=sys.stderr)
+    print(c(C.DIM, "Enable the llm-logger plugin:"), file=sys.stderr)
+    print(c(C.DIM, "  openclaw config set plugins.entries.llm-logger.enabled true"), file=sys.stderr)
+    print(c(C.DIM, "Then restart the gateway."), file=sys.stderr)
+    sys.exit(1)
+
+
+def match_model_pricing(model):
+    """Match model name to pricing table using prefix matching (strip date suffixes)."""
+    if not model:
+        return None
+    m = model.lower()
+    # Try exact match first
+    if m in MODEL_PRICING:
+        return MODEL_PRICING[m]
+    # Strip date suffix (e.g. "-20250929") and try again
+    for prefix in sorted(MODEL_PRICING.keys(), key=len, reverse=True):
+        if m.startswith(prefix):
+            return MODEL_PRICING[prefix]
+    return None
+
+
+def estimate_cost(model, input_tok, output_tok, cache_read=0, cache_write=0):
+    """Estimate cost from token counts and model pricing."""
+    pricing = match_model_pricing(model)
+    if not pricing:
+        return None
+    p_in, p_out, p_cr, p_cw = pricing
+    return (
+        input_tok * p_in / 1_000_000
+        + output_tok * p_out / 1_000_000
+        + cache_read * p_cr / 1_000_000
+        + cache_write * p_cw / 1_000_000
+    )
+
+
+def parse_llm_log(filepath):
+    """Parse LLM log JSONL, pair input/output by runId into call records.
+
+    Returns list of dicts with merged fields from both input and output entries.
+    Processes line-by-line to handle large files efficiently.
+    """
+    inputs = {}  # runId -> entry
+    calls = []
+
+    with open(filepath, "r", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event = entry.get("event")
+            run_id = entry.get("runId")
+            if not run_id:
+                continue
+
+            if event == "llm_input":
+                inputs[run_id] = entry
+            elif event == "llm_output":
+                inp = inputs.pop(run_id, {})
+
+                # Normalize token usage — check both usage object and top-level fields
+                usage = entry.get("usage") or {}
+                input_tok = usage.get("inputTokens", 0) or entry.get("inputTokens", 0) or 0
+                output_tok = usage.get("outputTokens", 0) or entry.get("outputTokens", 0) or 0
+                cache_read = usage.get("cacheReadTokens", 0) or entry.get("cacheReadTokens", 0) or 0
+                cache_write = usage.get("cacheWriteTokens", 0) or entry.get("cacheWriteTokens", 0) or 0
+
+                model = entry.get("model") or inp.get("model") or ""
+                cost = estimate_cost(model, input_tok, output_tok, cache_read, cache_write)
+
+                # Tool calls from output
+                tool_calls = entry.get("toolCalls") or []
+                tool_names = [tc.get("name", "?") for tc in tool_calls if isinstance(tc, dict)]
+
+                calls.append({
+                    "timestamp": entry.get("timestamp") or inp.get("timestamp"),
+                    "agentId": entry.get("agentId") or inp.get("agentId") or "",
+                    "sessionId": entry.get("sessionId") or inp.get("sessionId") or "",
+                    "sessionKey": entry.get("sessionKey") or inp.get("sessionKey") or "",
+                    "runId": run_id,
+                    "provider": entry.get("provider") or inp.get("provider") or "",
+                    "model": model,
+                    "inputTokens": input_tok,
+                    "outputTokens": output_tok,
+                    "cacheReadTokens": cache_read,
+                    "cacheWriteTokens": cache_write,
+                    "cost": cost,
+                    "durationMs": entry.get("durationMs"),
+                    "stopReason": entry.get("stopReason") or "",
+                    "toolNames": tool_names,
+                    "toolCount": inp.get("toolCount"),
+                })
+
+    return calls
 
 
 # ─── Commands ─────────────────────────────────────────────────────────────────
@@ -1078,6 +1219,307 @@ def cmd_summary(args):
         print()
 
 
+# ─── LLM Commands ────────────────────────────────────────────────────────────
+
+
+def cmd_llm_list(args):
+    """List LLM calls from the llm.log file."""
+    log_path = find_llm_log(args.llm_log)
+    calls = parse_llm_log(log_path)
+
+    # Apply filters
+    if args.agent:
+        calls = [c for c in calls if c["agentId"] == args.agent]
+    if args.model:
+        calls = [c for c in calls if args.model.lower() in (c["model"] or "").lower()]
+    if args.session:
+        calls = [c for c in calls if c["sessionId"] and c["sessionId"].startswith(args.session)]
+
+    if not calls:
+        print("No LLM calls found.")
+        return
+
+    if args.json_output:
+        json.dump(calls, sys.stdout, indent=2)
+        print()
+        return
+
+    hdr = (
+        f"{'TIMESTAMP':21s} {'AGENT':12s} {'MODEL':24s} {'DUR':>6s} "
+        f"{'IN_TOK':>7s} {'OUT_TOK':>7s} {'CACHE_R':>7s} {'COST':>8s} "
+        f"{'STOP':12s} {'TOOLS'}"
+    )
+    print(c(C.BOLD + C.CYAN, hdr))
+    print(c(C.DIM, "\u2500" * 130))
+
+    for call in calls:
+        ts = ""
+        if call["timestamp"]:
+            dt = parse_timestamp(call["timestamp"])
+            if dt:
+                ts = dt.strftime("%Y-%m-%d %H:%M UTC")
+
+        dur = ""
+        if call["durationMs"] is not None:
+            dur = f"{call['durationMs'] / 1000:.1f}s"
+
+        model = (call["model"] or "?")[:24]
+        cost_val = call["cost"]
+        cost_str = fmt_cost(cost_val) if cost_val is not None else "?"
+
+        # Color cost
+        if cost_val is not None and cost_val > 1:
+            cost_col = c(C.RED + C.BOLD, f"{cost_str:>8s}")
+        elif cost_val is not None and cost_val > 0.1:
+            cost_col = c(C.YELLOW, f"{cost_str:>8s}")
+        else:
+            cost_col = f"{cost_str:>8s}"
+
+        stop = (call["stopReason"] or "?")[:12]
+        if stop in ("stop", "end_turn"):
+            stop_col = c(C.GREEN, f"{stop:12s}")
+        else:
+            stop_col = f"{stop:12s}"
+
+        tools = ",".join(call["toolNames"][:4])
+        if len(call["toolNames"]) > 4:
+            tools += f"+{len(call['toolNames']) - 4}"
+
+        print(
+            f"{ts:21s} {call['agentId'][:12]:12s} {model:24s} {dur:>6s} "
+            f"{human_tokens(call['inputTokens']):>7s} "
+            f"{human_tokens(call['outputTokens']):>7s} "
+            f"{human_tokens(call['cacheReadTokens']):>7s} "
+            f"{cost_col} {stop_col} {c(C.DIM, tools)}"
+        )
+
+
+def cmd_llm_trace(args):
+    """Per-session LLM call sequence with running cost total."""
+    log_path = find_llm_log(args.llm_log)
+    calls = parse_llm_log(log_path)
+
+    # Filter by session
+    session_id = args.session_id
+    matched = [c for c in calls if c["sessionId"] and c["sessionId"].startswith(session_id)]
+
+    if args.agent:
+        matched = [c for c in matched if c["agentId"] == args.agent]
+
+    if not matched:
+        print(c(C.YELLOW, f"No LLM calls found for session: {session_id}"))
+        print(c(C.DIM, "Ensure the llm-logger plugin was enabled during this session."))
+        return
+
+    if args.json_output:
+        json.dump(matched, sys.stdout, indent=2)
+        print()
+        return
+
+    # Header
+    agent = matched[0]["agentId"]
+    sid = matched[0]["sessionId"][:12] if matched[0]["sessionId"] else session_id[:12]
+    print(c(C.BOLD + C.CYAN, "\u2550" * 90))
+    print(c(C.BOLD + C.CYAN, f" LLM TRACE: {agent}/{sid}  ({len(matched)} calls)"))
+    print(c(C.BOLD + C.CYAN, "\u2550" * 90))
+    print()
+
+    cumulative_cost = 0.0
+    total_tokens = 0
+
+    for i, call in enumerate(matched, 1):
+        ts = ""
+        if call["timestamp"]:
+            dt = parse_timestamp(call["timestamp"])
+            if dt:
+                ts = dt.strftime("%H:%M:%S")
+
+        dur = ""
+        if call["durationMs"] is not None:
+            dur = f"{call['durationMs'] / 1000:.1f}s"
+
+        cost_val = call["cost"] or 0
+        cumulative_cost += cost_val
+        in_tok = call["inputTokens"]
+        out_tok = call["outputTokens"]
+        total_tokens += in_tok + out_tok
+
+        tools = ", ".join(call["toolNames"][:5])
+        if len(call["toolNames"]) > 5:
+            tools += f" +{len(call['toolNames']) - 5}"
+
+        model_short = (call["model"] or "?")
+        # Strip common prefix for brevity
+        for prefix in ("claude-", ""):
+            if model_short.startswith(prefix) and prefix:
+                model_short = model_short[len(prefix):]
+                break
+
+        stop = call["stopReason"] or "?"
+        if stop in ("stop", "end_turn"):
+            stop_col = c(C.GREEN, stop)
+        elif "error" in stop.lower():
+            stop_col = c(C.RED, stop)
+        else:
+            stop_col = stop
+
+        # Cost coloring
+        cost_str = fmt_cost(cost_val)
+        if cost_val > 1:
+            cost_col = c(C.RED + C.BOLD, cost_str)
+        elif cost_val > 0.1:
+            cost_col = c(C.YELLOW, cost_str)
+        else:
+            cost_col = cost_str
+
+        cache_pct = ""
+        if in_tok > 0:
+            pct = call["cacheReadTokens"] / (in_tok + call["cacheReadTokens"]) * 100
+            cache_pct = f"cache {pct:.0f}%"
+
+        print(
+            c(C.BOLD + C.CYAN, f"  [{i:3d}]")
+            + f" {ts}  {model_short}  {dur}"
+        )
+        print(
+            f"        in: {human_tokens(in_tok)}  out: {human_tokens(out_tok)}  "
+            f"{cache_pct}  cost: {cost_col}  "
+            + c(C.DIM, f"cumul: {fmt_cost(cumulative_cost)}")
+        )
+        if tools:
+            print(f"        tools: {c(C.DIM, tools)}")
+        print(
+            f"        stop: {stop_col}"
+        )
+        print()
+
+    # Summary
+    print(c(C.DIM, "\u2500" * 90))
+    print(
+        c(C.BOLD, f"  Total: {len(matched)} calls  \u2502  ")
+        + c(C.BOLD, f"Cost: {fmt_cost(cumulative_cost)}  \u2502  ")
+        + f"Tokens: {fmt_tokens(total_tokens)}"
+    )
+    print()
+
+
+def cmd_llm_summary(args):
+    """Aggregate LLM stats by agent and model."""
+    log_path = find_llm_log(args.llm_log)
+    calls = parse_llm_log(log_path)
+
+    if args.agent:
+        calls = [c for c in calls if c["agentId"] == args.agent]
+
+    if not calls:
+        print("No LLM calls found.")
+        return
+
+    # Aggregate by agent
+    by_agent = defaultdict(lambda: {
+        "calls": 0, "cost": 0.0, "input_tokens": 0, "output_tokens": 0,
+        "cache_read": 0, "cache_write": 0, "durations": [], "models": defaultdict(int),
+    })
+    # Aggregate by model
+    by_model = defaultdict(lambda: {"calls": 0, "cost": 0.0, "input_tokens": 0, "output_tokens": 0})
+
+    for call in calls:
+        agent = call["agentId"] or "unknown"
+        model = call["model"] or "unknown"
+        cost = call["cost"] or 0
+
+        a = by_agent[agent]
+        a["calls"] += 1
+        a["cost"] += cost
+        a["input_tokens"] += call["inputTokens"]
+        a["output_tokens"] += call["outputTokens"]
+        a["cache_read"] += call["cacheReadTokens"]
+        a["cache_write"] += call["cacheWriteTokens"]
+        if call["durationMs"] is not None:
+            a["durations"].append(call["durationMs"])
+        a["models"][model] += 1
+
+        m = by_model[model]
+        m["calls"] += 1
+        m["cost"] += cost
+        m["input_tokens"] += call["inputTokens"]
+        m["output_tokens"] += call["outputTokens"]
+
+    if args.json_output:
+        output = {
+            "total_calls": len(calls),
+            "total_cost": sum(c["cost"] or 0 for c in calls),
+            "by_agent": {},
+            "by_model": {},
+        }
+        for agent, stats in by_agent.items():
+            s = dict(stats)
+            s["models"] = dict(s["models"])
+            s["avg_duration_ms"] = sum(s["durations"]) / len(s["durations"]) if s["durations"] else 0
+            del s["durations"]
+            output["by_agent"][agent] = s
+        for model, stats in by_model.items():
+            output["by_model"][model] = dict(stats)
+        json.dump(output, sys.stdout, indent=2)
+        print()
+        return
+
+    total_cost = sum(c["cost"] or 0 for c in calls)
+    total_in = sum(c["inputTokens"] for c in calls)
+    total_out = sum(c["outputTokens"] for c in calls)
+
+    print(c(C.BOLD + C.CYAN, "\u2550" * 70))
+    print(c(C.BOLD, f" LLM SUMMARY \u2014 {len(calls)} calls across {len(by_agent)} agents"))
+    print(c(C.BOLD, f" Total cost: {fmt_cost(total_cost)}  \u2502  In: {human_tokens(total_in)}  Out: {human_tokens(total_out)}"))
+    print(c(C.BOLD + C.CYAN, "\u2550" * 70))
+    print()
+
+    # By agent
+    print(c(C.BOLD, " BY AGENT"))
+    for agent in sorted(by_agent, key=lambda a: by_agent[a]["cost"], reverse=True):
+        stats = by_agent[agent]
+        avg_dur = ""
+        if stats["durations"]:
+            avg_ms = sum(stats["durations"]) / len(stats["durations"])
+            avg_dur = f"  \u2502  Avg: {avg_ms / 1000:.1f}s"
+
+        cache_total = stats["input_tokens"] + stats["cache_read"]
+        cache_pct = f"{stats['cache_read'] / cache_total * 100:.0f}%" if cache_total > 0 else "0%"
+
+        print(c(C.BOLD + C.MAGENTA, f" \u250c\u2500 {agent}"))
+        print(
+            f" \u2502  Calls: {stats['calls']}  \u2502  "
+            f"Cost: {c(C.BOLD, fmt_cost(stats['cost']))}{avg_dur}"
+        )
+        print(
+            f" \u2502  In: {human_tokens(stats['input_tokens'])}  "
+            f"Out: {human_tokens(stats['output_tokens'])}  "
+            f"Cache: {cache_pct}"
+        )
+        # Model breakdown
+        models_str = ", ".join(
+            f"{m}:{n}" for m, n in sorted(stats["models"].items(), key=lambda x: x[1], reverse=True)
+        )
+        print(f" \u2502  Models: {c(C.DIM, models_str)}")
+        print(c(C.MAGENTA, " \u2514" + "\u2500" * 69))
+        print()
+
+    # By model
+    print(c(C.BOLD, " BY MODEL"))
+    hdr = f"   {'MODEL':30s} {'CALLS':>6s} {'IN_TOK':>8s} {'OUT_TOK':>8s} {'COST':>10s}"
+    print(c(C.DIM, hdr))
+    print(c(C.DIM, "   " + "\u2500" * 67))
+    for model in sorted(by_model, key=lambda m: by_model[m]["cost"], reverse=True):
+        stats = by_model[model]
+        print(
+            f"   {model[:30]:30s} {stats['calls']:>6d} "
+            f"{human_tokens(stats['input_tokens']):>8s} "
+            f"{human_tokens(stats['output_tokens']):>8s} "
+            f"{fmt_cost(stats['cost']):>10s}"
+        )
+    print()
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -1123,12 +1565,17 @@ Examples:
   %(prog)s metrics 4e29832a
   %(prog)s errors 4e29832a --agent personal
   %(prog)s summary
+  %(prog)s llm-list
+  %(prog)s llm-list --agent personal --model opus
+  %(prog)s llm-trace 4e29832a
+  %(prog)s llm-summary
 """,
     )
 
     # Common args via parent parser
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--base-dir", help="Override agents directory path")
+    common.add_argument("--llm-log", help="Override LLM log file path")
     common.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
     common.add_argument(
         "--force-color", action="store_true", help="Force colored output (for piped use)"
@@ -1164,6 +1611,22 @@ Examples:
         "summary", parents=[common], help="Agent-level aggregate summary"
     )
 
+    # LLM log commands
+    p_llm_list = subparsers.add_parser(
+        "llm-list", parents=[common], help="List LLM API calls"
+    )
+    p_llm_list.add_argument("--model", help="Filter by model name (substring match)")
+    p_llm_list.add_argument("--session", help="Filter by session ID (prefix match)")
+
+    p_llm_trace = subparsers.add_parser(
+        "llm-trace", parents=[common], help="Per-session LLM call sequence"
+    )
+    p_llm_trace.add_argument("session_id", help="Session ID (or prefix)")
+
+    subparsers.add_parser(
+        "llm-summary", parents=[common], help="Aggregate LLM stats by agent/model"
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -1179,6 +1642,9 @@ Examples:
         "metrics": cmd_metrics,
         "errors": cmd_errors,
         "summary": cmd_summary,
+        "llm-list": cmd_llm_list,
+        "llm-trace": cmd_llm_trace,
+        "llm-summary": cmd_llm_summary,
     }
 
     try:
