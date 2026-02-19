@@ -479,16 +479,7 @@ curl -s -X POST "$LLEMTRY_URL" \
 # Expected: {"status":"ok","count":0}
 ```
 
-**2. Langfuse secrets configured** (if using Langfuse backend):
-
-```bash
-# From your local machine with wrangler configured
-cd workers/log-receiver
-npx wrangler secret list
-# Should include: LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
-```
-
-**3. Plugin startup validation** (on VPS):
+**2. Plugin startup validation** (on VPS):
 
 ```bash
 sudo docker logs openclaw-gateway 2>&1 | grep -i 'llm-logger.*telemetry'
@@ -496,7 +487,7 @@ sudo docker logs openclaw-gateway 2>&1 | grep -i 'llm-logger.*telemetry'
 # If missing LOG_WORKER_URL/TOKEN: "[llm-logger] ENABLE_LLEMTRY_LOGGING is true but..."
 ```
 
-**4. End-to-end** (after sending a message to an agent):
+**3. End-to-end** (after sending a message to an agent):
 
 ```bash
 # Check Log Worker logs for llemtry entries (Cloudflare dashboard or wrangler tail)
@@ -506,7 +497,6 @@ npx wrangler tail --format json | jq 'select(.logs[].message | contains("[LLEMTR
 - [ ] Llemtry endpoint returns `{"status":"ok","count":0}` for empty batch
 - [ ] Plugin logs confirm telemetry enabled (or correctly warns if misconfigured)
 - [ ] After agent message: llemtry spans visible in Log Worker logs
-- [ ] (If Langfuse configured) Traces appear in Langfuse with sessionId and agentId metadata
 
 ---
 
