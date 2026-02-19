@@ -10,7 +10,7 @@ The AI Gateway Cloudflare Worker (`workers/ai-gateway/`) proxies LLM calls to An
 
 1. **Non-blocking**: All LangFuse work happens in `ctx.waitUntil()` after the response is returned to the client
 2. **Stream-safe**: Use `response.body.tee()` to split the response — one branch streams to the client, the other is read in the background for LangFuse
-3. **Opt-in**: Only active when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` secrets are set
+3. **Opt-in**: Only active when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` secrets are set. When unset, the worker behaves exactly as it does today — no code paths touched, no stream splitting, no extra memory. The feature gate check happens before any LangFuse-related work.
 4. **Zero dependencies**: Direct `fetch()` to LangFuse REST API with Basic Auth
 
 ## Files to Change
@@ -40,9 +40,14 @@ Self-contained module with:
 - `isLangfuseEnabled(env)` — feature gate
 - `reportGeneration(env, log, opts)` — orchestrator called from `ctx.waitUntil()`
 - Request body parser — extracts model, messages, parameters from JSON
-- Response body parser — extracts usage from both non-streaming JSON and streaming SSE:
-  - Anthropic SSE: `message_start` (input_tokens, cache tokens) + `message_delta` (output_tokens)
-  - OpenAI SSE: final chunk `usage` field
+- Response body parser — extracts usage AND output from both non-streaming JSON and streaming SSE:
+  - **Non-streaming**: Parse JSON response body for usage and output
+  - **Anthropic SSE**: `message_start` (input_tokens, cache tokens) + `content_block_delta` (text deltas → reassemble output) + `message_delta` (output_tokens, stop_reason)
+  - **OpenAI SSE**: `chat.completion.chunk` events (`delta.content` → reassemble output) + final chunk `usage` field
+- Output capture safety:
+  - Concatenate text deltas into full output string, capped at **100KB** to bound memory
+  - If truncated, set `metadata.output_truncated: true` on the generation
+  - If SSE parsing fails mid-stream, send generation with whatever was captured + `metadata.output_partial: true`
 - REST client — `POST /api/public/ingestion` with Basic Auth, sends `trace-create` + `generation-create` in one batch
 
 **What's captured per LLM call:**
@@ -51,7 +56,7 @@ Self-contained module with:
 |-------|--------------|-----------|
 | Model | Yes | Yes |
 | Input (messages) | Yes | Yes |
-| Output (response) | Yes | No (too expensive to reconstruct from SSE) |
+| Output (response) | Yes | Yes (reassembled from SSE text deltas, capped at 100KB) |
 | Token usage | Yes | Yes (parsed from SSE events) |
 | Cache tokens (Anthropic) | Yes | Yes |
 | Latency | Yes | Yes |
@@ -78,8 +83,11 @@ Key changes:
 
 All LangFuse failures are isolated — they never affect the proxy response:
 
-- LangFuse secrets not set → feature silently disabled
-- Request/response parse failures → generation sent without usage data
+- LangFuse secrets not set → feature silently disabled, zero overhead (no stream tee, no body parsing)
+- Request/response parse failures → generation sent without usage/output data
+- SSE parse failure mid-stream → generation sent with partial output + `output_partial` metadata flag
+- Output exceeds 100KB cap → truncated, `output_truncated` metadata flag set
+- Client disconnect during streaming → partial data captured (best-effort)
 - LangFuse API errors → logged, not retried
 - Batch > 3.5 MB → skipped with warning
 - Any exception in background task → caught and logged
@@ -88,8 +96,10 @@ All LangFuse failures are isolated — they never affect the proxy response:
 
 1. Deploy without LangFuse secrets → verify existing behavior unchanged
 2. Set secrets → send non-streaming Anthropic request → verify trace + generation in LangFuse dashboard
-3. Send streaming request → verify SSE stream reaches client intact AND LangFuse shows token counts
-4. Set `LANGFUSE_BASE_URL` to invalid host → verify proxy still works, errors logged
+3. Send streaming Anthropic request → verify SSE stream reaches client intact AND LangFuse shows token counts AND full output text
+4. Send streaming OpenAI request → same verification as #3
+5. Send large streaming response (>100KB output) → verify truncation flag in LangFuse metadata
+6. Set `LANGFUSE_BASE_URL` to invalid host → verify proxy still works, errors logged
 
 ## Deferred Enhancements
 
@@ -98,3 +108,4 @@ All LangFuse failures are isolated — they never affect the proxy response:
 - Embeddings tracing
 - Session/user ID propagation from client headers
 - Input truncation for very large prompts (instead of skipping the whole batch)
+- Tool use content block capture (currently only text deltas are reassembled)
