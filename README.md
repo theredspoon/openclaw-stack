@@ -1,17 +1,14 @@
 # Claude > OpenClaw > VPS
 
-> [!WARNING]
-> STATUS: THIS PROJECT IS NOT YET PRODUCTION READY
+> [!NOTE]
+> This project is in active development. Reach out if you need help.
 
-It's what I'm running for my personal setup - with some config changes.
+This project primarily solves the hard bits of deploying fully containerized OpenClaw, as securely as possible without crippling capabilities.
 
-It's fantastic for hacking on OpenClaw in a secure environment.
+It's also packed full of useful debugging tools to assist you or `claude code` in modifying your OpenClaw setup.
 
-It's packed full of useful tools.
-
-The `openclaw.json` config is in rapid development.
-Star the project if you'd like to follow along.
-It will be more fully baked by Feb 28.
+You'll likely want to customize the agents in `deploy/openclaw.json` before deploying.
+The default agent is configured as a coordinator to hand off tasks to sub-agents.
 
 ---
 

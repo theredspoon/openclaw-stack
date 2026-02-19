@@ -2,8 +2,6 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
-- [ ] Make Control UI, Docs and Ask OpenClaw links in dashboard open in new window
-
 - [ ] Redeploy fresh to ensure new vector config works
 - [ ] Try deploying without skill-bin shims to see if it's been fixed
   - Upstream might have better support for routing
