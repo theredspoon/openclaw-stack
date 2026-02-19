@@ -29,6 +29,7 @@ import { execFile } from 'node:child_process'
 import { connect } from 'node:net'
 import { resolve, extname, join } from 'node:path'
 import { createPublicKey, verify as cryptoVerify, createHmac, timingSafeEqual } from 'node:crypto'
+import { handleStatsRequest } from '/app/deploy/stats-dashboard.mjs'
 
 const PORT = 6090
 const BROWSERS_JSON = '/home/node/.openclaw/sandbox/browsers.json'
@@ -591,6 +592,7 @@ async function indexPage() {
   const controlUiUrl = effectiveBP ? effectiveBP.replace(/\/[^/]+$/, '/') || '/' : '/'
   const intro = `<p class="note">Agent tools, browser sessions, and media files. <a href="${controlUiUrl}">Control UI</a> · <a href="https://docs.openclaw.ai/">Docs</a></p>`
   const mediaLink = `<p style="margin-top: 16px;"><a href="${effectiveBP}/media/">&#128196; Media Files</a> — screenshots, PDFs, and downloads from agents</p>`
+  const statsLink = `<p style="margin-top: 16px;"><a href="${effectiveBP}/stats/">&#128200; Stats Dashboard</a> — costs, sessions, agents, and trends</p>`
 
   // Build unified agent list: all agents from config + any browser entries for unknown agents.
   // Agents from config appear in config order; extra browser entries appended at the end.
@@ -622,7 +624,8 @@ async function indexPage() {
        ${intro}
        <h2>Agent Browsers</h2>
        <p class="empty">No active browser sessions. To start one, ask an agent to use the browser in the <a href="${controlUiUrl}">Control UI</a> (e.g. "open the browser and go to google.com").</p>
-       ${mediaLink}`
+       ${mediaLink}
+       ${statsLink}`
     )
   }
 
@@ -658,7 +661,8 @@ async function indexPage() {
      </table>
      <p class="note">Browser containers are auto started by OpenClaw when an agent sandbox is first used.<br> <a href="${controlUiUrl}">Ask OpenClaw via chat</a>: "open browser for Work Agent and go to google.com"</p>
      <p class="note">Page auto-refreshes every 10 seconds.</p>
-     ${mediaLink}`
+     ${mediaLink}
+     ${statsLink}`
   )
 }
 
@@ -837,6 +841,7 @@ const server = createServer(async (req, res) => {
       seg[1] !== 'media' &&
       seg[1] !== '_auth' &&
       seg[1] !== 'browser' &&
+      seg[1] !== 'stats' &&
       !findEntry(seg[1])
     ) {
       const detected = `/${seg[1]}`
@@ -895,6 +900,11 @@ const server = createServer(async (req, res) => {
     const mediaPath = path === '/media' ? '/media/' : path
     handleMediaRequest(req, res, effectiveBP + mediaPath)
     return
+  }
+
+  // Stats dashboard — all /stats/* routes handled by separate module
+  if (path === '/stats' || path.startsWith('/stats/')) {
+    return handleStatsRequest(req, res, path, effectiveBP)
   }
 
   // Bare /browser or /browser/ → redirect to index

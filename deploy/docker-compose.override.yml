@@ -59,6 +59,10 @@ services:
       - ./deploy/rebuild-sandboxes.sh:/app/deploy/rebuild-sandboxes.sh:ro
       # Dashboard server: browser sessions, media files, logs through a fixed port
       - ./deploy/dashboard.mjs:/app/deploy/dashboard.mjs:ro
+      # Stats dashboard: self-contained monitoring module, SPA frontend, and themes
+      - ./deploy/stats-dashboard.mjs:/app/deploy/stats-dashboard.mjs:ro
+      - ./deploy/stats.html:/app/deploy/stats.html:ro
+      - ./deploy/stats-themes.json:/app/deploy/stats-themes.json:ro
     # Entrypoint handles pre-start tasks before exec-ing the command
     entrypoint: ["/app/scripts/entrypoint-gateway.sh"]
     # Full gateway command (entrypoint passes it through via exec "$@")
