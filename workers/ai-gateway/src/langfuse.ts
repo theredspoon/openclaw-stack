@@ -3,9 +3,14 @@ import type { Log, Provider } from './types'
 const MAX_OUTPUT_BYTES = 100 * 1024 // 100KB
 const DEFAULT_LANGFUSE_URL = 'https://cloud.langfuse.com'
 
-/** Returns true when both LangFuse keys are configured. */
-export function isLangfuseEnabled(env: Env): boolean {
-  return !!(env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY)
+/** Returns true when LangFuse is explicitly enabled and keys are configured. */
+export function isLangfuseEnabled(env: Env, log: Log): boolean {
+  if (env.LANGFUSE_ENABLED !== 'true') return false
+  if (!env.LANGFUSE_PUBLIC_KEY || !env.LANGFUSE_SECRET_KEY) {
+    log.error('[langfuse] LANGFUSE_ENABLED is true but LANGFUSE_PUBLIC_KEY and/or LANGFUSE_SECRET_KEY are missing')
+    return false
+  }
+  return true
 }
 
 /** Returns true for LLM generation routes (excludes embeddings, models, etc). */

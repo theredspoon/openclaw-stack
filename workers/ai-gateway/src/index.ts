@@ -59,7 +59,7 @@ export default {
 
     // When LangFuse is enabled for an LLM route, pre-read the request body
     // so it can be shared with both the proxy function and LangFuse reporting
-    const langfuseActive = isLangfuseEnabled(env) && isLlmRoute(route.directPath)
+    const langfuseActive = isLangfuseEnabled(env, log) && isLlmRoute(route.directPath)
     const startTime = langfuseActive ? new Date() : undefined
     const requestBody = langfuseActive ? await request.text() : undefined
 
