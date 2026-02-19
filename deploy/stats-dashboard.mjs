@@ -447,15 +447,34 @@ async function getGateway() {
 }
 
 // ── Git log ──────────────────────────────────────────────────────────
+// Reads .git-info generated at image build time (tab-delimited: hash, subject, ISO date).
+// Computes relative timestamps live so "ago" stays accurate.
 
-async function getGit() {
+function getGit() {
   try {
-    const out = await run('git', ['-C', OPENCLAW_PATH, 'log', '--oneline', '-5', '--format=%h|%s|%ar'])
-    return out.split('\n').filter(l => l.includes('|')).map(l => {
-      const [hash, message, ago] = l.split('|')
-      return { hash, message, ago: ago || '' }
+    const content = readFileSync('/app/.git-info', 'utf8')
+    const now = Date.now()
+    return content.split('\n').filter(l => l.includes('\t')).map(l => {
+      const parts = l.split('\t')
+      const hash = parts[0]
+      const message = parts.slice(1, -1).join('\t')
+      const dateStr = parts[parts.length - 1]
+      return { hash, message, ago: relTime(now - new Date(dateStr).getTime()) }
     })
   } catch { return [] }
+}
+
+function relTime(ms) {
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return 'just now'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d}d ago`
+  const mo = Math.floor(d / 30)
+  return `${mo}mo ago`
 }
 
 // ── OpenClaw config ──────────────────────────────────────────────────
@@ -686,7 +705,8 @@ async function collect() {
   const stores = readStores()
 
   // Run async tasks in parallel
-  const [gw, git] = await Promise.all([getGateway(), getGit()])
+  const gw = await getGateway()
+  const git = getGit()
 
   // Sync tasks
   const cfg = parseConfig(stores.groupNames)

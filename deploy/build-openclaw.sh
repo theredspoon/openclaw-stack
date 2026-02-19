@@ -5,6 +5,8 @@
 #   1. Dockerfile: install Docker + gosu for nested Docker (sandbox isolation via Sysbox)
 #   2. Dockerfile: clear build-time jiti cache (belt-and-suspenders with entrypoint §2c)
 #   3. docker.ts: apply sandbox env vars (docker.env) to container creation
+#   4. .dockerignore: exclude local runtime dirs (data/, deploy/) from build context
+#   5. .git-info: snapshot recent commit history for stats dashboard git log panel
 #
 # Usage: sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 set -euo pipefail
@@ -46,11 +48,29 @@ else
   echo "[build] docker.ts already applies env vars (already patched or upstream fix)"
 fi
 
+# ── 4. Exclude local runtime dirs from build context ─────────────────
+# data/ (persistent nested Docker storage) and deploy/ (our bind-mounted files)
+# are not in the upstream .dockerignore but exist in our project directory.
+# data/docker has root-owned files from Sysbox that cause permission errors.
+if ! grep -q '^data/' .dockerignore; then
+  echo "[build] Patching .dockerignore to exclude data/ and deploy/..."
+  printf '\n# Local runtime dirs (not part of upstream)\ndata/\ndeploy/\nscripts/entrypoint-gateway.sh\n' >> .dockerignore
+else
+  echo "[build] .dockerignore already excludes data/"
+fi
+
+# ── 5. Generate git info for stats dashboard ─────────────────────────
+# Snapshot recent commit history so the stats dashboard can show what
+# version is running. COPY . . picks this up; cleaned after build.
+echo "[build] Generating .git-info..."
+git log --format='%h%x09%s%x09%aI' -10 > .git-info
+
 # ── Build image ──────────────────────────────────────────────────────
 echo "[build] Building openclaw:local..."
 docker build -t openclaw:local .
 
-# ── 4. Restore patched files (keep git working tree clean) ───────────
-git checkout -- Dockerfile "$DOCKER_FILE" 2>/dev/null || true
+# ── 7. Restore patched files (keep git working tree clean) ───────────
+git checkout -- Dockerfile "$DOCKER_FILE" .dockerignore 2>/dev/null || true
+rm -f .git-info
 
 echo "[build] Done. Run: docker compose up -d openclaw-gateway"
