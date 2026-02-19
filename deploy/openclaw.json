@@ -348,7 +348,15 @@
       // Enable with: openclaw config set plugins.entries.llm-logger.enabled true
       // Requires gateway restart (plugins.* not hot-reloadable).
       "llm-logger": {
-        "enabled": false
+        "enabled": false,
+        "config": {
+          "logFile": "llm.log",
+          "llemtry": {
+            "enabled": "{{ENABLE_LLEMTRY_LOGGING}}",
+            "url": "{{LLEMTRY_URL}}",
+            "authToken": "{{LOG_WORKER_TOKEN}}"
+          }
+        }
       }
     }
   },

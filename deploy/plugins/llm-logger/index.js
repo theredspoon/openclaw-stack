@@ -19,10 +19,11 @@
 // Log file is managed by logrotate (daily, 50M maxsize, 7 rotations).
 // File writes only — no LLM content is sent to stdout/stderr (avoids Vector shipping).
 //
-// LLM Telemetry (llemtry):
-//   When ENABLE_LLEMTRY_LOGGING=true, also sends spans to the Log Worker's /llemtry
-//   endpoint for forwarding to Langfuse (or other backends). Derives the URL from
-//   LOG_WORKER_URL (replaces /logs suffix with /llemtry). Uses LOG_WORKER_TOKEN for auth.
+// Configuration (openclaw.json → plugins.entries.llm-logger.config):
+//   logFile: filename in ~/.openclaw/logs/ (default "llm.log", empty string disables)
+//   llemtry.enabled: send spans to Log Worker for Langfuse (default false)
+//   llemtry.url: full URL of the llemtry endpoint
+//   llemtry.authToken: bearer token for the endpoint
 
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -40,15 +41,6 @@ const LIMITS = {
 
 // Keys to redact from logged objects (matches debug-logger pattern)
 const SENSITIVE_KEYS = /token|secret|password|apiKey|api_key|authorization/i
-
-// ── Llemtry configuration (from environment) ───────────────────────
-const LLEMTRY_ENABLED_ENV = process.env.ENABLE_LLEMTRY_LOGGING === 'true'
-const LLEMTRY_URL = process.env.LOG_WORKER_URL
-  ? process.env.LOG_WORKER_URL.replace(/\/logs$/, '/llemtry')
-  : undefined
-const LLEMTRY_TOKEN = process.env.LOG_WORKER_TOKEN
-const INSTANCE_ID = process.env.OPENCLAW_INSTANCE_ID || undefined
-const HOSTNAME = process.env.VPS_HOSTNAME || undefined
 
 // Stale pending input cleanup interval (5 minutes)
 const PENDING_INPUT_TTL_MS = 5 * 60 * 1000
@@ -158,25 +150,27 @@ function buildLlemtrySpan(input, outputEvent, ctx) {
   }
 }
 
-async function sendSpan(span) {
-  const batch = {
-    resource: {
-      serviceName: 'openclaw-gateway',
-      instanceId: INSTANCE_ID,
-      hostname: HOSTNAME,
-    },
-    spans: [span],
-  }
-  const res = await fetch(LLEMTRY_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${LLEMTRY_TOKEN}`,
-    },
-    body: JSON.stringify(batch),
-  })
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`)
+function makeSendSpan(url, token, instanceId, hostname) {
+  return async function sendSpan(span) {
+    const batch = {
+      resource: {
+        serviceName: 'openclaw-gateway',
+        instanceId,
+        hostname,
+      },
+      spans: [span],
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(batch),
+    })
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`)
+    }
   }
 }
 
@@ -185,14 +179,34 @@ export default {
   id: 'llm-logger',
 
   register(api) {
+    // Config from api.pluginConfig (openclaw.json → plugins.entries.llm-logger.config)
+    const cfg = api.pluginConfig ?? {}
+    const llemtryCfg = cfg.llemtry ?? {}
+
+    // File logging — default "llm.log", empty string disables
+    const logFileName = cfg.logFile ?? 'llm.log'
+    const fileLoggingEnabled = logFileName !== ''
+
+    // Llemtry — from plugin config
+    const llemtryWanted = llemtryCfg.enabled === true || llemtryCfg.enabled === 'true'
+    const llemtryUrl = llemtryCfg.url || undefined
+    const llemtryToken = llemtryCfg.authToken || undefined
+
+    // Deployment identifiers — stay as env vars (system-level, not plugin-specific)
+    const INSTANCE_ID = process.env.OPENCLAW_INSTANCE_ID || undefined
+    const HOSTNAME = process.env.VPS_HOSTNAME || undefined
+
     const ocDir = join(api.resolvePath('~'), '.openclaw')
     const logsDir = join(ocDir, 'logs')
-    const logFile = join(logsDir, 'llm.log')
+    const logFile = fileLoggingEnabled ? join(logsDir, logFileName) : null
 
     // Ensure logs directory exists (fire-and-forget, errors caught below per-write)
-    const dirReady = mkdir(logsDir, { recursive: true }).catch(() => {})
+    const dirReady = fileLoggingEnabled
+      ? mkdir(logsDir, { recursive: true }).catch(() => {})
+      : Promise.resolve()
 
     async function writeLine(entry) {
+      if (!fileLoggingEnabled) return
       try {
         await dirReady
         await appendFile(logFile, JSON.stringify(entry) + '\n', 'utf-8')
@@ -203,18 +217,23 @@ export default {
     }
 
     // ── Llemtry output validation ────────────────────────────────
-    let llemtryEnabled = LLEMTRY_ENABLED_ENV
-    if (llemtryEnabled) {
-      if (!LLEMTRY_URL || !LLEMTRY_TOKEN) {
+    let llemtryEnabled = false
+    if (llemtryWanted) {
+      if (!llemtryUrl || !llemtryToken) {
         api.logger.error(
-          '[llm-logger] ENABLE_LLEMTRY_LOGGING is true but LOG_WORKER_URL or LOG_WORKER_TOKEN is missing. ' +
-            'LLM telemetry will NOT be sent. Set these env vars or disable ENABLE_LLEMTRY_LOGGING.'
+          '[llm-logger] llemtry.enabled is true but llemtry.url or llemtry.authToken is missing in plugin config. ' +
+            'LLM telemetry will NOT be sent.'
         )
-        llemtryEnabled = false
       } else {
-        api.logger.info(`[llm-logger] LLM telemetry enabled → ${LLEMTRY_URL}`)
+        api.logger.info(`[llm-logger] LLM telemetry enabled → ${llemtryUrl}`)
+        llemtryEnabled = true
       }
     }
+
+    // Create configured sendSpan function (closure over url/token/identifiers)
+    const sendSpan = llemtryEnabled
+      ? makeSendSpan(llemtryUrl, llemtryToken, INSTANCE_ID, HOSTNAME)
+      : null
 
     // In-memory buffer: runId → pending input event (for span assembly)
     const pendingInputs = new Map()
@@ -377,6 +396,10 @@ export default {
       }
     })
 
-    api.logger.info('[llm-logger] Plugin registered — logging to ~/.openclaw/logs/llm.log')
+    if (fileLoggingEnabled) {
+      api.logger.info(`[llm-logger] Plugin registered — logging to ~/.openclaw/logs/${logFileName}`)
+    } else {
+      api.logger.info('[llm-logger] Plugin registered — file logging disabled')
+    }
   },
 }

@@ -484,7 +484,7 @@ curl -s -X POST "$LLEMTRY_URL" \
 ```bash
 sudo docker logs openclaw-gateway 2>&1 | grep -i 'llm-logger.*telemetry'
 # Expected: "[llm-logger] LLM telemetry enabled → https://..."
-# If missing LOG_WORKER_URL/TOKEN: "[llm-logger] ENABLE_LLEMTRY_LOGGING is true but..."
+# If missing url/authToken: "[llm-logger] llemtry.enabled is true but llemtry.url or llemtry.authToken is missing..."
 ```
 
 **3. End-to-end** (after sending a message to an agent):
