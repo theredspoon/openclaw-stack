@@ -49,7 +49,7 @@
     // When using CF AI Gateway, provider API keys can be set in the worker or directly in CF AI Gateway.
     // Any provider keys set in this worker are passed to CF AI Gateway and take precedence
     // over any keys set in the CF AI Gateway.
-    "CF_AI_GATEWAY_ID": "openclaw-ai-gateway-dev"
+    "CF_AI_GATEWAY_ID": "openclaw-ai-gateway"
     // CF AI Gateway Secret Keys: use `wrangler put secret ...` or set in CF Dashboard
     //   CF_AI_GATEWAY_ACCOUNT_ID — Cloudflare account ID (`wrangler whoami`)
     //   CF_AI_GATEWAY_TOKEN      — authenticates requests to Cloudflare AI Gateway
