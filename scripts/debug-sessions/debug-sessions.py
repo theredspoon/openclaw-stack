@@ -1302,6 +1302,79 @@ def cmd_llm_list(args):
         )
 
 
+def _extract_user_turns(records):
+    """Extract per-user-turn tool call and result data from session records.
+
+    Returns a list of dicts, one per user turn, each containing:
+      - user_ts: timestamp of the user message
+      - user_text: truncated user message text
+      - tool_calls: list of {step, name, summary, result_ok, result_text}
+      - response_text: truncated final assistant text response
+    """
+    turns = []
+    current_turn = None
+    step = 0
+    pending_calls = {}  # call_id -> index in current_turn["tool_calls"]
+
+    for record in records:
+        rtype = record.get("type")
+        if rtype != "message":
+            continue
+
+        msg = record.get("message", {})
+        role = msg.get("role")
+
+        if role == "user":
+            # Start a new user turn
+            ts = parse_timestamp(msg.get("timestamp") or record.get("timestamp"))
+            text = extract_text(msg.get("content", ""))
+            current_turn = {
+                "user_ts": ts,
+                "user_text": truncate(text, 200) if text else "",
+                "tool_calls": [],
+                "response_text": "",
+            }
+            turns.append(current_turn)
+            pending_calls = {}
+
+        elif role == "assistant" and current_turn is not None:
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type")
+                    if btype == "toolCall":
+                        step += 1
+                        name = block.get("name", "?")
+                        call_id = block.get("id", "")
+                        args = block.get("arguments", {})
+                        summary = _tool_call_summary(name, args)
+                        tc = {
+                            "step": step,
+                            "name": name,
+                            "summary": truncate(summary, 120),
+                            "result_ok": None,
+                            "result_text": "",
+                        }
+                        current_turn["tool_calls"].append(tc)
+                        pending_calls[call_id] = tc
+                    elif btype == "text":
+                        text = block.get("text", "")
+                        if text:
+                            current_turn["response_text"] = truncate(text, 200)
+
+        elif role == "toolResult" and current_turn is not None:
+            call_id = msg.get("toolCallId", "")
+            tc = pending_calls.get(call_id)
+            if tc:
+                is_err = is_error_result(msg)
+                tc["result_ok"] = not is_err
+                tc["result_text"] = truncate(extract_text(msg.get("content", "")), 150)
+
+    return turns
+
+
 def cmd_llm_trace(args):
     """Per-session LLM call sequence with running cost total."""
     log_path = find_llm_log(args.llm_log)
@@ -1324,11 +1397,12 @@ def cmd_llm_trace(args):
         print()
         return
 
-    # Cross-reference with session transcript for completeness check
+    # Cross-reference with session transcript
     agent = matched[0]["agentId"]
     sid = matched[0]["sessionId"][:12] if matched[0]["sessionId"] else session_id[:12]
     session_user_turns = None
     session_assistant_turns = None
+    user_turns_data = []
     try:
         session_info = find_session(args.base_dir, session_id, agent if args.agent else None)
         if session_info:
@@ -1336,8 +1410,23 @@ def cmd_llm_trace(args):
             a = analyze_session(records)
             session_user_turns = a["user_turns"]
             session_assistant_turns = a["assistant_turns"]
+            user_turns_data = _extract_user_turns(records)
     except Exception:
         pass
+
+    # Match LLM log entries to user turns by order (both are chronological)
+    # LLM hooks fire once per user turn, so entry i corresponds to user turn i
+    # But if plugin was enabled mid-session, early turns have no log entry.
+    # Align from the end if counts differ due to missing early entries.
+    turn_for_call = {}  # index in matched -> user turn data
+    if user_turns_data:
+        n_calls = len(matched)
+        n_turns = len(user_turns_data)
+        if n_calls <= n_turns:
+            # Align from the end — missing entries are at the start
+            offset = n_turns - n_calls
+            for i in range(n_calls):
+                turn_for_call[i] = user_turns_data[offset + i]
 
     # Header
     print(c(C.BOLD + C.CYAN, "\u2550" * 90))
@@ -1375,10 +1464,6 @@ def cmd_llm_trace(args):
         out_tok = call["outputTokens"]
         total_tokens += in_tok + out_tok
 
-        tools = ", ".join(call["toolNames"][:5])
-        if len(call["toolNames"]) > 5:
-            tools += f" +{len(call['toolNames']) - 5}"
-
         model_short = (call["model"] or "?")
         # Strip common prefix for brevity
         for prefix in ("claude-", ""):
@@ -1410,6 +1495,14 @@ def cmd_llm_trace(args):
             cache_parts.append(f"cw:{human_tokens(call['cacheWriteTokens'])}")
         cache_str = "  ".join(cache_parts)
 
+        # User message context from session transcript
+        turn_data = turn_for_call.get(i - 1)
+        if turn_data and turn_data["user_text"]:
+            user_preview = turn_data["user_text"].replace("\n", " ")
+            if len(user_preview) > 80:
+                user_preview = user_preview[:80] + "..."
+            print(c(C.BLUE, f"  \u2502 {user_preview}"))
+
         print(
             c(C.BOLD + C.CYAN, f"  [{i:3d}]")
             + f" {ts}  {model_short}  {dur}"
@@ -1419,11 +1512,32 @@ def cmd_llm_trace(args):
             f"{cache_str}  cost: {cost_col}  "
             + c(C.DIM, f"cumul: {fmt_cost(cumulative_cost)}")
         )
-        if tools:
-            print(f"        tools: {c(C.DIM, tools)}")
         print(
             f"        stop: {stop_col}"
         )
+
+        # Tool calls from session transcript
+        if turn_data and turn_data["tool_calls"]:
+            for tc in turn_data["tool_calls"]:
+                if tc["result_ok"] is True:
+                    status = c(C.GREEN, "\u2713")
+                elif tc["result_ok"] is False:
+                    status = c(C.RED, "\u2717")
+                else:
+                    status = c(C.DIM, "?")
+                name_col = c(C.CYAN, tc["name"])
+                summary = c(C.DIM, tc["summary"]) if tc["summary"] else ""
+                print(f"        {status} {name_col}  {summary}")
+                if tc["result_ok"] is False and tc["result_text"]:
+                    print(c(C.RED, f"          {truncate(tc['result_text'], 120)}"))
+
+        # Final response text preview
+        if turn_data and turn_data["response_text"]:
+            resp_preview = turn_data["response_text"].replace("\n", " ")
+            if len(resp_preview) > 100:
+                resp_preview = resp_preview[:100] + "..."
+            print(c(C.DIM, f"        \u2192 {resp_preview}"))
+
         print()
 
     # Summary
