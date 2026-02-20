@@ -100,6 +100,7 @@
   "agents": {
     // Agent sandbox default settings - all agents inherit these settings & can override per agent
     "defaults": {
+      "userTimezone": "America/Los_Angeles", // Default timezone - can be updated by OpenClaw
       "sandbox": {
         // all: every agent session runs sandboxed by default.
         // Main agent overrides to "non-main" so operator DMs run on host.
