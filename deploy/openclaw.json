@@ -70,6 +70,8 @@
     }
   },
   "logging": {
+    "level": "info", // file log level
+    "consoleLevel": "info", // console/docker log level
     "consoleStyle": "json", // Send json logs to vector -> Log Worker
     "redactSensitive": "tools" // Redact sensitive info before shipping logs
   },
