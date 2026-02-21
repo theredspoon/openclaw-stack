@@ -15,6 +15,7 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 
 ## Completed (this branch)
 
+- [x] Fix dashboard loading error - incorrectly parses jsonc openclaw.json file before gateway loads it and replaces with json
 - [x] Add layering to sandbox common builds to allow for layered builds instead of full rebuilds
 - [x] Rename sandbox-common to sandbox-toolkit
 - [x] Add sandbox-toolkit bin test to verification step

@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { connect } from 'node:net'
+import JSON5 from 'json5'
 import { getData } from '../data/stats.mjs'
 import { getRecentMedia } from './media.mjs'
 import { renderPage } from '../layout.mjs'
@@ -27,8 +28,7 @@ let agentNames = new Map()
 function loadAgentConfig() {
   try {
     const raw = readFileSync(OPENCLAW_CONFIG, 'utf8')
-    const json = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
-    const config = JSON.parse(json)
+    const config = JSON5.parse(raw)
     const agents = config?.agents?.list || []
     const nonMain = new Set()
     const denied = new Set()

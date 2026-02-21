@@ -6,6 +6,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
+import JSON5 from 'json5'
 
 const OPENCLAW_PATH = '/home/node/.openclaw'
 const AGENTS_BASE = join(OPENCLAW_PATH, 'agents')
@@ -62,16 +63,12 @@ function run(cmd, args, opts) {
   })
 }
 
-function stripComments(s) {
-  return s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
-}
-
 function readJson(p) {
   try { return JSON.parse(readFileSync(p, 'utf8')) } catch { return null }
 }
 
 function readJsonc(p) {
-  try { return JSON.parse(stripComments(readFileSync(p, 'utf8'))) } catch { return null }
+  try { return JSON5.parse(readFileSync(p, 'utf8')) } catch { return null }
 }
 
 function toDate(d) { return d.toISOString().slice(0, 10) }
