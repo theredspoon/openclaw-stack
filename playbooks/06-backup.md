@@ -8,6 +8,7 @@ This playbook configures:
 
 - Backup script for OpenClaw configuration and data
 - Automated daily backups via cron
+- Session transcript and stale log file pruning
 - 30-day retention policy
 
 ## Prerequisites
@@ -123,17 +124,59 @@ sudo tar -tzf /home/openclaw/.openclaw/backups/openclaw_backup_*.tar.gz
 
 ---
 
+## 6.4 Session & Log Pruning
+
+Session transcripts (`~/.openclaw/agents/<agentId>/sessions/*.jsonl`) accumulate indefinitely. This cron job deletes session files and stale log files older than 30 days.
+
+### Install Prune Script
+
+```bash
+# SOURCE: deploy/session-prune.sh
+sudo tee /home/openclaw/scripts/session-prune.sh << 'EOF'
+# <<< deploy/session-prune.sh >>>
+EOF
+
+sudo chmod +x /home/openclaw/scripts/session-prune.sh
+```
+
+### Schedule Cron Job
+
+```bash
+sudo tee /etc/cron.d/openclaw-session-prune << 'EOF'
+# OpenClaw session & log pruning — runs as root (uid 1000 owned directories)
+30 3 * * * root /home/openclaw/scripts/session-prune.sh >> /home/openclaw/.openclaw/logs/session-prune.log 2>&1
+EOF
+
+sudo chmod 644 /etc/cron.d/openclaw-session-prune
+```
+
+### Test Manually
+
+```bash
+sudo /home/openclaw/scripts/session-prune.sh
+# Expected: "<date>: Pruned 0 session files, 0 stale log files (retention: 30 days)"
+
+# Optional: test with a shorter retention to verify it works
+# sudo /home/openclaw/scripts/session-prune.sh 1
+```
+
+---
+
 ## Verification
 
 ```bash
-# Check cron job is installed
+# Check cron jobs are installed
 cat /etc/cron.d/openclaw-backup
+cat /etc/cron.d/openclaw-session-prune
 
 # Check backup directory exists (sudo required — .openclaw is owned by uid 1000)
 sudo ls -la /home/openclaw/.openclaw/backups/
 
 # Check backup log (after first run)
 sudo cat /home/openclaw/.openclaw/logs/backup.log
+
+# Check prune log (after first run)
+sudo cat /home/openclaw/.openclaw/logs/session-prune.log
 ```
 
 ---
