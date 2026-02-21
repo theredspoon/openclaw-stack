@@ -354,7 +354,8 @@ EVENTS_URL="${LOG_WORKER_URL/\/logs/\/events}"
 #        ENABLE_EVENTS_LOGGING (from openclaw-config.env), ENABLE_LLEMTRY_LOGGING (from openclaw-config.env),
 #        LLEMTRY_URL (derived: LOG_WORKER_URL with /logs → /llemtry),
 #        EVENTS_URL (derived: LOG_WORKER_URL with /logs → /events),
-#        LOG_WORKER_TOKEN (from openclaw-config.env)
+#        LOG_WORKER_TOKEN (from openclaw-config.env),
+#        OPENCLAW_INSTANCE_ID (from openclaw-config.env), VPS_HOSTNAME (from openclaw-config.env)
 # IMPORTANT: ALL {{VAR}} placeholders must be substituted — including empty strings.
 # OPENCLAW_DOMAIN_PATH="" is valid (serves UI at root). Never leave literal {{...}} in output.
 sudo tee /home/openclaw/.openclaw/openclaw.json << 'JSONEOF'

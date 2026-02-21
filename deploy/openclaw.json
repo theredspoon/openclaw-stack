@@ -352,6 +352,8 @@
       "telemetry": {
         "enabled": true,
         "config": {
+          "instanceId": "{{OPENCLAW_INSTANCE_ID}}", // TEMPLATE: from openclaw-config.env
+          "hostname": "{{VPS_HOSTNAME}}", // TEMPLATE: from openclaw-config.env
           "logFile": "telemetry.log", // Set to empty string to disable file logging
           // Remote event shipping to Log Worker /events → D1 database
           "events": {

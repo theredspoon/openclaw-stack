@@ -285,9 +285,9 @@ export default {
       }
     }
 
-    // ── Deployment identifiers ──────────────────────────────────
-    const INSTANCE_ID = process.env.OPENCLAW_INSTANCE_ID || undefined
-    const HOSTNAME = process.env.VPS_HOSTNAME || undefined
+    // ── Deployment identifiers (from plugin config, not env) ───
+    const INSTANCE_ID = cfg.instanceId || undefined
+    const HOSTNAME = cfg.hostname || undefined
 
     // ── Events output (/events endpoint) ────────────────────────
     const eventsWanted = eventsCfg.enabled === true || eventsCfg.enabled === 'true'

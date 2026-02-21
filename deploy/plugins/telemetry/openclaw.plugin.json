@@ -7,6 +7,14 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "instanceId": {
+        "type": "string",
+        "description": "Deployment identifier sent with telemetry events (e.g. 'openclaw-prod')"
+      },
+      "hostname": {
+        "type": "string",
+        "description": "VPS hostname sent with telemetry events"
+      },
       "logFile": {
         "type": "string",
         "description": "Log filename within ~/.openclaw/logs/. Empty string disables file logging.",
