@@ -26,6 +26,14 @@ import { join } from 'node:path'
 const SUMMARY_TRUNCATE_LENGTH = 500
 const SENSITIVE_KEYS = /token|secret|password|apiKey|api_key|authorization/i
 
+// Token metric fields — these contain "token" in the name but are numeric metrics,
+// not secrets. Checked before SENSITIVE_KEYS to avoid false-positive redaction.
+const METRIC_FIELDS = new Set([
+  'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'totalTokens',
+  'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'total_tokens',
+  'tokenCount',
+])
+
 // Stale pending input cleanup interval (5 minutes)
 const PENDING_INPUT_TTL_MS = 5 * 60 * 1000
 const PENDING_CLEANUP_INTERVAL_MS = 60 * 1000
@@ -44,7 +52,9 @@ function redactValue(obj) {
   if (typeof obj === 'object') {
     const result = {}
     for (const [key, value] of Object.entries(obj)) {
-      if (SENSITIVE_KEYS.test(key)) {
+      if (METRIC_FIELDS.has(key)) {
+        result[key] = value
+      } else if (SENSITIVE_KEYS.test(key)) {
         result[key] = '[REDACTED]'
       } else {
         result[key] = redactValue(value)
