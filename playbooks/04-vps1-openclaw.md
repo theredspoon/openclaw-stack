@@ -361,6 +361,13 @@ sudo tee /home/openclaw/.openclaw/openclaw.json << 'JSONEOF'
 # <<< deploy/openclaw.json (template) >>>
 JSONEOF
 
+# Verify no unsubstituted {{VAR}} placeholders remain (exclude comments)
+if sudo grep -v '^\s*//' /home/openclaw/.openclaw/openclaw.json | grep -q '{{'; then
+  echo "ERROR: Unsubstituted template placeholders found:"
+  sudo grep -n '{{' /home/openclaw/.openclaw/openclaw.json | grep -v '^\s*//'
+  exit 1
+fi
+
 # Ensure container (uid 1000) can read/write, and not world-readable
 sudo chown 1000:1000 /home/openclaw/.openclaw/openclaw.json
 sudo chmod 600 /home/openclaw/.openclaw/openclaw.json

@@ -143,9 +143,10 @@ fi
 # Hook entries must also be enabled in openclaw.json (hooks.internal.entries).
 hooks_dir="/home/node/.openclaw/hooks"
 deploy_hooks="/app/deploy/hooks"
-if [ -d "$deploy_hooks" ]; then
+if [ -d "$deploy_hooks" ] && [ -n "$(ls -A "$deploy_hooks" 2>/dev/null)" ]; then
   mkdir -p "$hooks_dir"
   for hook_dir in "$deploy_hooks"/*/; do
+    [ -d "$hook_dir" ] || continue
     hook_name=$(basename "$hook_dir")
     target="$hooks_dir/$hook_name"
     if [ ! -d "$target" ] || [ "$deploy_hooks/$hook_name/handler.js" -nt "$target/handler.js" ]; then

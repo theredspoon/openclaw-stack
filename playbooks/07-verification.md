@@ -417,7 +417,7 @@ sudo ss -tlnp
 
 # Verify pids_limit set (prevents fork bombs)
 sudo docker inspect openclaw-gateway --format '{{.HostConfig.PidsLimit}}'
-# Expected: 512
+# Expected: 1024
 ```
 
 ```bash

@@ -19,9 +19,10 @@ cd /home/openclaw/openclaw
 # usermod: add node user to docker group for socket access after privilege drop
 if ! grep -q "docker.io" Dockerfile; then
   echo "[build] Patching Dockerfile to install Docker + gosu..."
-  # Insert before USER node so it runs as root
+  # Insert before first USER node so it runs as root (0, address stops at first match)
   # Single line to avoid sed multiline continuation issues in Dockerfile
-  sed -i '/^USER /i RUN apt-get update && apt-get install -y --no-install-recommends docker.io gosu && usermod -aG docker node && rm -rf /var/lib/apt/lists/*' Dockerfile
+  sed -i '0,/^USER node/{/^USER node/i RUN apt-get update && apt-get install -y --no-install-recommends docker.io gosu && usermod -aG docker node && rm -rf /var/lib/apt/lists/*
+}' Dockerfile
 else
   echo "[build] Docker already in Dockerfile (already patched)"
 fi

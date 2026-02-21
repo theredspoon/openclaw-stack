@@ -56,7 +56,7 @@
     ],
     "controlUi": {
       // TEMPLATE: replace with value from OPENCLAW_DOMAIN_PATH in openclaw-config.env
-      // Use "" (empty string) for root path, or "/subpath" for a subpath — never leave as {{...}}
+      // Use "" (empty string) for root path, or "/subpath" for a subpath — never leave as OPENCLAW_DOMAIN_PATH var
       "basePath": "{{OPENCLAW_DOMAIN_PATH}}"
     }
   },
