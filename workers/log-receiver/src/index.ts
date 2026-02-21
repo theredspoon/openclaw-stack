@@ -6,7 +6,11 @@ import { handleLlemtry } from './llemtry'
 
 export default {
   // Cron trigger: prune old events from D1
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
     if (!env.DB) {
       console.error('[prune] D1 database binding "DB" not configured — skipping')
       return
@@ -77,8 +81,10 @@ export default {
     // POST /events — receive batched telemetry events for D1 storage
     if (request.method === 'POST' && pathname === '/events') {
       if (!env.DB) {
-        console.error('[events] D1 database binding "DB" not configured — run: wrangler d1 create openclaw-logs')
-        return addCorsHeaders(jsonError('Events endpoint not available: D1 database not configured', 503))
+        console.error('[events] D1 database binding "DB" not configured')
+        return addCorsHeaders(
+          jsonError('Events endpoint not available: D1 database not configured', 503)
+        )
       }
 
       const authError = await validateAuth(request, env.AUTH_TOKEN)
