@@ -42,7 +42,7 @@ function fmtDate(ms, tz) {
   }
 }
 
-console.log('[stats] Stats dashboard module loaded')
+console.log('[dashboard:stats] Stats module loaded')
 
 // ── Export ────────────────────────────────────────────────────────────
 
@@ -629,7 +629,7 @@ function parseConfig(groupNames) {
       })
     }
   } catch (e) {
-    console.error('[stats] Config error:', e.message)
+    console.error('[dashboard:stats] Config error:', e.message)
   }
 
   return res

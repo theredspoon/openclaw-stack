@@ -156,10 +156,10 @@ function loadPairedDevices() {
       if (tokenSet.size > 0) map.set(id, tokenSet)
     }
     pairedDevices = map
-    console.log(`[dashboard] Loaded ${map.size} paired device(s)`)
+    console.log(`[dashboard:auth] Loaded ${map.size} paired device(s)`)
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      console.log(`[dashboard] Error reading paired.json: ${err.message}`)
+      console.log(`[dashboard:auth] Error reading paired.json: ${err.message}`)
     }
     lastPairedJson = ''
     pairedDevices = new Map()
@@ -346,14 +346,14 @@ export function handleAuthPost(req, res) {
     }
 
     if (!isDeviceTokenValid(deviceId, token)) {
-      console.log(`[dashboard] Auth failed: device ${deviceId} not found or token mismatch`)
+      console.log(`[dashboard:auth] Auth failed: device ${deviceId} not found or token mismatch`)
       res.writeHead(403, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'Device not recognized' }))
       return
     }
 
     const cookie = signSessionCookie(deviceId)
-    console.log(`[dashboard] Auth success: device ${deviceId}`)
+    console.log(`[dashboard:auth] Auth success: device ${deviceId}`)
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Set-Cookie': sessionCookieHeader(cookie),
@@ -368,7 +368,7 @@ export function handleAuthPost(req, res) {
 export async function checkCfAccess(req, res) {
   const auth = await verifyCfAccess(req)
   if (!auth.valid) {
-    console.log(`[dashboard] Access denied: ${auth.reason} (${req.socket.remoteAddress})`)
+    console.log(`[dashboard:auth] Access denied: ${auth.reason} (${req.socket.remoteAddress})`)
     res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' })
     res.end(accessDeniedPage())
     return false
@@ -395,7 +395,7 @@ export function checkSession(req, res) {
 export async function checkWs(req, socket) {
   const auth = await verifyCfAccess(req)
   if (!auth.valid) {
-    console.log(`[dashboard] WS access denied: ${auth.reason} (${req.socket.remoteAddress})`)
+    console.log(`[dashboard:auth] WS access denied: ${auth.reason} (${req.socket.remoteAddress})`)
     socket.destroy()
     return false
   }
@@ -404,7 +404,7 @@ export async function checkWs(req, socket) {
     const cookieVal = getSessionCookie(req)
     const session = cookieVal ? verifySessionCookie(cookieVal) : null
     if (!session) {
-      console.log(`[dashboard] WS pairing auth denied: no valid session cookie (${req.socket.remoteAddress})`)
+      console.log(`[dashboard:auth] WS pairing auth denied: no valid session cookie (${req.socket.remoteAddress})`)
       socket.destroy()
       return false
     }
@@ -420,6 +420,6 @@ export function init() {
     loadPairedDevices()
     watchPairedDevices()
   } else {
-    console.log('[dashboard] OPENCLAW_GATEWAY_TOKEN not set — device pairing auth disabled')
+    console.log('[dashboard:auth] OPENCLAW_GATEWAY_TOKEN not set — device pairing auth disabled')
   }
 }

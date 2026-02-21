@@ -718,4 +718,4 @@ export async function getSessionTrace(sessionId, agent) {
   return { agent: session.agent, sessionId: session.sessionId, status: session.status, entries }
 }
 
-console.log('[logs] Logs data module loaded')
+console.log('[dashboard:logs] Logs data module loaded')

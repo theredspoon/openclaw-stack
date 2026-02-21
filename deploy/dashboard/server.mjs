@@ -167,7 +167,7 @@ const server = createServer(async (req, res) => {
       if (!currentBP) {
         setEffectiveBP(detected)
         console.log(
-          `[dashboard] Auto-detected base path: ${detected} (set DASHBOARD_BASE_PATH=${detected} to make this explicit)`
+          `[dashboard:server] Auto-detected base path: ${detected} (set DASHBOARD_BASE_PATH=${detected} to make this explicit)`
         )
       }
       if (getEffectiveBP() === detected) {
@@ -376,7 +376,7 @@ initHome()
 server.listen(PORT, () => {
   const bp = getConfiguredBP()
   console.log(
-    `[dashboard] Listening on port ${PORT}${
+    `[dashboard:server] Listening on port ${PORT}${
       bp ? `, base path: ${bp}` : ' (no base path — will auto-detect from first request if needed)'
     }`
   )

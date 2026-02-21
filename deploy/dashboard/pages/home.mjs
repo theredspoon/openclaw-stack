@@ -57,14 +57,14 @@ function loadAgentConfig() {
     browserDeniedAgents = denied
     agentNames = names
     if (nonMain.size > 0) {
-      console.log(`[dashboard] Non-main agents (browser hidden when stopped): ${[...nonMain].join(', ')}`)
+      console.log(`[dashboard:home] Non-main agents (browser hidden when stopped): ${[...nonMain].join(', ')}`)
     }
     if (denied.size > 0) {
-      console.log(`[dashboard] Browser-denied agents: ${[...denied].join(', ')}`)
+      console.log(`[dashboard:home] Browser-denied agents: ${[...denied].join(', ')}`)
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      console.log(`[dashboard] Could not read agent config: ${err.message}`)
+      console.log(`[dashboard:home] Could not read agent config: ${err.message}`)
     }
   }
 }

@@ -103,7 +103,7 @@ function json(res, data) {
 }
 
 function error(res, e) {
-  console.error('[logs] API error:', e.message)
+  console.error('[dashboard:logs] API error:', e.message)
   res.writeHead(500, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify({ error: e.message }))
 }
