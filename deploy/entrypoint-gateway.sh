@@ -213,7 +213,19 @@ fi
 # that would block the gateway (also node) from writing cache entries.
 DASHBOARD_SERVER="/app/deploy/dashboard/server.mjs"
 if [ -f "$DASHBOARD_SERVER" ]; then
-  gosu node node "$DASHBOARD_SERVER" &
+  # Supervisor loop: restart dashboard if it crashes, with backoff to avoid spin.
+  # - set +e: parent script uses set -e which subshells inherit; without this,
+  #   a non-zero exit from the dashboard (e.g. signal kill) would exit the loop.
+  # - Inner (...) around gosu: gosu uses exec which replaces the current process;
+  #   the inner subshell gives gosu a disposable process to replace.
+  (
+    set +e
+    while true; do
+      ( gosu node node "$DASHBOARD_SERVER" )
+      echo "[entrypoint] Dashboard exited ($?), restarting in 3s..."
+      sleep 3
+    done
+  ) &
   echo "[entrypoint] Dashboard server started on port 6090 (as node)"
 fi
 
