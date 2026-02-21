@@ -231,6 +231,7 @@ function makeEventSender(url, token, instanceId, hostname) {
     // Reset flush timer on each enqueue
     if (flushTimer) clearTimeout(flushTimer)
     flushTimer = setTimeout(flush, flushIntervalMs)
+    flushTimer.unref() // Don't keep process alive for flush
   }
 
   async function shutdown() {
@@ -334,7 +335,7 @@ export default {
     const pendingInputs = new Map()
 
     if (llemtryEnabled) {
-      setInterval(() => {
+      const cleanupTimer = setInterval(() => {
         const now = Date.now()
         for (const [runId, entry] of pendingInputs) {
           if (now - entry.timestamp > PENDING_INPUT_TTL_MS) {
@@ -342,6 +343,7 @@ export default {
           }
         }
       }, PENDING_CLEANUP_INTERVAL_MS)
+      cleanupTimer.unref() // Don't keep process alive for cleanup
     }
 
     // ── Shared emit function ────────────────────────────────────

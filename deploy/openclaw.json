@@ -323,8 +323,15 @@
     "enabled": true,
     "allow": [
       "coordinator", // Coordinator plugin — builds routing table from agent configs
-      "telemetry" // Unified telemetry — replaces llm-logger plugin and debug-logger hook
+      "telemetry", // Unified telemetry — replaces llm-logger plugin and debug-logger hook
+      "memory-core" // File-backed memory search tools
     ],
+    "load": {
+      "paths": ["~/.openclaw/extensions"] // Trust the managed extensions directory for provenance
+    },
+    "slots": {
+      "memory": "memory-core" // Bundled memory plugin — provides memory_search and memory_get tools
+    },
     "entries": {
       // Coordinator Plugin
       // Auto-discovers routes from agents.list[].skills via loadConfig() and writes
@@ -370,6 +377,12 @@
             "gateway": "metadata"
           }
         }
+      },
+      // Memory Core Plugin
+      // Bundled file-backed memory — provides memory_search and memory_get tools.
+      // Loaded from /app/extensions/memory-core/ (ships with OpenClaw).
+      "memory-core": {
+        "enabled": true
       }
     }
   },
