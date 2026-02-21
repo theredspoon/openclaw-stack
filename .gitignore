@@ -9,6 +9,10 @@ source/
 openclaw-config.env
 node_modules/
 
+# Worker configs contain environment-specific values (D1 database IDs, worker names).
+# Use wrangler.jsonc.example as template — see playbooks/01-workers.md.
+workers/*/wrangler.jsonc
+
 # Local sync of /home/node/.openclaw/media/ via the scripts/sync-media.sh script
 media/
 

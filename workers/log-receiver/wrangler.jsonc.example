@@ -28,7 +28,7 @@
     {
       "binding": "DB",
       "database_name": "openclaw-logs",
-      "database_id": "<run: wrangler d1 create openclaw-logs>"
+      "database_id": "<run: npx wrangler d1 create openclaw-logs>"
     }
   ],
 

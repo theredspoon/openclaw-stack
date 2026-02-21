@@ -39,6 +39,16 @@ cd workers/ai-gateway
 npm install
 ```
 
+### Configure wrangler.jsonc
+
+If `wrangler.jsonc` doesn't exist, copy from the example template:
+
+```bash
+cp wrangler.jsonc.example wrangler.jsonc
+```
+
+No values need to be changed for a standard deployment. If using multiple Cloudflare accounts, add `"account_id": "<id>"` to `wrangler.jsonc`.
+
 ### Check for Existing AI Gateway Worker Deployment
 
 Before deploying, check if the worker is already live. If `AI_GATEWAY_WORKER_URL` in `openclaw-config.env` is not a placeholder (no angle brackets), curl its health endpoint:
@@ -69,8 +79,6 @@ echo "<generated-token>" | npx wrangler secret put AUTH_TOKEN
 
 If `AI_GATEWAY_AUTH_TOKEN` already has a real value, use that value instead.
 
-> **Multiple Cloudflare accounts:** If `wrangler whoami` lists more than one account, wrangler commands will fail with _"More than one account available but unable to select one in non-interactive mode."_ Fix by adding `"account_id": "<id>"` to `wrangler.jsonc`, or by setting `export CLOUDFLARE_ACCOUNT_ID=<id>` before running wrangler commands. Use the account ID that matches your Workers subscription.
-
 ### Deploy AI Gateway Worker
 
 ```bash
@@ -100,6 +108,16 @@ The Log Receiver Worker receives batched log events from Vector and `console.log
 cd workers/log-receiver
 npm install
 ```
+
+### Configure wrangler.jsonc
+
+If `wrangler.jsonc` doesn't exist, copy from the example template:
+
+```bash
+cp wrangler.jsonc.example wrangler.jsonc
+```
+
+The D1 `database_id` placeholder will be updated after creating the database (see "Create D1 Database" below).
 
 ### Check for Existing Log Receiver Deployment
 
@@ -144,16 +162,11 @@ npx wrangler d1 list | grep openclaw-logs
 npx wrangler d1 create openclaw-logs
 ```
 
-Capture the `database_id` from the output and update the `d1_databases` section in `wrangler.jsonc`:
+Capture the `database_id` from the output and update the placeholder in `wrangler.jsonc`:
 
-```jsonc
-"d1_databases": [
-  {
-    "binding": "DB",
-    "database_name": "openclaw-logs",
-    "database_id": "<paste-database-id-here>"
-  }
-]
+```bash
+# Replace the placeholder with the real database ID
+sed -i 's/<run: npx wrangler d1 create openclaw-logs>/<database-id>/' wrangler.jsonc
 ```
 
 ### Apply D1 Schema
