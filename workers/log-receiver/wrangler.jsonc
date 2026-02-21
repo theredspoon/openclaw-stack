@@ -32,9 +32,17 @@
     }
   ],
 
+  // Cron trigger: prune old events from D1 daily at 04:00 UTC
+  "triggers": {
+    "crons": ["0 4 * * *"]
+  },
+
   "vars": {
     // Comma-separated log levels to output to console (changeable without redeploy via dashboard)
-    "LOGGABLE_LEVELS": "info,warn,error,fatal,panic"
+    "LOGGABLE_LEVELS": "info,warn,error,fatal,panic",
+
+    // Number of days to retain events in D1 before auto-pruning (changeable via dashboard)
+    "EVENT_RETENTION_DAYS": "30"
     //
     // Secrets (set via `wrangler secret put`):
     //

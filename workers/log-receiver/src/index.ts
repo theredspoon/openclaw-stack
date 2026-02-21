@@ -5,6 +5,38 @@ import { handleEvents } from './events'
 import { handleLlemtry } from './llemtry'
 
 export default {
+  // Cron trigger: prune old events from D1
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!env.DB) {
+      console.error('[prune] D1 database binding "DB" not configured — skipping')
+      return
+    }
+
+    const retentionDays = parseInt(env.EVENT_RETENTION_DAYS || '30', 10)
+    if (!Number.isFinite(retentionDays) || retentionDays < 1) {
+      console.error(`[prune] Invalid EVENT_RETENTION_DAYS: ${env.EVENT_RETENTION_DAYS}`)
+      return
+    }
+
+    try {
+      const result = await env.DB.prepare(
+        `DELETE FROM events WHERE timestamp < datetime('now', '-' || ? || ' days')`
+      )
+        .bind(retentionDays)
+        .run()
+
+      const deleted = result.meta?.changes ?? 0
+      console.log({
+        _prune: true,
+        message: `[PRUNE] Deleted ${deleted} events older than ${retentionDays} days`,
+        deleted,
+        retentionDays,
+      })
+    } catch (err) {
+      console.error('[prune] Failed:', err instanceof Error ? err.message : err)
+    }
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // CORS preflight
     if (request.method === 'OPTIONS') {
