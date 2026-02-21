@@ -267,32 +267,42 @@ Normal informational output (progress updates, version notes, check results) sho
 
 ### Context window management
 
-A full deployment consumes significant context. To avoid mid-deploy compaction, **offload verbose steps to Bash subagents** using the `Task` tool. Subagents run in their own context window — only their short summary returns to the main conversation.
+A full deployment consumes significant context. To avoid mid-deploy compaction, **offload verbose steps to subagents** using the `Task` tool. Subagents run in their own context window — only their short summary returns to the main conversation.
 
 **Delegate to subagents:** Steps that produce verbose output but only need pass/fail + key values back:
 
-| Step | Why it's heavy |
-|------|---------------|
-| 02: System update + package install | apt output (hundreds of lines) |
-| 03: Docker CE installation | apt output |
-| 04: Sysbox installation | dpkg output |
-| 04: OpenClaw Docker build | Full Docker build log |
-| 04: File deployments (batch) | Reading templates + writing to VPS |
-| 04: Sandbox build wait | Polling loop with log tail |
+| Step | Why it's heavy | Return values |
+|------|---------------|---------------|
+| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID |
+| 02: System update + package install | apt output (hundreds of lines) | pass/fail |
+| 02: SSH hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version |
+| 03: Docker CE installation | apt + daemon config output | pass/fail, Docker/Compose versions |
+| 04: Sysbox + setup (4.1–4.4) | dpkg + network/directory creation | pass/fail |
+| 04: File deployments (4.6–4.15) | Reading templates + writing to VPS | pass/fail |
+| 04: OpenClaw Docker build (4.16) | Full Docker build log | pass/fail |
+| 04: Sandbox build wait | Polling loop with log tail | pass/fail |
+| 06: Backup setup | Script creation + cron config | pass/fail, test backup size |
+| 07: VPS-side verification | 14 SSH checks, each with output | Summary table (check name + pass/fail) |
 
-**Keep in main context:** Steps that need careful error handling, generate credentials used later, require user interaction, or involve critical transitions (SSH hardening port swap, device pairing, verification results).
+**Keep in main context:** Steps that generate credentials stored in `openclaw-config.env` (user creation in 02, gateway token in 04), SSH hardening port transition (02), device pairing (04/08), user-facing interactions (08), and local-side verification checks in 07 (worker health, Cloudflare Access, port exposure — these are fast curl commands).
 
-**Subagent prompt pattern:** Include SSH connection details, the exact commands from the playbook, and specify what to return:
+**Critical: avoid reading playbooks before delegating.** Do NOT read a playbook into main context and then pass its contents to a subagent — this doubles the context cost. Instead, tell the subagent to read the playbook section itself:
 
 ```
-Connect to VPS via: ssh -i <key> -p <port> <user>@<ip>
-Run these commands: <commands from playbook>
-Return: pass/fail, any generated values (tokens, passwords), error output if failed.
-Do NOT return raw apt/build output on success.
+Read playbooks/04-vps1-openclaw.md sections 4.6 through 4.15 and execute them.
+SSH: ssh -i <key> -p <port> <user>@<ip>
+Config values for template substitution:
+  GATEWAY_TOKEN=<value>
+  OPENCLAW_DOMAIN=<value>
+  ...
+Return: pass/fail for each section, error output if failed.
 ```
+
+**Template substitution in subagents:** When delegating file deployments, pass the config variable values (from `openclaw-config.env`) to the subagent and let it read the `deploy/` template files internally. Do NOT read deploy files into main context and then copy their contents into the subagent prompt.
 
 **Additional techniques:**
 - Batch related SSH commands into single calls (e.g., all file deployments in one SSH session)
 - Use `2>&1 | tail -5` for build commands where only the final status matters
 - Use background tasks (`run_in_background`) for sandbox build waits
 - After a subagent completes successfully, its verbose output stays out of main context automatically
+- Run independent subagents in parallel when possible (e.g., 06-backup can overlap with sandbox build wait)
