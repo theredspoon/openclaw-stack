@@ -506,8 +506,8 @@ sudo tail -5 /home/openclaw/.openclaw/logs/telemetry.log | jq .
 # Check Log Worker logs for event and llemtry entries
 npx wrangler tail --format json | jq 'select(.logs[].message | contains("[EVENTS]") or contains("[LLEMTRY]"))'
 
-# Check D1 for stored events
-npx wrangler d1 execute openclaw-logs --command="SELECT type, category, agent_id, session_id FROM events ORDER BY id DESC LIMIT 10"
+# Check D1 for stored events (D1_DATABASE_NAME from workers/log-receiver/wrangler.jsonc)
+npx wrangler d1 execute <D1_DATABASE_NAME> --command="SELECT type, category, agent_id, session_id FROM events ORDER BY id DESC LIMIT 10"
 ```
 
 - [ ] Events endpoint returns `{"status":"ok","count":0}` for empty batch

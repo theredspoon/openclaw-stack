@@ -102,6 +102,8 @@ curl -s https://<worker-url>/health
 
 The Log Receiver Worker receives batched log events from Vector and `console.log()`s them. Cloudflare captures Worker console output via real-time Logs dashboard and Logpush. It also stores structured telemetry events in a D1 database for dashboard session exploration.
 
+> **VARS:** `D1_DATABASE_NAME` — read from `workers/log-receiver/wrangler.jsonc` → `d1_databases[0].database_name`. All `wrangler d1` commands below use this value.
+
 ### Setup Log Receiver
 
 ```bash
@@ -152,35 +154,30 @@ echo "<existing-token>" | npx wrangler secret put AUTH_TOKEN
 The Log Worker stores telemetry events in a D1 database. Check if one already exists:
 
 ```bash
-npx wrangler d1 list | grep openclaw-logs
+npx wrangler d1 list | grep <D1_DATABASE_NAME>
 ```
 
 - **If it exists:** Skip creation, use the existing database ID.
 - **If not found:** Create it:
 
 ```bash
-npx wrangler d1 create openclaw-logs
+npx wrangler d1 create <D1_DATABASE_NAME>
 ```
 
-Capture the `database_id` from the output and update the placeholder in `wrangler.jsonc`:
-
-```bash
-# Replace the placeholder with the real database ID
-sed -i 's/<run: npx wrangler d1 create openclaw-logs>/<database-id>/' wrangler.jsonc
-```
+Capture the `database_id` from the output and update the placeholder in `wrangler.jsonc`.
 
 ### Apply D1 Schema
 
 Apply the events table schema to the remote database:
 
 ```bash
-npx wrangler d1 execute openclaw-logs --remote --file=src/schema.sql
+npx wrangler d1 execute <D1_DATABASE_NAME> --remote --file=src/schema.sql
 ```
 
 Verify the table was created:
 
 ```bash
-npx wrangler d1 execute openclaw-logs --remote --command="SELECT name FROM sqlite_master WHERE type='table'"
+npx wrangler d1 execute <D1_DATABASE_NAME> --remote --command="SELECT name FROM sqlite_master WHERE type='table'"
 # Expected: events
 ```
 

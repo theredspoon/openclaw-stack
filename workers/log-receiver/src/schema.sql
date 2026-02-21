@@ -1,5 +1,5 @@
 -- OpenClaw Telemetry Events — D1 Schema
--- Applied via: wrangler d1 execute openclaw-logs --file=src/schema.sql
+-- Applied via: wrangler d1 execute <database_name> --remote --file=src/schema.sql
 
 -- Core events table — one row per event
 CREATE TABLE IF NOT EXISTS events (

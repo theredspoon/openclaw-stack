@@ -22,13 +22,13 @@
   },
 
   // D1 database for telemetry event storage
-  // Create with: wrangler d1 create openclaw-logs
-  // Apply schema: wrangler d1 execute openclaw-logs --file=src/schema.sql
+  // Create with: wrangler d1 create <database_name>
+  // Apply schema: wrangler d1 execute <database_name> --file=src/schema.sql
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "openclaw-logs",
-      "database_id": "<run: npx wrangler d1 create openclaw-logs>"
+      "database_id": "<run: npx wrangler d1 create>"
     }
   ],
 
