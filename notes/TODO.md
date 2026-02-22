@@ -2,19 +2,6 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
-- [x] Remove debug-logger hook and llm-logger plugin
-- [x] Update workers playbook to generate D1 database during Log Worker deployment
-- [X] Add prefixing to all dashboard models logs: e.g. [dashboard:stats] [dashboard:logs] etc.
-
-- [x] Run cleanup cron job for deleting out old session files in .openclaw/agents/[agent]/sessions
-  - Session jsonl files accumulate indefinitely
-
-- [ ] Redeploy fresh to ensure new vector config works
-- [ ] Try deploying without skill-bin shims to see if it's been fixed
-  - Upstream might have better support for routing
-  - Coordinator might be solving the issue without shimming
-  - At a minimum, needs to be renamed to tool-bin to avoid confusion
-
 - [ ] Verify if the health cron in log worker can reach the VPS over the tunnel, if not, remove from README
 
 - [ ] Add seccompProfile, apparmorProfile to sandbox configs in openclaw.json
@@ -22,6 +9,13 @@ AGENTS: IGNORE THIS TODO LIST - for development only
 
 ## Completed (this branch)
 
+- [x] Include the current resource limits in the host-alert report: ram, cpu & disk total space
+  - Currently just shows % used but doesn't show total values
+- [x] Remove debug-logger hook and llm-logger plugin
+- [x] Update workers playbook to generate D1 database during Log Worker deployment
+- [X] Add prefixing to all dashboard models logs: e.g. [dashboard:stats] [dashboard:logs] etc.
+- [x] Run cleanup cron job for deleting out old session files in .openclaw/agents/[agent]/sessions
+  - Session jsonl files accumulate indefinitely
 - [x] Fix dashboard loading error - incorrectly parses jsonc openclaw.json file before gateway loads it and replaces with json
 - [x] Add layering to sandbox common builds to allow for layered builds instead of full rebuilds
 - [x] Rename sandbox-common to sandbox-toolkit
