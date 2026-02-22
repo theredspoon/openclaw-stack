@@ -281,11 +281,10 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 | 04: Sysbox + setup (4.1–4.4) | dpkg + network/directory creation | pass/fail |
 | 04: File deployments (4.6–4.15) | Reading templates + writing to VPS | pass/fail |
 | 04: OpenClaw Docker build (4.16) | Full Docker build log | pass/fail |
-| 04: Sandbox build wait | Polling loop with log tail | pass/fail |
 | 06: Backup setup | Script creation + cron config | pass/fail, test backup size |
 | 07: VPS-side verification | 14 SSH checks, each with output | Summary table (check name + pass/fail) |
 
-**Keep in main context:** Steps that generate credentials stored in `openclaw-config.env` (user creation in 02, gateway token in 04), SSH hardening port transition (02), device pairing (04/08), user-facing interactions (08), and local-side verification checks in 07 (worker health, Cloudflare Access, port exposure — these are fast curl commands).
+**Keep in main context:** Steps that generate credentials stored in `openclaw-config.env` (user creation in 02, gateway token in 04), SSH hardening port transition (02), device pairing (04/08), user-facing interactions (08), local-side verification checks in 07 (worker health, Cloudflare Access, port exposure — these are fast curl commands), and the **sandbox build wait** (04: §4.16 — use background task + progress polling pattern for user feedback, ~100 tokens per poll).
 
 **Critical: avoid reading playbooks before delegating.** Do NOT read a playbook into main context and then pass its contents to a subagent — this doubles the context cost. Instead, tell the subagent to read the playbook section itself:
 
@@ -304,6 +303,5 @@ Return: pass/fail for each section, error output if failed.
 **Additional techniques:**
 - Batch related SSH commands into single calls (e.g., all file deployments in one SSH session)
 - Use `2>&1 | tail -5` for build commands where only the final status matters
-- Use background tasks (`run_in_background`) for sandbox build waits
 - After a subagent completes successfully, its verbose output stays out of main context automatically
 - Run independent subagents in parallel when possible (e.g., 06-backup can overlap with sandbox build wait)

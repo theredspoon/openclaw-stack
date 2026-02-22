@@ -651,29 +651,44 @@ sudo docker logs --tail 20 openclaw-gateway
 
 ### Wait for full startup
 
-On first boot, the entrypoint builds 3 sandbox images inside nested Docker (~5-15 min).
+On first boot, the entrypoint builds 3 sandbox images inside nested Docker (~15-25 min).
 The gateway HTTP endpoint responds during this time, but WebSocket connections (needed for
-CLI pairing) fail until the entrypoint finishes and drops to the node user.
+device pairing) fail until the entrypoint finishes and drops to the node user.
 
-**Wait for the entrypoint to complete before attempting CLI pairing:**
+**Wait for the entrypoint to complete with progress feedback:**
+
+Use a background task + polling pattern to give the user visual feedback without flooding the context window:
+
+1. **Start the wait in the background** using the Bash tool with `run_in_background: true`:
 
 ```bash
 #!/bin/bash
 # Wait for entrypoint to finish sandbox builds — looks for privilege drop message
-echo "Waiting for entrypoint to finish (first boot builds sandbox images)..."
-timeout 600 bash -c 'until sudo docker logs openclaw-gateway 2>&1 | grep -q "Executing as node"; do sleep 10; done'
-echo "Entrypoint finished."
-
+timeout 900 bash -c 'until sudo docker logs openclaw-gateway 2>&1 | grep -q "Executing as node"; do sleep 10; done'
 # Then wait for gateway health endpoint
-echo "Waiting for gateway health..."
 timeout 120 bash -c 'until curl -sf http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ > /dev/null 2>&1; do sleep 3; done'
-echo "Gateway is healthy."
+echo "READY"
 ```
 
+2. **Poll for progress every 30 seconds** from the main context. Each poll is a lightweight SSH command:
+
+```bash
+ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  "sudo docker logs openclaw-gateway 2>&1 | grep '\[entrypoint\]' | tail -1"
+```
+
+Print the result as a status update to the user (e.g., `[entrypoint] Building toolkit sandbox image...`). Continue polling until the background task completes.
+
+3. **Check background task completion** between polls using `TaskOutput` with `block: false`. When the background task returns `READY`, proceed to the next step.
+
 > **Why not just check health?** The health endpoint (`curl`) responds as soon as the
-> gateway HTTP server starts, which happens before sandbox builds finish. But the CLI
-> connects via WebSocket, which requires the gateway to be fully initialized. Checking
-> the "Executing as node" log line ensures the entrypoint has completed.
+> gateway HTTP server starts, which happens before sandbox builds finish. But device
+> pairing requires the gateway to be fully initialized. Checking the "Executing as node"
+> log line ensures the entrypoint has completed.
+>
+> **Why not delegate to a subagent?** Subagent output is invisible to the user until it
+> returns. The background + polling pattern keeps the build in the main context cheaply
+> (~100 tokens per poll) while giving real-time progress feedback.
 
 ### Fix .openclaw ownership
 
