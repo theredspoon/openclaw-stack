@@ -106,10 +106,17 @@ rm "${SYSBOX_DEB}"
 
 ---
 
-## 4.2 Create Docker Networks
+## 4.2 Infrastructure Setup
+
+> **Single SSH session.** Creates networks, directories, clones the repo, and generates the `.env` file. Returns the generated `GATEWAY_TOKEN` which must be saved locally before proceeding.
 
 ```bash
 #!/bin/bash
+set -euo pipefail
+
+# ============================================================
+# Part 1: Create Docker Networks
+# ============================================================
 # IMPORTANT: Use 172.30.x.x subnets to avoid conflicts with Docker's default bridge (172.20.0.0/16)
 
 # Gateway network (for OpenClaw)
@@ -124,19 +131,14 @@ docker network create \
     --internal \
     --subnet 172.31.0.0/24 \
     openclaw-sandbox-net
-```
 
----
-
-## 4.3 Create Directory Structure
-
-```bash
-#!/bin/bash
-# Create directories as openclaw user
-sudo -u openclaw bash << 'EOF'
+# ============================================================
+# Part 2: Create Directory Structure
+# ============================================================
+sudo -u openclaw bash << 'DIREOF'
 OPENCLAW_HOME="/home/openclaw"
 
-# NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in section 4.4
+# NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in Part 3
 mkdir -p "${OPENCLAW_HOME}/.openclaw/workspace"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/credentials"
 mkdir -p "${OPENCLAW_HOME}/.openclaw/logs"
@@ -148,7 +150,7 @@ mkdir -p "${OPENCLAW_HOME}/sandboxes-home"
 
 chmod 700 "${OPENCLAW_HOME}/.openclaw"
 chmod 700 "${OPENCLAW_HOME}/.openclaw/credentials"
-EOF
+DIREOF
 
 # ⚠️  IMPORTANT: Do NOT change 1000:1000 to openclaw:openclaw!
 # The container runs as uid 1000 (node user inside Docker), which is typically
@@ -162,47 +164,21 @@ sudo chown -R 1000:1000 /home/openclaw/sandboxes-home
 # Root-owned with 755/644 permissions so both root can write and container can read
 sudo mkdir -p /home/openclaw/.openclaw/workspace/host-status
 sudo chmod 755 /home/openclaw/.openclaw/workspace/host-status
-```
 
----
-
-## 4.4 Clone OpenClaw Repository
-
-```bash
-#!/bin/bash
-sudo -u openclaw bash << 'EOF'
+# ============================================================
+# Part 3: Clone OpenClaw Repository
+# ============================================================
+sudo -u openclaw bash << 'CLONEEOF'
 cd /home/openclaw
 git clone https://github.com/openclaw/openclaw.git openclaw
 
 # Create data directory for bind mounts (not tracked by git)
 mkdir -p /home/openclaw/openclaw/data/docker
-EOF
-```
+CLONEEOF
 
-**If git clone fails with "fatal: unable to access":**
-
-> "Can't reach GitHub from the VPS. Check network connectivity:"
->
-> `curl -sI https://github.com` — if this times out, the VPS may have
-> DNS or outbound connectivity issues.
-
-**If git clone fails with "already exists and is not an empty directory":**
-
-> "The openclaw directory already exists. This VPS may have a previous
-> installation. Use `00-analysis-mode.md` to analyze it first, or
-> remove it to start fresh:"
->
-> `sudo rm -rf /home/openclaw/openclaw`
-
----
-
-## 4.5 Create Environment File
-
-> **Batch:** Steps 4.5 through 4.8 write independent config files. Execute all file writes in a single SSH session.
-
-```bash
-#!/bin/bash
-# Generate gateway token
+# ============================================================
+# Part 4: Create Environment File
+# ============================================================
 GATEWAY_TOKEN=$(openssl rand -hex 32)
 
 # Dashboard base path — direct from config, no parsing needed
@@ -259,69 +235,142 @@ fi
 echo "========================================="
 ```
 
+**If git clone fails with "fatal: unable to access":**
+
+> "Can't reach GitHub from the VPS. Check network connectivity:"
+>
+> `curl -sI https://github.com` — if this times out, the VPS may have
+> DNS or outbound connectivity issues.
+
+**If git clone fails with "already exists and is not an empty directory":**
+
+> "The openclaw directory already exists. This VPS may have a previous
+> installation. Use `00-analysis-mode.md` to analyze it first, or
+> remove it to start fresh:"
+>
+> `sudo rm -rf /home/openclaw/openclaw`
+
 **Record gateway token locally:** Immediately after the script above runs, use the `Edit` tool to update the `GATEWAY_TOKEN` and `GATEWAY_URL` values in the `# DEPLOYED:` section of `openclaw-config.env`. Replace the existing `# DEPLOYED: GATEWAY_TOKEN=` and `# DEPLOYED: GATEWAY_URL=` lines with the generated token and composed URL (`https://<OPENCLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/chat?token=<TOKEN>`). Do NOT use `sed` — it creates backup files on macOS.
 
 > These are comments — `source openclaw-config.env` won't export them. They're a safety net in case the session ends before the deployment report (§ 8.6).
 
 ---
 
-## 4.6 Create Docker Compose Override
+## 4.3 Deploy Configuration
 
-The OpenClaw repo includes a docker-compose.yml. Create an override file to add security hardening and monitoring services. Building happens separately via the build script (section 4.9), not via `docker compose build`.
+> **Two-step batch:** SCP the entire `deploy/` directory to the VPS, then run a single SSH session that copies all files into place, substitutes template variables, and sets permissions.
+
+### File manifest
+
+| Source | Destination | Type | Notes |
+|--------|------------|------|-------|
+| `deploy/docker-compose.override.yml` | `/home/openclaw/openclaw/docker-compose.override.yml` | static | Security hardening + monitoring |
+| `deploy/vector/docker-compose.yml` | `/home/openclaw/vector/docker-compose.yml` | static | Skip if `ENABLE_VECTOR_LOG_SHIPPING=false` |
+| `deploy/vector/vector.yaml` | `/home/openclaw/vector/vector.yaml` | static | Skip if `ENABLE_VECTOR_LOG_SHIPPING=false` |
+| `deploy/openclaw.json` | `/home/openclaw/.openclaw/openclaw.json` | template | See template variables below |
+| `deploy/models.json` | `/home/openclaw/.openclaw/agents/*/agent/models.json` | template | Deployed per-agent (main, code, skills) |
+| `deploy/build-openclaw.sh` | `/home/openclaw/scripts/build-openclaw.sh` | static | |
+| `deploy/entrypoint-gateway.sh` | `/home/openclaw/openclaw/scripts/entrypoint-gateway.sh` | static | |
+| `deploy/host-alert.sh` | `/home/openclaw/scripts/host-alert.sh` | static | |
+| `deploy/host-maintenance-check.sh` | `/home/openclaw/scripts/host-maintenance-check.sh` | static | |
+| `deploy/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | static | |
+| `deploy/plugins/*` | `/home/openclaw/openclaw/deploy/plugins/` | static | Owned by uid 1000 |
+
+### Template variables
+
+These are substituted server-side via `sed` after copying from staging:
+
+| Variable | Source | Used in |
+|----------|--------|---------|
+| `GATEWAY_TOKEN` | Read from `.env` on VPS | `openclaw.json` |
+| `OPENCLAW_DOMAIN_PATH` | `openclaw-config.env` | `openclaw.json` |
+| `YOUR_TELEGRAM_ID` | `openclaw-config.env` | `openclaw.json` |
+| `OPENCLAW_INSTANCE_ID` | `openclaw-config.env` | `openclaw.json` |
+| `VPS_HOSTNAME` | `openclaw-config.env` | `openclaw.json` |
+| `ENABLE_EVENTS_LOGGING` | `openclaw-config.env` | `openclaw.json` |
+| `ENABLE_LLEMTRY_LOGGING` | `openclaw-config.env` | `openclaw.json` |
+| `EVENTS_URL` | Derived: `LOG_WORKER_URL` with `/logs` → `/events` | `openclaw.json` |
+| `LLEMTRY_URL` | Derived: `LOG_WORKER_URL` with `/logs` → `/llemtry` | `openclaw.json` |
+| `LOG_WORKER_TOKEN` | `openclaw-config.env` | `openclaw.json` |
+| `AI_GATEWAY_WORKER_URL` | `openclaw-config.env` | `models.json` |
+
+### Step 1: SCP deploy directory to VPS
+
+**Run from LOCAL machine:**
 
 ```bash
-#!/bin/bash
-# SOURCE: deploy/docker-compose.override.yml → /home/openclaw/openclaw/docker-compose.override.yml
-sudo -u openclaw tee /home/openclaw/openclaw/docker-compose.override.yml << 'EOF'
-# <<< deploy/docker-compose.override.yml >>>
-EOF
+# Create staging directory on VPS
+ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} "mkdir -p /tmp/deploy-staging"
+
+# Bulk-copy entire deploy/ directory
+scp -P ${SSH_PORT} -i ${SSH_KEY_PATH} -r deploy/* ${SSH_USER}@${VPS1_IP}:/tmp/deploy-staging/
 ```
 
----
+### Step 2: Deploy all files in a single SSH session
 
-## 4.7 Set Up Vector Log Shipper (Standalone Project)
+The script below receives config values as shell variables at the top, then copies static files and substitutes template variables using `sed`.
 
-Ships Docker container logs to the Cloudflare Log Receiver Worker. Vector runs as a separate Docker Compose project — independent of the gateway lifecycle.
-
-> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false` in `openclaw-config.env`.
+> **Important:** `OPENCLAW_DOMAIN_PATH` may be empty (serves UI at root). The `sed` command handles empty values correctly. ALL `{{VAR}}` placeholders must be substituted — never leave literal `{{...}}` in output.
 
 ```bash
 #!/bin/bash
-# Create Vector project directory
-sudo -u openclaw mkdir -p /home/openclaw/vector/data
+set -euo pipefail
 
-# SOURCE: deploy/vector/docker-compose.yml → /home/openclaw/vector/docker-compose.yml
-sudo -u openclaw tee /home/openclaw/vector/docker-compose.yml << 'EOF'
-# <<< deploy/vector/docker-compose.yml >>>
-EOF
+# ---- Config values (passed from openclaw-config.env) ----
+OPENCLAW_DOMAIN_PATH="${OPENCLAW_DOMAIN_PATH:-}"
+YOUR_TELEGRAM_ID="${YOUR_TELEGRAM_ID}"
+OPENCLAW_INSTANCE_ID="${OPENCLAW_INSTANCE_ID:-}"
+VPS_HOSTNAME="${VPS_HOSTNAME:-}"
+ENABLE_EVENTS_LOGGING="${ENABLE_EVENTS_LOGGING:-false}"
+ENABLE_LLEMTRY_LOGGING="${ENABLE_LLEMTRY_LOGGING:-false}"
+LOG_WORKER_TOKEN="${LOG_WORKER_TOKEN:-}"
+LOG_WORKER_URL="${LOG_WORKER_URL:-}"
+AI_GATEWAY_WORKER_URL="${AI_GATEWAY_WORKER_URL}"
+ENABLE_VECTOR_LOG_SHIPPING="${ENABLE_VECTOR_LOG_SHIPPING:-false}"
 
-# SOURCE: deploy/vector/vector.yaml → /home/openclaw/vector/vector.yaml
-sudo -u openclaw tee /home/openclaw/vector/vector.yaml << 'EOF'
-# <<< deploy/vector/vector.yaml >>>
-EOF
+# Derived URLs
+LLEMTRY_URL="${LOG_WORKER_URL/\/logs/\/llemtry}"
+EVENTS_URL="${LOG_WORKER_URL/\/logs/\/events}"
 
-# Create Vector .env with log shipping credentials
-sudo -u openclaw tee /home/openclaw/vector/.env << EOF
+# Read the gateway token generated in section 4.2
+GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+
+STAGING="/tmp/deploy-staging"
+
+# ============================================================
+# 1. Docker Compose override (static)
+# ============================================================
+# Building happens separately via the build script (section 4.4), not via docker compose build.
+sudo -u openclaw cp "${STAGING}/docker-compose.override.yml" /home/openclaw/openclaw/docker-compose.override.yml
+
+# ============================================================
+# 2. Vector log shipper (static, conditional)
+# ============================================================
+if [ "${ENABLE_VECTOR_LOG_SHIPPING}" = "true" ]; then
+  sudo -u openclaw mkdir -p /home/openclaw/vector/data
+
+  sudo -u openclaw cp "${STAGING}/vector/docker-compose.yml" /home/openclaw/vector/docker-compose.yml
+  sudo -u openclaw cp "${STAGING}/vector/vector.yaml" /home/openclaw/vector/vector.yaml
+
+  # Create Vector .env with log shipping credentials
+  sudo -u openclaw tee /home/openclaw/vector/.env << VECTOREOF
 # Vector log shipping — Cloudflare Log Receiver Worker
 LOG_WORKER_URL=${LOG_WORKER_URL}
 LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
 VPS1_IP=${VPS1_IP}
-EOF
+VECTOREOF
 
-sudo chmod 600 /home/openclaw/vector/.env
-```
+  sudo chmod 600 /home/openclaw/vector/.env
+fi
 
----
-
-## 4.8 Create OpenClaw Configuration
-
-```bash
-#!/bin/bash
+# ============================================================
+# 3. OpenClaw configuration (template)
+# ============================================================
 # IMPORTANT: OpenClaw rejects unknown config keys — only use documented keys.
 # bind: "lan" required (Docker bridge traffic, not loopback). openclaw doctor warning is expected.
 # trustedProxies: exact IPs only, CIDR ranges NOT supported.
 # Device pairing: tunnel users need CLI approval — see 08-post-deploy.md.
-# gateway.auth.token + gateway.remote.token: must match OPENCLAW_GATEWAY_TOKEN from .env (section 4.5).
+# gateway.auth.token + gateway.remote.token: must match OPENCLAW_GATEWAY_TOKEN from .env (section 4.2).
 #   - auth.token: the gateway uses this for WebSocket auth (CLI flag --token overrides if set)
 #   - remote.token: the CLI reads this to authenticate when connecting to the gateway
 #   - Without remote.token, `openclaw doctor`, `openclaw devices list`, and `openclaw security audit --deep`
@@ -337,26 +386,21 @@ sudo chmod 600 /home/openclaw/vector/.env
 #   Main agent delegates to code agent via sessions_spawn for coding tasks.
 #   /opt/skill-bins is auto-shimmed from sandbox-toolkit.yaml (see entrypoint §1g).
 
-# Read the gateway token generated in section 4.5
-GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+sudo cp "${STAGING}/openclaw.json" /home/openclaw/.openclaw/openclaw.json
 
-# Derive telemetry URLs from LOG_WORKER_URL (replace /logs suffix)
-LLEMTRY_URL="${LOG_WORKER_URL/\/logs/\/llemtry}"
-EVENTS_URL="${LOG_WORKER_URL/\/logs/\/events}"
-
-# SOURCE: deploy/openclaw.json (template) → /home/openclaw/.openclaw/openclaw.json
-# VARS: GATEWAY_TOKEN (from .env on VPS), OPENCLAW_DOMAIN_PATH (from openclaw-config.env),
-#        YOUR_TELEGRAM_ID (from openclaw-config.env),
-#        ENABLE_EVENTS_LOGGING (from openclaw-config.env), ENABLE_LLEMTRY_LOGGING (from openclaw-config.env),
-#        LLEMTRY_URL (derived: LOG_WORKER_URL with /logs → /llemtry),
-#        EVENTS_URL (derived: LOG_WORKER_URL with /logs → /events),
-#        LOG_WORKER_TOKEN (from openclaw-config.env),
-#        OPENCLAW_INSTANCE_ID (from openclaw-config.env), VPS_HOSTNAME (from openclaw-config.env)
-# IMPORTANT: ALL {{VAR}} placeholders must be substituted — including empty strings.
-# OPENCLAW_DOMAIN_PATH="" is valid (serves UI at root). Never leave literal {{...}} in output.
-sudo tee /home/openclaw/.openclaw/openclaw.json << 'JSONEOF'
-# <<< deploy/openclaw.json (template) >>>
-JSONEOF
+# Substitute all template variables — use | as sed delimiter (URLs contain /)
+sudo sed -i \
+  -e "s|{{GATEWAY_TOKEN}}|${GATEWAY_TOKEN}|g" \
+  -e "s|{{OPENCLAW_DOMAIN_PATH}}|${OPENCLAW_DOMAIN_PATH}|g" \
+  -e "s|{{YOUR_TELEGRAM_ID}}|${YOUR_TELEGRAM_ID}|g" \
+  -e "s|{{OPENCLAW_INSTANCE_ID}}|${OPENCLAW_INSTANCE_ID}|g" \
+  -e "s|{{VPS_HOSTNAME}}|${VPS_HOSTNAME}|g" \
+  -e "s|{{ENABLE_EVENTS_LOGGING}}|${ENABLE_EVENTS_LOGGING}|g" \
+  -e "s|{{ENABLE_LLEMTRY_LOGGING}}|${ENABLE_LLEMTRY_LOGGING}|g" \
+  -e "s|{{EVENTS_URL}}|${EVENTS_URL}|g" \
+  -e "s|{{LLEMTRY_URL}}|${LLEMTRY_URL}|g" \
+  -e "s|{{LOG_WORKER_TOKEN}}|${LOG_WORKER_TOKEN}|g" \
+  /home/openclaw/.openclaw/openclaw.json
 
 # Verify no unsubstituted {{VAR}} placeholders remain (exclude comments)
 if sudo grep -v '^\s*//' /home/openclaw/.openclaw/openclaw.json | grep -q '{{'; then
@@ -368,12 +412,10 @@ fi
 # Ensure container (uid 1000) can read/write, and not world-readable
 sudo chown 1000:1000 /home/openclaw/.openclaw/openclaw.json
 sudo chmod 600 /home/openclaw/.openclaw/openclaw.json
-```
 
-Create the agent model configuration for all agents to route API calls through the AI Gateway proxy:
-
-```bash
-#!/bin/bash
+# ============================================================
+# 4. Agent model configuration (template)
+# ============================================================
 # IMPORTANT: The embedded agent reads models.json from the agent directory,
 # NOT from openclaw.json. The built-in "anthropic" provider ignores the
 # ANTHROPIC_BASE_URL env var — this file is the only way to override the base URL.
@@ -383,13 +425,14 @@ Create the agent model configuration for all agents to route API calls through t
 # instead of overriding the built-in anthropic models, and the built-in
 # entries (with hardcoded api.anthropic.com) take precedence.
 
-# SOURCE: deploy/models.json (template) → /home/openclaw/.openclaw/agents/<agent>/agent/models.json
-# VARS: AI_GATEWAY_WORKER_URL (from openclaw-config.env)
 for agent in main code skills; do
   sudo mkdir -p /home/openclaw/.openclaw/agents/${agent}/agent
-  sudo tee /home/openclaw/.openclaw/agents/${agent}/agent/models.json << 'JSONEOF'
-# <<< deploy/models.json (template) >>>
-JSONEOF
+  sudo cp "${STAGING}/models.json" /home/openclaw/.openclaw/agents/${agent}/agent/models.json
+
+  # Substitute template variable
+  sudo sed -i "s|{{AI_GATEWAY_WORKER_URL}}|${AI_GATEWAY_WORKER_URL}|g" \
+    /home/openclaw/.openclaw/agents/${agent}/agent/models.json
+
   # Pre-create session store — the gateway lazily creates this dir only when the
   # first session is saved, but `openclaw doctor` reports CRITICAL if it's missing.
   sudo mkdir -p /home/openclaw/.openclaw/agents/${agent}/sessions
@@ -399,123 +442,60 @@ JSONEOF
   sudo chmod 600 /home/openclaw/.openclaw/agents/${agent}/agent/models.json
   sudo chmod 600 /home/openclaw/.openclaw/agents/${agent}/sessions/sessions.json
 done
-```
 
----
-
-## 4.9 Install Build Script and Patches
-
-Instead of maintaining a forked Dockerfile, we patch upstream source files in-place before building. Each patch auto-skips when already applied.
-
-Two patches are applied:
-
-1. **Dockerfile**: installs `docker.io` and `gosu` for nested Docker (sandbox isolation via Sysbox)
-2. **docker.ts**: applies sandbox env vars (`docker.env`) to container creation (missing upstream feature)
-
-```bash
-#!/bin/bash
-# Create directory
+# ============================================================
+# 5. Build script and patches (static)
+# ============================================================
+# Instead of maintaining a forked Dockerfile, we patch upstream source files
+# in-place before building. Each patch auto-skips when already applied.
+# Two patches: Dockerfile (docker.io + gosu) and docker.ts (sandbox env vars).
 sudo -u openclaw mkdir -p /home/openclaw/scripts
-
-# SOURCE: deploy/build-openclaw.sh → /home/openclaw/scripts/build-openclaw.sh
-sudo -u openclaw tee /home/openclaw/scripts/build-openclaw.sh << 'SCRIPTEOF'
-# <<< deploy/build-openclaw.sh >>>
-SCRIPTEOF
-
+sudo -u openclaw cp "${STAGING}/build-openclaw.sh" /home/openclaw/scripts/build-openclaw.sh
 sudo chmod +x /home/openclaw/scripts/build-openclaw.sh
-```
 
----
-
-## 4.10 Create Gateway Entrypoint Script
-
-Runs as root (`user: "0:0"`). Handles lock cleanup, permission fixes, dockerd startup, sandbox image builds, then drops to node via `exec gosu node "$@"`. See inline comments for details.
-
-```bash
-#!/bin/bash
-# Create scripts directory
+# ============================================================
+# 6. Gateway entrypoint script (static)
+# ============================================================
+# Runs as root (user: "0:0"). Handles lock cleanup, permission fixes, dockerd startup,
+# sandbox image builds, then drops to node via gosu. See inline comments for details.
 sudo -u openclaw mkdir -p /home/openclaw/openclaw/scripts
-
-# SOURCE: deploy/entrypoint-gateway.sh → /home/openclaw/openclaw/scripts/entrypoint-gateway.sh
-sudo -u openclaw tee /home/openclaw/openclaw/scripts/entrypoint-gateway.sh << 'SCRIPTEOF'
-# <<< deploy/entrypoint-gateway.sh >>>
-SCRIPTEOF
-
-# Make executable
+sudo -u openclaw cp "${STAGING}/entrypoint-gateway.sh" /home/openclaw/openclaw/scripts/entrypoint-gateway.sh
 sudo chmod +x /home/openclaw/openclaw/scripts/entrypoint-gateway.sh
-```
 
----
-
-## 4.11 Create Host Alerter & Maintenance Checker
-
-Install host monitoring scripts:
-
-- **Host alerter** — real-time health monitoring (disk, memory, CPU, Docker). Sends Telegram alerts on threshold breaches (if configured). Always writes `health.json` for OpenClaw agent access.
-- **Maintenance checker** — daily OS maintenance check (security updates, upgradable packages, reboot required, failed services). Writes `maintenance.json` for both Telegram reports and OpenClaw agents.
-
-> **Note:** Telegram alerts require `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `openclaw-config.env`. The JSON status files are always written regardless of Telegram configuration.
-
-```bash
-#!/bin/bash
-# SOURCE: deploy/host-alert.sh → /home/openclaw/scripts/host-alert.sh
-sudo tee /home/openclaw/scripts/host-alert.sh << 'SCRIPTEOF'
-# <<< deploy/host-alert.sh >>>
-SCRIPTEOF
-
+# ============================================================
+# 7. Host alerter & maintenance checker (static)
+# ============================================================
+sudo cp "${STAGING}/host-alert.sh" /home/openclaw/scripts/host-alert.sh
 sudo chmod +x /home/openclaw/scripts/host-alert.sh
+
+sudo cp "${STAGING}/host-maintenance-check.sh" /home/openclaw/scripts/host-maintenance-check.sh
+sudo chmod +x /home/openclaw/scripts/host-maintenance-check.sh
 
 # Create cron entries — alerter every 15 minutes, daily report if Telegram configured
 # HOSTALERT_DAILY_REPORT_TIME is human-readable (e.g., "9:00 AM PST") — Claude converts
 # it to cron format at execution time. Default: 0 17 * * * (9:00 AM PST = 5PM UTC).
-sudo tee /etc/cron.d/openclaw-alerts << 'EOF'
+sudo tee /etc/cron.d/openclaw-alerts << 'CRONEOF'
 # OpenClaw host alerter — checks disk, memory, CPU, container health
 */15 * * * * root /home/openclaw/scripts/host-alert.sh
 # Daily health report (time configured via HOSTALERT_DAILY_REPORT_TIME)
 <CRON_MINUTE> <CRON_HOUR> * * * root /home/openclaw/scripts/host-alert.sh --report
-EOF
+CRONEOF
 
 sudo chmod 644 /etc/cron.d/openclaw-alerts
 
-# --- Maintenance checker ---
-# SOURCE: deploy/host-maintenance-check.sh → /home/openclaw/scripts/host-maintenance-check.sh
-sudo tee /home/openclaw/scripts/host-maintenance-check.sh << 'SCRIPTEOF'
-# <<< deploy/host-maintenance-check.sh >>>
-SCRIPTEOF
-
-sudo chmod +x /home/openclaw/scripts/host-maintenance-check.sh
-
 # Maintenance checker cron — runs daily, 30 min before daily report so data is fresh
 # Always runs (not gated on Telegram) — JSON is needed by OpenClaw agents
-sudo tee /etc/cron.d/openclaw-maintenance << 'EOF'
+sudo tee /etc/cron.d/openclaw-maintenance << 'CRONEOF'
 # OpenClaw host maintenance checker — detects pending OS updates, required reboots, failed services
 # Runs 30 min before daily report so data is fresh for both Telegram and OpenClaw
 <CRON_MAINTENANCE_MINUTE> <CRON_MAINTENANCE_HOUR> * * * root /home/openclaw/scripts/host-maintenance-check.sh
-EOF
+CRONEOF
 
 sudo chmod 644 /etc/cron.d/openclaw-maintenance
-```
 
-**Maintenance cron generation rules:**
-
-- Schedule 30 minutes before the daily report time. If the daily report runs at `9:00 AM`, the maintenance checker runs at `8:30 AM` (same timezone conversion rules as the report cron).
-- If `HOSTALERT_DAILY_REPORT_TIME` is not set, default to 30 minutes before `9:00 AM UTC` (i.e., `8:30 AM UTC`).
-- The maintenance cron **always** runs, even without Telegram — OpenClaw agents read the JSON independently.
-
-**Cron generation rules:**
-
-- **Cron runs in the server's local timezone**, not necessarily UTC. Before converting `HOSTALERT_DAILY_REPORT_TIME` to cron fields, check the server timezone: `timedatectl show -p Timezone --value` (or `cat /etc/timezone` as fallback). Convert the user's specified time to the server's local timezone, then write the cron minute/hour fields in that timezone. Include the server timezone and original user time in the cron comment for clarity.
-- If `HOSTALERT_DAILY_REPORT_TIME` is not set, default to `9:00 AM UTC` — still convert to the server's local timezone.
-- Only include the daily report cron line (`--report`) if both `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` are set in `openclaw-config.env`. If Telegram is not configured, write only the alerter line (the script exits silently without Telegram credentials, but there's no point scheduling the report).
-
----
-
-## 4.12 Create OpenClaw CLI Host Wrapper
-
-Create a convenience wrapper so `adminclaw` can run `openclaw <command>` directly from the VPS host without typing the full `docker exec` prefix.
-
-```bash
-#!/bin/bash
+# ============================================================
+# 8. OpenClaw CLI host wrapper (inline)
+# ============================================================
 # Write wrapper directly to /usr/local/bin (not a symlink — adminclaw can't
 # traverse /home/openclaw/scripts/ due to directory permissions)
 sudo tee /usr/local/bin/openclaw << 'WRAPEOF'
@@ -530,85 +510,61 @@ exec sudo docker exec $TTY_FLAG --user node openclaw-gateway openclaw "$@"
 WRAPEOF
 
 sudo chmod +x /usr/local/bin/openclaw
+
+# ============================================================
+# 9. Deploy plugins (static)
+# ============================================================
+# Plugins are loaded via plugins.load.paths in openclaw.json (pointing to /app/deploy/plugins).
+# They are NOT copied into ~/.openclaw/extensions/ — this avoids name collisions
+# with any plugins bundled by OpenClaw.
+# Must be owned by uid 1000 (container's node user), not openclaw (uid 1002).
+# OpenClaw's plugin security check blocks candidates with unexpected ownership.
+sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/plugins
+sudo cp -r "${STAGING}/plugins/"* /home/openclaw/openclaw/deploy/plugins/
+sudo chown -R 1000:1000 /home/openclaw/openclaw/deploy/plugins/
+
+# ============================================================
+# 10. Log rotation config (static)
+# ============================================================
+sudo cp "${STAGING}/logrotate-openclaw" /etc/logrotate.d/openclaw
+sudo chmod 644 /etc/logrotate.d/openclaw
+
+# Dry-run test — should show "rotating pattern" for each log file with no errors
+sudo logrotate -d /etc/logrotate.d/openclaw
+
+# ============================================================
+# Cleanup
+# ============================================================
+rm -rf "${STAGING}"
+
+echo ""
+echo "========================================="
+echo "Configuration deployment complete."
+echo "========================================="
 ```
 
-After this, `adminclaw` can run commands like:
+**Cron generation rules:**
 
-```bash
-openclaw --version
-openclaw doctor --deep
-openclaw security audit --deep
-openclaw devices list
-```
+- **Cron runs in the server's local timezone**, not necessarily UTC. Before converting `HOSTALERT_DAILY_REPORT_TIME` to cron fields, check the server timezone: `timedatectl show -p Timezone --value` (or `cat /etc/timezone` as fallback). Convert the user's specified time to the server's local timezone, then write the cron minute/hour fields in that timezone. Include the server timezone and original user time in the cron comment for clarity.
+- If `HOSTALERT_DAILY_REPORT_TIME` is not set, default to `9:00 AM UTC` — still convert to the server's local timezone.
+- Only include the daily report cron line (`--report`) if both `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` are set in `openclaw-config.env`. If Telegram is not configured, write only the alerter line (the script exits silently without Telegram credentials, but there's no point scheduling the report).
 
----
+**Maintenance cron generation rules:**
 
-## 4.13 Deploy Plugins
+- Schedule 30 minutes before the daily report time. If the daily report runs at `9:00 AM`, the maintenance checker runs at `8:30 AM` (same timezone conversion rules as the report cron).
+- If `HOSTALERT_DAILY_REPORT_TIME` is not set, default to 30 minutes before `9:00 AM UTC` (i.e., `8:30 AM UTC`).
+- The maintenance cron **always** runs, even without Telegram — OpenClaw agents read the JSON independently.
 
-Plugins in `deploy/plugins/` are SCP'd to the VPS repo and loaded directly via `plugins.load.paths` in `openclaw.json` (pointing to `/app/deploy/plugins`). They are **not** copied into `~/.openclaw/extensions/` — this avoids name collisions with any plugins bundled by OpenClaw.
-
-Current plugins:
+**Current plugins:**
 
 - **coordinator** — auto-discovers agent skills from `agents.list[].skills` arrays in `openclaw.json`, writes a routing table to `AGENTS.md` in the workspace, and injects delegation instructions into agent system prompts via `before_agent_start` hook.
 - **telemetry** — unified event shipping to the Log Receiver Worker (LLM spans, session events, tool usage). Configured via `plugins.entries.telemetry.config` in `openclaw.json`.
-
-SCP the plugins to the VPS:
-
-**Run from LOCAL machine:**
-
-```bash
-# Create deploy/plugins directory on VPS and staging dir for SCP
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
-  "sudo -u openclaw mkdir -p /home/openclaw/openclaw/deploy/plugins && mkdir -p /tmp/deploy-plugins"
-
-# Copy plugins from local repo to VPS
-scp -P ${SSH_PORT} -i ${SSH_KEY_PATH} -r deploy/plugins/* ${SSH_USER}@${VPS1_IP}:/tmp/deploy-plugins/
-```
-
-**Run on VPS (via SSH):**
-
-```bash
-# Move into place — must be owned by uid 1000 (container's node user), not openclaw (uid 1002).
-# OpenClaw's plugin security check blocks candidates with unexpected ownership.
-sudo cp -r /tmp/deploy-plugins/* /home/openclaw/openclaw/deploy/plugins/
-sudo chown -R 1000:1000 /home/openclaw/openclaw/deploy/plugins/
-rm -rf /tmp/deploy-plugins
-```
 
 To add a new skill to an agent, add it to the agent's `skills` array in `openclaw.json` under `agents.list[]`. The coordinator plugin reads these automatically and updates the routing table — no plugin config changes needed. Restart the gateway after updating `openclaw.json`.
 
 ---
 
-## 4.14 Configure Log Rotation
-
-The hook-generated JSONL logs (`debug.log`, `commands.log`) and the backup cron log (`backup.log`) in `~/.openclaw/logs/` grow unbounded. Docker container logs are already rotated via the `json-file` driver in `docker-compose.override.yml`, but these application-level files need logrotate.
-
-```bash
-#!/bin/bash
-# SOURCE: deploy/logrotate-openclaw → /etc/logrotate.d/openclaw
-sudo tee /etc/logrotate.d/openclaw << 'EOF'
-# <<< deploy/logrotate-openclaw >>>
-EOF
-
-sudo chmod 644 /etc/logrotate.d/openclaw
-
-# Dry-run test — should show "rotating pattern" for each log file with no errors
-sudo logrotate -d /etc/logrotate.d/openclaw
-```
-
----
-
-## 4.15 Deploy Managed Hooks
-
-> **Skip this section** if `deploy/hooks/` is empty (no hook subdirectories).
-
-Custom managed hooks live in `deploy/hooks/<name>/` (HOOK.md + handler.js). Unlike plugins, hooks use OpenClaw's built-in `hooks.internal.entries` config — they don't have a custom load path mechanism, so they must be registered in `openclaw.json`.
-
-When hooks are added in the future, SCP them to the VPS and configure in `openclaw.json` under `hooks.internal.entries`.
-
----
-
-## 4.16 Build, Start, and Auto-Pair CLI
+## 4.4 Build, Start, and Verify
 
 ```bash
 #!/bin/bash
@@ -711,105 +667,6 @@ sudo /usr/local/bin/openclaw devices list
 **Expected:** Command runs without pairing errors. On a fresh gateway with no browser
 connections yet, the output will show an empty device list — that's normal.
 
----
-
-## 4.17 Deploy OpenClaw Cron Jobs
-
-After the gateway is running and the CLI is paired, deploy the cron jobs defined in `deploy/openclaw-crons.jsonc`.
-
-The playbook reads each job from the reference file and runs `openclaw cron add` via SSH.
-
-### Daily VPS Health Check
-
-This job runs the main agent daily to read the health and maintenance JSON files written by the host cron scripts (§4.11). If everything is healthy, the agent responds with `HEARTBEAT_OK` and no notification is sent. If issues are found, the agent sends a concise alert.
-
-```bash
-#!/bin/bash
-# SOURCE: deploy/openclaw-crons.jsonc — "Daily VPS Health Check"
-# Schedule uses HOSTALERT_DAILY_REPORT_TIME converted to cron format in the configured timezone.
-# Default: 30 9 * * * America/Los_Angeles (9:30 AM PST)
-
-# Read the message from the reference file
-# The message is a multi-line string — pass it via --message flag
-openclaw cron add \
-  --name "Daily VPS Health Check" \
-  --cron "<CRON_EXPR>" \
-  --tz "<CRON_TZ>" \
-  --session isolated \
-  --wake next-heartbeat \
-  --agent main \
-  --announce \
-  --best-effort-deliver \
-  <DELIVERY_FLAGS> \
-  --message "Read the VPS health report files and analyze them:
-
-1. Read host-status/health.json (resource metrics)
-2. Read host-status/maintenance.json (OS maintenance)
-
-Analyze for issues that need human attention:
-
-Health (health.json):
-- disk_pct approaching or exceeding disk_threshold
-- memory_pct approaching or exceeding memory_threshold
-- load_avg significantly above cpu_count
-- docker_ok or gateway_ok is false
-- crashed is non-empty (containers restarting)
-- backup_ok is false or backup_age_hours > 36
-- timestamp older than 30 minutes (monitoring may be broken)
-
-Maintenance (maintenance.json):
-- security_updates > 0 (pending security patches)
-- reboot_required is true
-- failed_services is not \"none\"
-- uptime_days > 90 (consider scheduled reboot)
-- timestamp older than 26 hours (checker may not be running)
-
-If everything looks healthy, respond with exactly: HEARTBEAT_OK
-
-If any issues are found, send a concise alert with:
-- What's wrong (use emoji indicators: 🔴 critical, ⚠️ warning)
-- Why it matters (one line per issue)
-- Recommended action
-Keep it brief — this goes to Telegram."
-```
-
-**Placeholder rules:**
-
-- `<CRON_EXPR>` — cron expression derived from `HOSTALERT_DAILY_REPORT_TIME`. Same conversion rules as §4.11. Default: `30 9 * * *`.
-- `<CRON_TZ>` — IANA timezone for the cron expression. Derive from the timezone specified in `HOSTALERT_DAILY_REPORT_TIME` (e.g., "PST" → `America/Los_Angeles`). Default: `America/Los_Angeles`.
-- `<DELIVERY_FLAGS>` — conditional based on Telegram configuration:
-  - **If `HOSTALERT_TELEGRAM_CHAT_ID` is set:** `--channel telegram --to <HOSTALERT_TELEGRAM_CHAT_ID>`
-  - **If not set:** omit both `--channel` and `--to`. The CLI defaults to `channel: "last"` (delivers to wherever the user last interacted).
-
-**Verify:**
-
-```bash
-openclaw cron list
-```
-
-**Expected:** Shows "Daily VPS Health Check" with status `ok` and the correct schedule.
-
----
-
-## Verification
-
-```bash
-# Check containers are running
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
-
-# Check gateway logs
-sudo docker logs --tail 50 openclaw-gateway
-
-# Test internal endpoint (must include basePath if controlUi.basePath is set)
-curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
-
-# Check Vector is running (separate compose project)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
-
-# Check Vector logs
-sudo docker logs --tail 10 vector
-```
-
 ### Sandbox Image Verification
 
 Run after gateway startup to verify all sandbox images were built correctly. With the persistent `/var/lib/docker` bind mount, images survive restarts — the entrypoint only rebuilds missing images. On first boot, wait for logs to show build completion before checking.
@@ -887,6 +744,105 @@ fi
 ```
 
 **Expected:** All 3 images exist (base, toolkit, browser), USER is 1000 on toolkit, all binaries present including custom tools from `sandbox-toolkit.yaml` (claude, gifgrep). Images should have `openclaw.build-date` labels and be less than 30 days old. If verification fails, check entrypoint logs for ERROR messages.
+
+---
+
+## 4.5 Deploy OpenClaw Cron Jobs
+
+After the gateway is running and the CLI is paired, deploy the cron jobs defined in `deploy/openclaw-crons.jsonc`.
+
+The playbook reads each job from the reference file and runs `openclaw cron add` via SSH.
+
+### Daily VPS Health Check
+
+This job runs the main agent daily to read the health and maintenance JSON files written by the host cron scripts (§4.3). If everything is healthy, the agent responds with `HEARTBEAT_OK` and no notification is sent. If issues are found, the agent sends a concise alert.
+
+```bash
+#!/bin/bash
+# SOURCE: deploy/openclaw-crons.jsonc — "Daily VPS Health Check"
+# Schedule uses HOSTALERT_DAILY_REPORT_TIME converted to cron format in the configured timezone.
+# Default: 30 9 * * * America/Los_Angeles (9:30 AM PST)
+
+# Read the message from the reference file
+# The message is a multi-line string — pass it via --message flag
+openclaw cron add \
+  --name "Daily VPS Health Check" \
+  --cron "<CRON_EXPR>" \
+  --tz "<CRON_TZ>" \
+  --session isolated \
+  --wake next-heartbeat \
+  --agent main \
+  --announce \
+  --best-effort-deliver \
+  <DELIVERY_FLAGS> \
+  --message "Read the VPS health report files and analyze them:
+
+1. Read host-status/health.json (resource metrics)
+2. Read host-status/maintenance.json (OS maintenance)
+
+Analyze for issues that need human attention:
+
+Health (health.json):
+- disk_pct approaching or exceeding disk_threshold
+- memory_pct approaching or exceeding memory_threshold
+- load_avg significantly above cpu_count
+- docker_ok or gateway_ok is false
+- crashed is non-empty (containers restarting)
+- backup_ok is false or backup_age_hours > 36
+- timestamp older than 30 minutes (monitoring may be broken)
+
+Maintenance (maintenance.json):
+- security_updates > 0 (pending security patches)
+- reboot_required is true
+- failed_services is not \"none\"
+- uptime_days > 90 (consider scheduled reboot)
+- timestamp older than 26 hours (checker may not be running)
+
+If everything looks healthy, respond with exactly: HEARTBEAT_OK
+
+If any issues are found, send a concise alert with:
+- What's wrong (use emoji indicators: 🔴 critical, ⚠️ warning)
+- Why it matters (one line per issue)
+- Recommended action
+Keep it brief — this goes to Telegram."
+```
+
+**Placeholder rules:**
+
+- `<CRON_EXPR>` — cron expression derived from `HOSTALERT_DAILY_REPORT_TIME`. Same conversion rules as §4.3. Default: `30 9 * * *`.
+- `<CRON_TZ>` — IANA timezone for the cron expression. Derive from the timezone specified in `HOSTALERT_DAILY_REPORT_TIME` (e.g., "PST" → `America/Los_Angeles`). Default: `America/Los_Angeles`.
+- `<DELIVERY_FLAGS>` — conditional based on Telegram configuration:
+  - **If `HOSTALERT_TELEGRAM_CHAT_ID` is set:** `--channel telegram --to <HOSTALERT_TELEGRAM_CHAT_ID>`
+  - **If not set:** omit both `--channel` and `--to`. The CLI defaults to `channel: "last"` (delivers to wherever the user last interacted).
+
+**Verify:**
+
+```bash
+openclaw cron list
+```
+
+**Expected:** Shows "Daily VPS Health Check" with status `ok` and the correct schedule.
+
+---
+
+## Verification
+
+```bash
+# Check containers are running
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
+
+# Check gateway logs
+sudo docker logs --tail 50 openclaw-gateway
+
+# Test internal endpoint (must include basePath if controlUi.basePath is set)
+curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
+
+# Check Vector is running (separate compose project)
+sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
+
+# Check Vector logs
+sudo docker logs --tail 10 vector
+```
 
 ---
 

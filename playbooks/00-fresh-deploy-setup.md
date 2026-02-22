@@ -278,18 +278,18 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 | 02: System update + package install | apt output (hundreds of lines) | pass/fail |
 | 02: SSH hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version |
 | 03: Docker CE installation | apt + daemon config output | pass/fail, Docker/Compose versions |
-| 04: Sysbox + setup (4.1–4.4) | dpkg + network/directory creation | pass/fail |
-| 04: File deployments (4.6–4.15) | Reading templates + writing to VPS | pass/fail |
-| 04: OpenClaw Docker build (4.16) | Full Docker build log | pass/fail |
+| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation | pass/fail |
+| 04: Deploy configuration (4.3) | SCP files + template substitution on VPS | pass/fail |
+| 04: Build + start (4.4) | Full Docker build log | pass/fail |
 | 06: Backup setup | Script creation + cron config | pass/fail, test backup size |
 | 07: VPS-side verification | 14 SSH checks, each with output | Summary table (check name + pass/fail) |
 
-**Keep in main context:** Steps that generate credentials stored in `openclaw-config.env` (user creation in 02, gateway token in 04), SSH hardening port transition (02), device pairing (04/08), user-facing interactions (08), local-side verification checks in 07 (worker health, Cloudflare Access, port exposure — these are fast curl commands), and the **sandbox build wait** (04: §4.16 — use background task + progress polling pattern for user feedback, ~100 tokens per poll).
+**Keep in main context:** Steps that generate credentials stored in `openclaw-config.env` (user creation in 02, gateway token in 04), SSH hardening port transition (02), device pairing (04/08), user-facing interactions (08), local-side verification checks in 07 (worker health, Cloudflare Access, port exposure — these are fast curl commands), and the **sandbox build wait** (04: §4.4 — use background task + progress polling pattern for user feedback, ~100 tokens per poll).
 
 **Critical: avoid reading playbooks before delegating.** Do NOT read a playbook into main context and then pass its contents to a subagent — this doubles the context cost. Instead, tell the subagent to read the playbook section itself:
 
 ```
-Read playbooks/04-vps1-openclaw.md sections 4.6 through 4.15 and execute them.
+Read playbooks/04-vps1-openclaw.md section 4.3 and execute it.
 SSH: ssh -i <key> -p <port> <user>@<ip>
 Config values for template substitution:
   GATEWAY_TOKEN=<value>

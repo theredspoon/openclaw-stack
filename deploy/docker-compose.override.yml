@@ -50,8 +50,6 @@ services:
       # Plugins: entrypoint copies these to ~/.openclaw/extensions/ where
       # the gateway discovers them (e.g. coordinator for capability-based routing)
       - ./deploy/plugins:/app/deploy/plugins:ro
-      # Managed hooks: entrypoint copies these to ~/.openclaw/hooks/
-      - ./deploy/hooks:/app/deploy/hooks:ro
       # Sandbox toolkit config: entrypoint reads this for packages, tool installs, and shim generation
       - ./deploy/sandbox-toolkit.yaml:/app/deploy/sandbox-toolkit.yaml:ro
       - ./deploy/parse-toolkit.mjs:/app/deploy/parse-toolkit.mjs:ro

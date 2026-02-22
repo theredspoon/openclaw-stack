@@ -346,7 +346,7 @@ openclaw devices list
 
 **If it fails with "pairing required":**
 
-Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.16:
+Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.4:
 
 ```bash
 GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
@@ -444,7 +444,7 @@ openclaw doctor --deep
 
 **If you see other doctor warnings:**
 
-- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.8 (OpenClaw Configuration). If missing, recreate: `sudo mkdir -p /home/openclaw/.openclaw/agents/main/sessions && echo '{}' | sudo tee /home/openclaw/.openclaw/agents/main/sessions/sessions.json > /dev/null && sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main`
+- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.3 (Deploy Configuration). If missing, recreate: `sudo mkdir -p /home/openclaw/.openclaw/agents/main/sessions && echo '{}' | sudo tee /home/openclaw/.openclaw/agents/main/sessions/sessions.json > /dev/null && sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main`
 - **Sandbox: base image missing** — restart gateway to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
 
 ### Checklist
