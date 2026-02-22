@@ -20,4 +20,9 @@ printf '\e[8;40;120t'
 
 # Size in pixels
 printf '\e[4;800;1200t'
+
+# Get the current cols & row size
+echo "$(tput cols) x $(tput lines)"
+# or
+echo "$COLUMNS x $LINES"
 ```
