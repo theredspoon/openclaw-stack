@@ -60,41 +60,13 @@ SSH_USER and SSH_PORT start as provider defaults (e.g., `ubuntu`/`22`) and are c
 
 ## Setup Question Flow
 
-**ALWAYS start this flow when the user's intent is ambiguous or general** (e.g., "hi", "start", "let's go", "help me"). Also start when the user explicitly requests deployment or mentions VPS work. This is the default entry point.
-
-### Step 0: Check Configuration File
-
-Check `openclaw-config.env` exists. If missing, tell user to `cp openclaw-config.env.example openclaw-config.env` and fill in values. Give the user the option to copy the example env for them.
-
-### Step 1: Deployment Type
-
-Ask: **New deployment** (fresh VPS) or **Existing deployment** (already configured)?
-
-- **New deployment:** Follow `playbooks/00-fresh-deploy-setup.md` for validation (`VPS1_IP`, `CF_TUNNEL_TOKEN`, domain config, and SSH needed). Cloudflare Access must be configured before deploy begins.
-- **Existing deployment:** Ask: **Analyze** (`00-analysis-mode.md`), **Test** (`07-verification.md`), or **Modify** (describe custom changes). If "something else," use plan mode.
+See [00-fresh-deploy-setup.md](playbooks/00-fresh-deploy-setup.md) for the setup question flow and deployment validation.
 
 ---
 
 ## Execution Order
 
-### Full Deployment
-
-```
-1. Validate openclaw-config.env (including placeholder detection)
-2. In parallel:
-   a. Deploy workers (01-workers.md) — local machine via wrangler     ~5 min
-   b. Execute 02-base-setup.md — VPS via SSH                          ~10 min
-3. Execute 03-docker.md on VPS-1 (after 2b)
-4. Execute 04-vps1-openclaw.md on VPS-1 (after both 2a and 3)
-5. Execute 06-backup.md on VPS-1
-6. Reboot VPS-1
-7. Execute 07-verification.md
-8. Execute 08-post-deploy.md (device pairing & deployment report)
-```
-
-Steps 3–8 are sequential on the VPS. Workers deployment (01-workers, step 2a) runs from the local machine using `wrangler` in parallel with base setup (02-base-setup, step 2b) since they share no dependencies. Both must complete before step 4 begins, as `04-vps1-openclaw` needs worker URLs/tokens from 2a and Docker from step 3 (which depends on 2b).
-
-**Automation:** After the user confirms the deployment plan in `00-fresh-deploy-setup.md` § 0.7, execute all playbooks continuously without pausing between steps. Launch steps 2a and 2b as parallel subagents (multiple Task tool calls in a single message), then synchronize their results before proceeding to step 3. Only stop for errors requiring user input. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`. See § 0.7 for context window management during deployment.
+See [00-fresh-deploy-setup.md](playbooks/00-fresh-deploy-setup.md) § 0.7 for execution order, automation directive, and context window management.
 
 ---
 

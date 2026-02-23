@@ -273,14 +273,16 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 
 **Delegate to subagents:** Steps that produce verbose output but only need pass/fail + key values back:
 
-| Step | Why it's heavy | Return values |
-|------|---------------|---------------|
-| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID |
-| 02: System update + package install | apt output (hundreds of lines) | pass/fail |
-| 02: SSH hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version |
-| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation + SCP | pass/fail, GATEWAY_TOKEN |
-| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail |
-| 04: Build + start (4.4) | Full Docker build log | pass/fail |
+| Step | Why it's heavy | Return values | Read range |
+|------|---------------|---------------|------------|
+| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | Full file |
+| 02: System update + package install | apt output (hundreds of lines) | pass/fail | Full file |
+| 02: SSH hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | Full file |
+| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation + SCP | pass/fail, GATEWAY_TOKEN | Lines 1–162 |
+| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | Lines 24–262 |
+| 04: Build + start (4.4) | Full Docker build log | pass/fail | Lines 263–447 |
+
+> **Read ranges:** Use `offset` and `limit` parameters when telling subagents to read playbook sections. This prevents subagents from loading troubleshooting, updating, and verification sections they don't need (~250 lines saved per 04 subagent).
 
 > **Parallel launch:** 01 and 02 subagents should be launched together in a single message (multiple Task tool calls). Both must return their values before step 04 can begin — 04 needs worker URLs/tokens from 01 and requires Docker (step 03, which depends on 02).
 
@@ -289,7 +291,7 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 **Critical: avoid reading playbooks before delegating.** Do NOT read a playbook into main context and then pass its contents to a subagent — this doubles the context cost. Instead, tell the subagent to read the playbook section itself:
 
 ```
-Read playbooks/04-vps1-openclaw.md sections 4.1-4.2 and execute them.
+Read playbooks/04-vps1-openclaw.md (offset: 1, limit: 162) for sections 4.1-4.2 and execute them.
 SSH: ssh -i <key> -p <port> <user>@<ip>
 Config values (pass as env vars to setup-infra.sh):
   AI_GATEWAY_WORKER_URL=<value>
