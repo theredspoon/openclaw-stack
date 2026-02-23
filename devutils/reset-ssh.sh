@@ -30,4 +30,4 @@ echo "Connecting to $SSH_USER@$VPS1_IP:$SSH_PORT"
 echo "You will be prompted to confirm the new host key fingerprint."
 echo ""
 
-exec ssh -t -i "$SSH_KEY_PATH" -p "$SSH_PORT" "$SSH_USER@$VPS1_IP"
+ TERM=xterm-256color exec ssh -t -i "$SSH_KEY_PATH" -p "$SSH_PORT" "$SSH_USER@$VPS1_IP"
