@@ -10,7 +10,6 @@
 #   directory is owned by uid 1000 (group-writable). Using root:root so logrotate
 #   can traverse /home/openclaw (owned by openclaw user, mode 700).
 
-/home/openclaw/.openclaw/logs/commands.log
 /home/openclaw/.openclaw/logs/backup.log
 {
     su root root

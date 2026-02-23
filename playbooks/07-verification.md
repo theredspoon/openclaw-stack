@@ -329,7 +329,7 @@ sudo logrotate -f /etc/logrotate.d/openclaw
 sudo ls -la /home/openclaw/.openclaw/logs/
 ```
 
-**Expected:** Config file exists with mode 644. Dry run shows no errors. After forced rotation, `.1` files appear alongside the originals. Log writers (`debug.log`, `commands.log`) continue appending to the truncated files.
+**Expected:** Config file exists with mode 644. Dry run shows no errors. After forced rotation, `.1` files appear alongside the originals. Log writers (`telemetry.log`, `backup.log`) continue appending to the truncated files.
 
 ---
 

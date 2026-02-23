@@ -118,7 +118,7 @@ See [docs/CLOUDFLARE-TUNNEL.md](../docs/CLOUDFLARE-TUNNEL.md#rotating-tunnel-tok
 
 ### Sandbox Images
 
-Sandbox images (base, common, browser) persist across gateway restarts in `./data/docker`. The entrypoint auto-rebuilds when:
+Sandbox images (base, toolkit, browser) persist across gateway restarts in `./data/docker`. The entrypoint auto-rebuilds when:
 
 - An image is **missing** (first boot or after manual removal)
 - **`sandbox-toolkit.yaml` changes** — config is embedded as a Docker label; entrypoint compares current config against the label and rebuilds on mismatch
@@ -126,7 +126,7 @@ Sandbox images (base, common, browser) persist across gateway restarts in `./dat
 For manual updates (security patches, new apt packages):
 
 ```bash
-# From local machine — rebuilds common + base if needed
+# From local machine — rebuilds toolkit + base if needed
 scripts/update-sandboxes.sh
 
 # Also rebuild browser sandbox

@@ -5,7 +5,7 @@
 # Image layer architecture:
 #   openclaw-sandbox:bookworm-slim                     (upstream base)
 #     -> openclaw-sandbox-base-root:bookworm-slim      (intermediate, cleaned up)
-#       -> openclaw-sandbox-packages:bookworm-slim     (apt + brew + bun + pnpm)
+#       -> openclaw-sandbox-packages:bookworm-slim     (apt + brew packages)
 #         -> openclaw-sandbox-toolkit:bookworm-slim    (tool installs from sandbox-toolkit.yaml)
 #   openclaw-sandbox-browser:bookworm-slim             (separate chain, FROM debian:bookworm-slim)
 #

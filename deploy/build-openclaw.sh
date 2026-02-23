@@ -70,7 +70,7 @@ git log --format='%h%x09%s%x09%aI' -10 > .git-info
 echo "[build] Building openclaw:local..."
 docker build -t openclaw:local .
 
-# ── 7. Restore patched files (keep git working tree clean) ───────────
+# ── 6. Restore patched files (keep git working tree clean) ───────────
 git checkout -- Dockerfile "$DOCKER_FILE" .dockerignore 2>/dev/null || true
 rm -f .git-info
 

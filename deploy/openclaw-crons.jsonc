@@ -10,7 +10,7 @@
 // To change the cron job after deploy, use the CLI or simply chat with openclaw to modify it.
 // You can also ask claude to redeploy the cron jobs.
 //
-// Host cron scripts (host-alert.sh, host-maintenance.sh) write status files to the main agent workspace at host-status/:
+// Host cron scripts (host-alert.sh, host-maintenance-check.sh) write status files to the main agent workspace at host-status/:
 //   - health.json — updated every 15 min by host-alert.sh (disk, memory, load, Docker, backup)
 //   - maintenance.json — updated daily by host-maintenance-check.sh (security updates, packages, reboot, services)
 //

@@ -18,6 +18,7 @@ set -euo pipefail
 #   Exit: 0 success, 1 failure (e.g. unsubstituted {{VAR}} found)
 
 # ---- Defaults for optional vars ----
+YOUR_TELEGRAM_ID="${YOUR_TELEGRAM_ID:-}"
 OPENCLAW_DOMAIN_PATH="${OPENCLAW_DOMAIN_PATH:-}"
 OPENCLAW_INSTANCE_ID="${OPENCLAW_INSTANCE_ID:-}"
 VPS_HOSTNAME="${VPS_HOSTNAME:-}"
@@ -155,7 +156,7 @@ echo "Deployed per-agent models.json." >&2
 # ============================================================
 # Instead of maintaining a forked Dockerfile, we patch upstream source files
 # in-place before building. Each patch auto-skips when already applied.
-# Two patches: Dockerfile (docker.io + gosu) and docker.ts (sandbox env vars).
+# Five patches applied by build-openclaw.sh (each auto-skips when upstream fixes the issue).
 sudo -u openclaw mkdir -p /home/openclaw/scripts
 sudo -u openclaw cp "${STAGING}/build-openclaw.sh" /home/openclaw/scripts/build-openclaw.sh
 sudo chmod +x /home/openclaw/scripts/build-openclaw.sh

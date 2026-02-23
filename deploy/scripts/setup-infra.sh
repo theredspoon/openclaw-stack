@@ -33,7 +33,7 @@ done
 # ============================================================
 # Part 1: Create Docker Networks
 # ============================================================
-# IMPORTANT: Use 172.30.x.x subnets to avoid conflicts with Docker's default bridge (172.20.0.0/16)
+# IMPORTANT: Use 172.30.x.x subnets to avoid conflicts with Docker's default bridge (172.17.0.0/16)
 
 # Gateway network (for OpenClaw)
 docker network create \

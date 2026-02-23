@@ -4,7 +4,7 @@
 # containers launched by agents automatically use the fresh images.
 #
 # Usage:
-#   scripts/update-sandboxes.sh              # rebuild common (+ base if needed)
+#   scripts/update-sandboxes.sh              # rebuild toolkit (+ base if needed)
 #   scripts/update-sandboxes.sh --all        # also rebuild browser sandbox
 #   scripts/update-sandboxes.sh --dry-run    # show what would be rebuilt
 

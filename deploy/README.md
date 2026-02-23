@@ -45,6 +45,6 @@ window), improving deployment reliability.
 | `scripts/deploy-config.sh` | 04 §4.3 | Copies config files, substitutes templates, sets permissions |
 | `scripts/register-cron-jobs.sh` | 04 §4.5 | Registers OpenClaw cron jobs via `openclaw cron add` |
 
-Both scripts use `set -euo pipefail`, send progress to stderr, and emit a
+All three scripts use `set -euo pipefail`, send progress to stderr, and emit a
 single machine-parseable line on stdout (`OPENCLAW_GENERATED_TOKEN=<hex>` or
 `DEPLOY_CONFIG_OK`). Config values are passed as environment variables.

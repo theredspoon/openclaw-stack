@@ -60,7 +60,12 @@ SSH_USER and SSH_PORT start as provider defaults (e.g., `ubuntu`/`22`) and are c
 
 ## Setup Question Flow
 
-See [00-fresh-deploy-setup.md](playbooks/00-fresh-deploy-setup.md) for the setup question flow and deployment validation.
+**ALWAYS start this flow when the user's intent is ambiguous or general** (e.g., "hi", "start", "let's go", "help me"). Also start when the user explicitly requests deployment or mentions VPS work. This is the default entry point.
+
+1. Check `openclaw-config.env` exists. If missing, offer to `cp openclaw-config.env.example openclaw-config.env`.
+2. Ask: **New deployment** (fresh VPS) or **Existing deployment** (already configured)?
+   - **New deployment:** Follow [00-fresh-deploy-setup.md](playbooks/00-fresh-deploy-setup.md) for validation and deployment.
+   - **Existing deployment:** Ask: **Analyze** (`00-analysis-mode.md`), **Test** (`07-verification.md`), or **Modify** (describe changes).
 
 ---
 

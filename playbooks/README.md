@@ -27,4 +27,4 @@ For existing deployments, run `00-analysis-mode.md` first to verify current stat
 
 ## Maintenance
 
-- `maintenance.md` - Token rotation schedules and procedures
+- `maintenance.md` - Token rotation, image updates, and maintenance

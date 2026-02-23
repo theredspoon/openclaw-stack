@@ -118,9 +118,9 @@
           // Sandbox env settings
           // OpenClaw reads these when processing agent requests. e.g. Can be used to override API Keys per agent.
           // Requires a custom patch to propagate env to the sandbox containers to be used for bins.
-          // See Patch #2 in build-openclaw.sh to properly set ENV vars in sandbox containers - patches missing openclaw feature.
-          // Env is only propagated into the containers at build time.
-          // Requires rebuilding & restarting sandboxes if you need any of these env settings in the sandbox container.
+          // See Patch #3 in build-openclaw.sh to properly set ENV vars in sandbox containers - patches missing openclaw feature.
+          // Env is only propagated into the containers at container creation time.
+          // Requires recreating sandboxes if you need any of these env settings in the sandbox container.
           "env": {
             "LANG": "C.UTF-8",
             // Add /opt/skill-bins to PATH so gateway passes skill binary preflight checks.

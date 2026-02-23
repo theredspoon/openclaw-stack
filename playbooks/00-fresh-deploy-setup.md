@@ -277,8 +277,8 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 |------|---------------|---------------|------------|
 | 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | Full file |
 | 02: System update + package install | apt output (hundreds of lines) | pass/fail | Full file |
-| 02: SSH hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | Full file |
-| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation + SCP | pass/fail, GATEWAY_TOKEN | Lines 1–162 |
+| 02: System hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | Full file |
+| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation + SCP | pass/fail, OPENCLAW_GENERATED_TOKEN | Lines 1–162 |
 | 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | Lines 24–262 |
 | 04: Build + start (4.4) | Full Docker build log | pass/fail | Lines 263–447 |
 
