@@ -403,6 +403,8 @@ Check `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `opencl
 
 > For additional AI provider configuration (OpenAI, Cloudflare AI Gateway, Claude Code subscription), see [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md).
 
+> **Deploy logs:** Detailed subagent execution logs are saved in `.deploy-logs/<timestamp>/`. Ask Claude to review a specific log if you need to investigate a deployment step.
+
 > **Note:** If user passwords are no longer in the conversation context, check `openclaw-config.env` for `# DEPLOYED:` lines first (`grep 'DEPLOYED' openclaw-config.env`). These are written automatically during deployment as a safety net. If those are also empty, the passwords can be reset via VNC/console access.
 
 ---

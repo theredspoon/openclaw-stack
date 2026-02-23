@@ -302,6 +302,29 @@ Return: pass/fail, OPENCLAW_GENERATED_TOKEN from stdout.
 
 **Template substitution in subagents:** Sections 4.2 and 4.3 now use standalone scripts (`deploy/scripts/setup-infra.sh` and `deploy/scripts/deploy-config.sh`) that are SCP'd to the VPS and run remotely. Config values are passed as env vars — the subagent just needs the variable values, not the script contents.
 
+**Subagent deploy logs:** Each subagent must write its detailed execution log to `.deploy-logs/<timestamp>/` before returning its summary. This preserves the full output for post-deploy review without consuming main context.
+
+At the start of deployment (before launching subagents), create the log directory:
+
+```
+.deploy-logs/YYYYMMDD-HHMMSS/
+```
+
+Instruct each subagent to write its detailed report (all commands run, full output, errors encountered, recovery steps) to a file in this directory:
+
+```
+.deploy-logs/YYYYMMDD-HHMMSS/01-workers.md
+.deploy-logs/YYYYMMDD-HHMMSS/02-base-setup.md
+.deploy-logs/YYYYMMDD-HHMMSS/03-docker.md
+.deploy-logs/YYYYMMDD-HHMMSS/04-infra-config.md
+.deploy-logs/YYYYMMDD-HHMMSS/04-build-start.md
+.deploy-logs/YYYYMMDD-HHMMSS/06-backup.md
+```
+
+The subagent's return message to the main agent should still be a short summary (pass/fail + key values). The log file contains everything else. At the end of deployment, tell the user where the logs are so they can ask for review if needed.
+
+The `.deploy-logs/` directory is gitignored.
+
 **Additional techniques:**
 - Batch related SSH commands into single calls (e.g., all file deployments in one SSH session)
 - Use `2>&1 | tail -5` for build commands where only the final status matters
