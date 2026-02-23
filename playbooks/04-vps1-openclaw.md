@@ -441,13 +441,27 @@ fi
 
 **Expected:** All 3 images exist (base, toolkit, browser), USER is 1000 on toolkit, all binaries present including custom tools from `sandbox-toolkit.yaml` (claude, gifgrep). Images should have `openclaw.build-date` labels and be less than 30 days old. If verification fails, check entrypoint logs for ERROR messages.
 
+> **Next:** Proceed to section 4.5 to register OpenClaw cron jobs. The gateway must be running first — `openclaw cron add` communicates with the gateway scheduler.
+
 ---
 
 ## 4.5 Deploy OpenClaw Cron Jobs
 
-After the gateway is running and the CLI is paired, deploy the cron jobs defined in `deploy/openclaw-crons.jsonc`.
+After the gateway is running and healthy, register the cron jobs defined in `deploy/openclaw-crons.jsonc`.
 
-The playbook reads each job from the reference file and runs `openclaw cron add` via SSH.
+### Automated Registration
+
+Run the registration script on the VPS (it was copied during the `scp` in section 4.2 Step 1):
+
+```bash
+ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+  "env HOSTALERT_TELEGRAM_CHAT_ID='${HOSTALERT_TELEGRAM_CHAT_ID}' \
+  bash /tmp/deploy-staging/scripts/register-cron-jobs.sh"
+```
+
+The script is idempotent — it skips registration if the job already exists.
+
+### Manual Registration (alternative)
 
 ### Daily VPS Health Check
 

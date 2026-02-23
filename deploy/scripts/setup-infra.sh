@@ -15,6 +15,22 @@ set -euo pipefail
 #   Exit: 0 success, 1 failure
 
 # ============================================================
+# Validate required environment variables
+# ============================================================
+# These must be passed by the caller (see playbook 04, section 4.2).
+# If running via sudo, use: env VAR=value ... bash setup-infra.sh
+# (do NOT use: sudo bash setup-infra.sh — sudo strips env vars)
+missing=0
+for var in AI_GATEWAY_WORKER_URL AI_GATEWAY_AUTH_TOKEN; do
+  if [ -z "${!var:-}" ]; then
+    echo "ERROR: Required env var ${var} is not set." >&2
+    echo "  Hint: use 'env VAR=val ... bash setup-infra.sh' (not 'sudo bash')." >&2
+    missing=1
+  fi
+done
+[ "$missing" -eq 1 ] && exit 1
+
+# ============================================================
 # Part 1: Create Docker Networks
 # ============================================================
 # IMPORTANT: Use 172.30.x.x subnets to avoid conflicts with Docker's default bridge (172.20.0.0/16)
