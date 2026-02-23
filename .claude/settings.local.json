@@ -28,7 +28,8 @@
       "mcp__chrome-devtools__navigate_page",
       "mcp__chrome-devtools__list_console_messages",
       "mcp__chrome-devtools__press_key",
-      "mcp__plugin_claude-mem_mcp-search__get_observations"
+      "mcp__plugin_claude-mem_mcp-search__get_observations",
+      "mcp__chrome-devtools__wait_for"
     ]
   }
 }
