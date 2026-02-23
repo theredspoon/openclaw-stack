@@ -141,6 +141,7 @@ All provider API keys are set to `AI_GATEWAY_AUTH_TOKEN` and base URLs to `AI_GA
 | Port | Binding | Service | Access |
 |------|---------|---------|--------|
 | 222/tcp | 0.0.0.0 | SSH | Public (key-only, adminclaw) |
+| 6090/tcp | 127.0.0.1 | Dashboard | Via Cloudflare Tunnel only |
 | 18789/tcp | 127.0.0.1 | Gateway | Via Cloudflare Tunnel only |
 | 18790/tcp | 127.0.0.1 | Bridge API | Local only |
 

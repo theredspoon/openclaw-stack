@@ -56,7 +56,7 @@ npx wrangler secret list --cwd workers/ai-gateway
 
   Go to Step 3.
 
-- **Skip:** Note in the deployment report (§ 8.6) that the AI proxy is not configured. Continue to § 8.2.
+- **Skip:** Note in the deployment report (§ 8.5) that the AI proxy is not configured. Continue to § 8.2.
 
 ### Step 3: Test LLM Proxy
 
@@ -117,7 +117,7 @@ Ask the user to confirm they can see the page (even with the pairing error) befo
 
 ---
 
-## 8.4 Approve Device Pairing
+## 8.3 Approve Device Pairing
 
 After the user opens the URL and sees "pairing required", approve their device.
 
@@ -141,7 +141,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 Tell the user to wait ~15 seconds for browser auto-retry.
 
-**If this works:** Skip to § 8.5.
+**If this works:** Skip to § 8.4.
 
 ### Approach 2: Re-pair CLI with Explicit Token
 
@@ -233,7 +233,7 @@ than first boot), then retry from Approach 1.
 
 ---
 
-## 8.5 Verify Connection
+## 8.4 Verify Connection
 
 Ask the user to confirm:
 
@@ -256,7 +256,7 @@ If the device shows as approved but the browser still can't connect, ask the use
 
 ---
 
-## 8.5.1 Telegram Pairing
+## 8.4.1 Telegram Pairing
 
 If `OPENCLAW_TELEGRAM_BOT_TOKEN` is set in `openclaw-config.env`, the gateway is already connected to Telegram. Tell the user:
 
@@ -266,7 +266,7 @@ If the bot token is empty, skip this step — Telegram was not configured.
 
 ---
 
-## 8.6 Deployment Report
+## 8.5 Deployment Report
 
 **IMPORTANT:** After the user confirms the chat interface is working, output a complete deployment report. This is the final step — do NOT skip it.
 
@@ -393,7 +393,7 @@ Check `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` in `opencl
 |------|---------|
 | SSH to VPS | `./scripts/ssh-vps.sh` |
 | SSH to Gateway | `./scripts/ssh-gateway.sh` |
-| Gateway logs | `./scripts/logs-gateway.sh` |
+| Gateway logs | `./scripts/logs-openclaw.sh` |
 | Health Checks | `./scripts/health-check.sh` |
 | OpenClaw CLI | `./scripts/openclaw.sh [command]` or SSH to Gateway `openclaw` |
 | Run backup | `claude "run the backup script on the vps"` |

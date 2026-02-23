@@ -300,7 +300,7 @@ Config values (pass as env vars to setup-infra.sh):
 Return: pass/fail, OPENCLAW_GENERATED_TOKEN from stdout.
 ```
 
-**Template substitution in subagents:** Sections 4.2 and 4.3 now use standalone scripts (`deploy/scripts/setup-infra.sh` and `deploy/scripts/deploy-config.sh`) that are SCP'd to the VPS and run remotely. Config values are passed as env vars — the subagent just needs the variable values, not the script contents.
+**Template substitution in subagents:** Sections 4.2 and 4.3 now use standalone scripts (`deploy/scripts/setup-infra.sh` and `deploy/scripts/deploy-config.sh`) that are bulk-copied to `/tmp/deploy-staging/` as part of the `deploy/` directory copy in § 4.2 Step 1, then run remotely. Config values are passed as env vars — the subagent just needs the variable values, not the script contents.
 
 **Subagent deploy logs:** Each subagent must write its detailed execution log to `.deploy-logs/<timestamp>/` before returning its summary. This preserves the full output for post-deploy review without consuming main context.
 

@@ -24,7 +24,7 @@ All deployment steps are in modular playbooks under `playbooks/`:
 | `04-vps1-openclaw.md` | Sysbox, networks, gateway, Vector |
 | `06-backup.md` | Backup scripts and cron jobs |
 | `07-verification.md` | Testing and verification |
-| `maintenance.md` | Token rotation schedules and procedures |
+| `maintenance.md` | Token rotation, image updates, and maintenance |
 | `08-post-deploy.md` | Device pairing & deployment report |
 
 See [playbooks/README.md](playbooks/README.md) for detailed playbook documentation.

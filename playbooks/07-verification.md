@@ -346,7 +346,7 @@ openclaw devices list
 
 **If it fails with "pairing required":**
 
-Re-run the auto-pairing step from `04-vps1-openclaw.md` section 4.4:
+Re-run the CLI pairing step from `08-post-deploy.md` § 8.3:
 
 ```bash
 GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
