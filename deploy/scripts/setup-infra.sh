@@ -46,6 +46,7 @@ docker network create \
 
 # Part 2: Create Directory Structure
 sudo -u openclaw bash << 'DIREOF'
+set -euo pipefail
 OPENCLAW_HOME="/home/openclaw"
 
 # NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in Part 3
@@ -79,6 +80,7 @@ echo "Directory structure created." >&2
 
 # Part 3: Clone OpenClaw Repository
 sudo -u openclaw bash << 'CLONEEOF'
+set -euo pipefail
 cd /home/openclaw
 git clone https://github.com/openclaw/openclaw.git openclaw
 
