@@ -53,6 +53,7 @@ LOG_WORKER_URL="${LOG_WORKER_URL:-}"
 ENABLE_VECTOR_LOG_SHIPPING="${ENABLE_VECTOR_LOG_SHIPPING:-false}"
 HOSTALERT_TELEGRAM_BOT_TOKEN="${HOSTALERT_TELEGRAM_BOT_TOKEN:-}"
 HOSTALERT_TELEGRAM_CHAT_ID="${HOSTALERT_TELEGRAM_CHAT_ID:-}"
+OPENCLAW_DOMAIN="${OPENCLAW_DOMAIN:-}"
 
 STAGING="/tmp/deploy-staging"
 DEFAULTS_DIR="${STAGING}/openclaws/_defaults"
@@ -72,6 +73,7 @@ deploy_claw_config() {
   # Save/restore outer env vars that might be modified
   local saved_domain_path="$OPENCLAW_DOMAIN_PATH"
   local saved_instance_id="$OPENCLAW_INSTANCE_ID"
+  local saved_domain="$OPENCLAW_DOMAIN"
 
   if [ -f "$instance_config" ]; then
     # Source claw-specific config on top of shared config
@@ -92,6 +94,9 @@ deploy_claw_config() {
     token=$(openssl rand -hex 32)
     echo "  Generated GATEWAY_TOKEN for ${name}: ${token}" >&2
   fi
+
+  # Construct allowed origin for controlUi (required for non-loopback binds)
+  local allowed_origin="https://${OPENCLAW_DOMAIN}"
 
   # Re-derive URLs with potentially updated LOG_WORKER_URL
   local llemtry_url="${LOG_WORKER_URL/\/logs/\/llemtry}"
@@ -119,6 +124,7 @@ deploy_claw_config() {
     -e "s|{{EVENTS_URL}}|${events_url}|g" \
     -e "s|{{LLEMTRY_URL}}|${llemtry_url}|g" \
     -e "s|{{LOG_WORKER_TOKEN}}|${LOG_WORKER_TOKEN}|g" \
+    -e "s|{{ALLOWED_ORIGIN}}|${allowed_origin}|g" \
     "${config_target}/openclaw.json"
 
   # Verify no unsubstituted {{VAR}} placeholders remain (exclude comments)
@@ -162,6 +168,7 @@ deploy_claw_config() {
   # Restore env vars for next claw
   OPENCLAW_DOMAIN_PATH="$saved_domain_path"
   OPENCLAW_INSTANCE_ID="$saved_instance_id"
+  OPENCLAW_DOMAIN="$saved_domain"
   # Reset GATEWAY_TOKEN so next claw generates its own
   GATEWAY_TOKEN=""
 }
