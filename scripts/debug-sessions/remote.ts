@@ -100,7 +100,9 @@ export async function resolveInstance(cfg: Config): Promise<Config> {
   }
 
   // Auto-detect by listing instance directories on VPS
-  const out = await sshExec(cfg, `ls -1 ${cfg.installDir}/instances/ 2>/dev/null`)
+  // sudo: adminclaw can't traverse /home/openclaw (750 owned by openclaw)
+  // grep -v '^\\.': exclude .shared-backups and other dotdirs
+  const out = await sshExec(cfg, `sudo ls -1 ${cfg.installDir}/instances/ | grep -v '^\\.'`)
   const instances = out.trim().split("\n").filter(Boolean)
 
   if (instances.length === 1) {

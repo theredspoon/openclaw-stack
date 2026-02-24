@@ -80,11 +80,21 @@ source "$CONFIG_FILE"
 
 INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
 
+# Common SSH/SCP options (scp uses -P for port, ssh uses -p)
+SSH_COMMON=(-i "${SSH_KEY_PATH}" -o ConnectTimeout=10)
+SSH_OPTS=("${SSH_COMMON[@]}" -p "${SSH_PORT}")
+SCP_OPTS=("${SSH_COMMON[@]}" -P "${SSH_PORT}")
+
 # Resolve instance if not specified
 if [[ -z "$INSTANCE" ]]; then
-  INSTANCES=$(ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
+  # adminclaw can't traverse /home/openclaw (750), so use sudo ls
+  INSTANCES=$(ssh "${SSH_OPTS[@]}" -o BatchMode=yes \
     "${SSH_USER}@${VPS1_IP}" \
-    "ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null" || true)
+    "sudo ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null | grep -v '^\\.'" 2>&1) || {
+    echo "Error: SSH connection failed. Check SSH_KEY_PATH, SSH_PORT, SSH_USER, VPS1_IP in openclaw-config.env" >&2
+    echo "  SSH_USER=${SSH_USER} SSH_PORT=${SSH_PORT} VPS1_IP=${VPS1_IP}" >&2
+    exit 1
+  }
 
   COUNT=$(echo "$INSTANCES" | grep -c . || true)
 
@@ -115,7 +125,10 @@ if [[ ! -f "$PYTHON_SCRIPT" ]]; then
 fi
 
 # Copy script to VPS
-scp -q -i "${SSH_KEY_PATH}" -P "${SSH_PORT}" "$PYTHON_SCRIPT" "${SSH_USER}@${VPS1_IP}:${REMOTE_SCRIPT}" 2>/dev/null
+if ! scp -q "${SCP_OPTS[@]}" "$PYTHON_SCRIPT" "${SSH_USER}@${VPS1_IP}:${REMOTE_SCRIPT}"; then
+  echo "Error: Failed to copy debug script to VPS" >&2
+  exit 1
+fi
 
 # Run on VPS — inject --base-dir and --llm-log, pass through all user args
 # Use -t for TTY (color support) only when stdout is a terminal
@@ -130,5 +143,6 @@ case "${1:-}" in
   llm-*) EXTRA_ARGS="${EXTRA_ARGS} --llm-log ${LLM_LOG}" ;;
 esac
 
-TERM=xterm-256color ssh $SSH_TTY_FLAG -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+# sudo: adminclaw can't read /home/openclaw directly
+TERM=xterm-256color ssh $SSH_TTY_FLAG "${SSH_OPTS[@]}" "${SSH_USER}@${VPS1_IP}" \
   "sudo python3 ${REMOTE_SCRIPT} $* ${EXTRA_ARGS}"
