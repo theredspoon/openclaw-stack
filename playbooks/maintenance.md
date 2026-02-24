@@ -41,6 +41,8 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart op
 
 > **Note:** The shared `.env` contains `OPENCLAW_GATEWAY_TOKEN` from initial setup, but this is not used by multi-claw containers. Each claw reads its token from its own `openclaw.json`. You do not need to update `.env` when rotating a claw's token.
 
+> **Verify:** Run § 7.1 — each rotated claw's health endpoint responds. Re-pair devices per `08-post-deploy.md` § 8.3.
+
 #### AI Gateway Auth Token
 
 ```bash
@@ -56,6 +58,8 @@ echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 # 4. Recreate all claws to pick up new .env values (no rebuild needed — token is an env var)
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 ```
+
+> **Verify:** Run § 7.3 — AI Gateway Worker health check returns `{"status":"ok"}`.
 
 #### Log Worker Token
 
@@ -74,6 +78,8 @@ echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 # 4. Recreate Vector to pick up new .env values (see CLAUDE.md: restart vs up -d)
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose up -d'
 ```
+
+> **Verify:** Run § 7.2 (Vector running) and § 7.3 (Log Receiver Worker health check returns `{"status":"ok"}`).
 
 #### Provider API Keys
 
@@ -96,6 +102,8 @@ echo "new-token" | npx wrangler secret put CF_AI_GATEWAY_TOKEN
 
 See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for details on both modes.
 
+> **Verify:** Run § 7.3 — AI Gateway Worker health check. Full LLM routing verified during § 7.7 (E2E test).
+
 #### SSH Keys
 
 ```bash
@@ -114,9 +122,13 @@ ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS1_IP> echo "
 # 6. Delete old private key
 ```
 
+> **Verify:** Run § 7.6 — SSH on port `<SSH_PORT>` with new key, key-only auth confirmed.
+
 #### Cloudflare Tunnel Token
 
 See [docs/CLOUDFLARE-TUNNEL.md](../docs/CLOUDFLARE-TUNNEL.md#rotating-tunnel-token) for rotation procedure.
+
+> **Verify:** Run § 7.4 — cloudflared active, domain routing returns 302/403.
 
 ## Image Updates
 
@@ -148,6 +160,8 @@ No container restart needed — builds happen inside the running container's nes
 - When entrypoint logs a staleness warning (images > 30 days old)
 - After editing `sandbox-toolkit.yaml` — auto-detected on next container restart, but `update-sandboxes.sh` applies immediately without restart
 
+> **Verify:** Run § 7.1a — all sandbox toolkit binaries operational in sandbox container.
+
 ### Bind-Mounted Deploy Files
 
 Several deploy files are bind-mounted read-only into claw containers. These can be updated without a full image rebuild — just SCP the file and restart the claws.
@@ -172,6 +186,8 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP> "
 
 > **Note:** `sandbox-toolkit.yaml` changes are also auto-detected on container restart via Docker label comparison, triggering a sandbox image rebuild if needed.
 
+> **Verify:** Run § 7.1 — claw health endpoints respond after restart.
+
 ### OpenClaw Image
 
 Update OpenClaw to the latest upstream version:
@@ -182,6 +198,8 @@ scripts/update-openclaw.sh
 ```
 
 Brief downtime (~5-10s) per claw during container swap. The script waits for health checks to pass before reporting success.
+
+> **Verify:** Run § 7.1 (container health) and § 7.5b (CLI pairing still works).
 
 ---
 
