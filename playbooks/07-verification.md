@@ -6,16 +6,25 @@ Comprehensive verification procedures after deployment.
 
 This playbook verifies:
 
-- OpenClaw gateway functionality
+- OpenClaw container health
 - Vector log shipping
 - Cloudflare Workers health
 - End-to-end connectivity
 - Security (port exposure, listening services, built-in audit)
 
+## Verification Tiers
+
+| Tier | Purpose | Sections | When to run |
+|------|---------|----------|-------------|
+| **Tier 1: Critical** | Smoke test — deployment is functional | 7.1, 7.2, 7.3, 7.4, 7.6 | Every deployment, after reboots, after maintenance |
+| **Tier 2: Extended** | Full validation — comprehensive checks | 7.1a, 7.5, 7.5a–c, 7.6a, 7.7 | Fresh deploys, major updates, periodic audits |
+
+> **Quick smoke test:** Run Tier 1 only (~5 min). If all pass, the deployment is operational. Run Tier 2 for full confidence on fresh deploys or after significant changes.
+
 ## Prerequisites
 
 - All previous playbooks completed
-- Cloudflare Tunnel installed (02-base-setup.md section 2.9)
+- Cloudflare Tunnel installed (02-base-setup.md section 2.6)
 - Workers deployed (01-workers.md)
 - VPS-1 rebooted after configuration
 
@@ -44,103 +53,49 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> -o ConnectTimeout=10 adminclaw@<VPS1_IP> "ec
 
 ---
 
+# Tier 1: Critical Smoke Test
+
 ## 7.1 Verify OpenClaw (VPS-1)
 
 > **Batch:** Steps 7.1-7.2 run on VPS via SSH; step 7.3 runs locally. Execute VPS checks in one SSH session and worker checks in parallel from the local machine.
 
 ```bash
+# Discover all running claw containers for per-claw checks
+CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+echo "Claw containers: $CLAWS"
+
 # Check containers are running
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
 
-# Check gateway logs for errors
-sudo docker logs --tail 50 openclaw-gateway
+# Check claw logs for errors
+for CLAW in $CLAWS; do
+  echo "=== $CLAW ==="
+  sudo docker logs --tail 50 "$CLAW"
+done
 
-# Test internal endpoint (must include basePath if controlUi.basePath is set)
-curl -s http://localhost:18789<OPENCLAW_DOMAIN_PATH>/ | head -5
+# Test each claw's health endpoint
+for CLAW in $CLAWS; do
+  PORT=$(sudo docker inspect "$CLAW" --format '{{range .NetworkSettings.Ports}}{{range .}}{{.HostPort}}{{end}}{{end}}' | head -1)
+  echo "$CLAW (port $PORT):"
+  curl -s "http://localhost:${PORT}<OPENCLAW_DOMAIN_PATH>/" | head -5
+done
 ```
 
-**Expected:** All containers running, endpoint returns the Control UI HTML.
+**Expected:** All containers running, each endpoint returns the Control UI HTML.
 
 **If containers are not running after reboot:**
 
-> "Containers didn't auto-start after reboot. Start them manually:"
+This is expected on the first reboot after deployment. Docker Compose services use `restart: unless-stopped`, but the Sysbox runtime (required for these containers) starts as a separate systemd service. On boot, Docker may attempt to restart containers before Sysbox is fully ready, causing them to fail with a runtime error. Docker does not retry after this initial failure.
+
+> "Containers didn't auto-start after reboot. This is a known first-reboot issue — Sysbox wasn't ready when Docker tried to restart the containers. Start them manually:"
 
 ```bash
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 ```
 
-> If they fail to start, check `sudo docker logs openclaw-gateway` for errors.
+> Subsequent reboots typically work because Sysbox starts faster on warm boots. If containers consistently fail to start after reboot, check that Sysbox is enabled: `sudo systemctl is-enabled sysbox`.
 
----
-
-## 7.1a Verify Sandbox Toolkit
-
-Verify all tool binaries from `deploy/sandbox-toolkit.yaml` are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
-
-> **Why docker exec into the gateway first?** Sandbox containers run as nested Docker inside the gateway container (Sysbox). To inspect them, you must first enter the gateway, then exec into the sandbox.
-
-```bash
-# Get the list of all tool binaries from sandbox-toolkit.yaml
-BINS=$(sudo docker exec --user node openclaw-gateway \
-  node /app/deploy/parse-toolkit.mjs /app/deploy/sandbox-toolkit.yaml \
-  | jq -r '.allBins[]')
-echo "Bins to test: $BINS"
-
-# Find a running sandbox-toolkit container (code or skills agent)
-SANDBOX=$(sudo docker exec --user node openclaw-gateway \
-  docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
-
-# If no sandbox is running, trigger one via the openclaw CLI.
-# This creates the container with correct env (PATH, etc.) from openclaw.json.
-if [ -z "$SANDBOX" ]; then
-  echo "No sandbox running — triggering skills agent sandbox..."
-  sudo docker exec --user node openclaw-gateway \
-    openclaw agent --agent skills --message ping --timeout 60 >/dev/null 2>&1 &
-  AGENT_PID=$!
-
-  # Wait for the sandbox container to appear
-  for i in $(seq 1 20); do
-    sleep 3
-    SANDBOX=$(sudo docker exec --user node openclaw-gateway \
-      docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
-    [ -n "$SANDBOX" ] && break
-    echo "  waiting... ($((i*3))s)"
-  done
-  kill $AGENT_PID 2>/dev/null; wait $AGENT_PID 2>/dev/null || true
-
-  if [ -z "$SANDBOX" ]; then
-    echo "FAILED — sandbox did not appear after 60s. Check gateway logs."
-    exit 1
-  fi
-fi
-
-echo "Testing sandbox: $SANDBOX"
-
-# Test each binary inside the sandbox — use `which` to verify it's on PATH
-PASS=0; FAIL=0; TOTAL=0
-for bin in $BINS; do
-  TOTAL=$((TOTAL+1))
-  if sudo docker exec --user node openclaw-gateway \
-    docker exec "$SANDBOX" which "$bin" > /dev/null 2>&1; then
-    echo "  ✓ $bin"
-    PASS=$((PASS+1))
-  else
-    echo "  ✗ $bin — NOT FOUND"
-    FAIL=$((FAIL+1))
-  fi
-done
-
-echo ""
-echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
-[ "$FAIL" -eq 0 ] && echo "All sandbox toolkit binaries operational" || echo "FAILED — some binaries missing"
-```
-
-**Expected:** All binaries found on PATH. `0 failed`.
-
-**If tools are missing:**
-
-- Rebuild the sandbox image: `sudo docker exec --user node openclaw-gateway /app/deploy/rebuild-sandboxes.sh --force`
-- Then recreate containers: `sudo docker exec --user node openclaw-gateway openclaw sandbox recreate --all --force`
+> If they fail to start even manually, check logs: `for CLAW in $CLAWS; do sudo docker logs "$CLAW"; done`
 
 ---
 
@@ -150,13 +105,13 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 ```bash
 # Check Vector is running (separate compose project)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose ps'
 
 # Check Vector logs for errors
 sudo docker logs --tail 20 vector
 
 # Check checkpoint data exists
-sudo ls -la /home/openclaw/vector/data/
+sudo ls -la <INSTALL_DIR>/vector/data/
 ```
 
 **Expected:** Vector running, no errors in logs, checkpoint files present.
@@ -198,7 +153,7 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 
 **Expected:** Returns `{"status":"ok"}`.
 
-> **Note:** The health check passing confirms the worker is deployed and reachable. It does NOT verify that provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured — that is tested during post-deploy (`08-post-deploy.md` § 8.1). On a fresh deploy, the worker is healthy but won't proxy LLM requests until keys are added.
+> **Note:** The health check passing confirms the worker is deployed and reachable. It does NOT verify that provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured — that is tested during post-deploy (`08a-configure-llm-proxy.md`). On a fresh deploy, the worker is healthy but won't proxy LLM requests until keys are added.
 
 **If either worker health check fails:**
 
@@ -247,22 +202,187 @@ curl -sI --connect-timeout 10 https://<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHB
 
 ---
 
+## 7.6 Security Verification
+
+Comprehensive security check: system hardening, port exposure, and built-in audit.
+
+### System Hardening (on VPS)
+
+```bash
+# SSH, firewall, intrusion prevention, tunnel
+sudo ufw status
+sudo systemctl status fail2ban
+sudo systemctl status cloudflared
+ss -tlnp | grep <SSH_PORT>
+
+# Services and cron jobs
+sudo systemctl status sysbox
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
+sudo docker logs --tail 5 vector
+cat /etc/cron.d/openclaw-backup
+cat /etc/cron.d/openclaw-alerts
+```
+
+**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
+
+### Port Binding & External Reachability
+
+```bash
+# On VPS: verify claw ports bind to localhost only (Docker bypasses UFW)
+for CLAW in $CLAWS; do
+  PORT=$(sudo docker port "$CLAW" 2>/dev/null | grep -oP '0\.0\.0\.0:\K\d+' | head -1)
+  BIND=$(sudo ss -tlnp | grep ":${PORT} " | awk '{print $4}')
+  echo "$CLAW (port $PORT): $BIND"
+done
+# Expected: 127.0.0.1:<port> for each claw (NOT 0.0.0.0)
+
+# Full port audit — only <SSH_PORT> should be on 0.0.0.0 or [::]
+sudo ss -tlnp
+
+# Verify pids_limit set (prevents fork bombs)
+for CLAW in $CLAWS; do
+  echo "$CLAW: $(sudo docker inspect "$CLAW" --format '{{.HostConfig.PidsLimit}}')"
+done
+# Expected: 1024 for each claw
+```
+
+```bash
+# From LOCAL machine: confirm claw ports aren't externally reachable
+for CLAW in $CLAWS; do
+  PORT=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+    "sudo docker port $CLAW 2>/dev/null | grep -oP '0\.0\.0\.0:\K\d+' | head -1")
+  nc -zv -w 5 <VPS1_IP> $PORT 2>&1 || echo "Port $PORT not reachable (expected)"
+done
+```
+
+**Expected:** All connections fail. If any succeed, Docker daemon.json localhost binding is misconfigured — see `03-docker.md`.
+
+### OpenClaw Security Audit & Doctor (on VPS)
+
+```bash
+# Security scanner (no device pairing needed — local HTTP probes)
+openclaw security audit --deep
+
+# Diagnostic checker
+openclaw doctor --deep
+```
+
+**Security audit expected:** 0 critical, 0 warnings. 1 info finding is normal. If ECONNREFUSED on unexpected port, check `OPENCLAW_GATEWAY_PORT` in `.env` is `18789` (port only, not `IP:port`).
+
+**Doctor expected:** Only the `lan` binding warning (safe — required for Docker/Tunnel). No State integrity or Sandbox warnings.
+
+**If you see other doctor warnings:**
+
+- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.3 (Deploy Configuration). If missing, recreate per-instance: `for inst_dir in <INSTALL_DIR>/instances/*/; do sudo mkdir -p "${inst_dir}.openclaw/agents/main/sessions" && echo '{}' | sudo tee "${inst_dir}.openclaw/agents/main/sessions/sessions.json" > /dev/null && sudo chown -R 1000:1000 "${inst_dir}.openclaw"; done`
+- **Sandbox: base image missing** — restart the claw container to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
+
+### Checklist
+
+- [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
+- [ ] UFW enabled (SSH only), port 443 closed
+- [ ] Fail2ban running, cloudflared active
+- [ ] OpenClaw claws + Sysbox running (+ Vector if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+- [ ] Backup + host alerter + maintenance checker cron jobs configured
+- [ ] Host status JSON files written and readable from agent sandbox
+- [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
+- [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
+- [ ] AI Gateway Worker responding (+ Log Receiver if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+- [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
+
+---
+
+# Tier 2: Extended Validation
+
+## 7.1a Verify Sandbox Toolkit
+
+Verify all tool binaries from `deploy/sandbox-toolkit.yaml` are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
+
+> **Why docker exec into the claw container first?** Sandbox containers run as nested Docker inside the claw container (Sysbox). To inspect them, you must first enter the claw container, then exec into the sandbox.
+
+```bash
+FIRST_CLAW=$(echo "$CLAWS" | head -1)
+
+# Get the list of all tool binaries from sandbox-toolkit.yaml
+BINS=$(sudo docker exec --user node "$FIRST_CLAW" \
+  node /app/deploy/parse-toolkit.mjs /app/deploy/sandbox-toolkit.yaml \
+  | jq -r '.allBins[]')
+echo "Bins to test: $BINS"
+
+# Find a running sandbox-toolkit container (code or skills agent)
+SANDBOX=$(sudo docker exec --user node "$FIRST_CLAW" \
+  docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
+
+# If no sandbox is running, trigger one via the openclaw CLI.
+# This creates the container with correct env (PATH, etc.) from openclaw.json.
+if [ -z "$SANDBOX" ]; then
+  echo "No sandbox running — triggering skills agent sandbox..."
+  sudo docker exec --user node "$FIRST_CLAW" \
+    openclaw agent --agent skills --message ping --timeout 60 >/dev/null 2>&1 &
+  AGENT_PID=$!
+
+  # Wait for the sandbox container to appear
+  for i in $(seq 1 20); do
+    sleep 3
+    SANDBOX=$(sudo docker exec --user node "$FIRST_CLAW" \
+      docker ps --filter "ancestor=openclaw-sandbox-toolkit:bookworm-slim" --format '{{.Names}}' | head -1)
+    [ -n "$SANDBOX" ] && break
+    echo "  waiting... ($((i*3))s)"
+  done
+  kill $AGENT_PID 2>/dev/null; wait $AGENT_PID 2>/dev/null || true
+
+  if [ -z "$SANDBOX" ]; then
+    echo "FAILED — sandbox did not appear after 60s. Check claw container logs."
+    exit 1
+  fi
+fi
+
+echo "Testing sandbox: $SANDBOX (via $FIRST_CLAW)"
+
+# Test each binary inside the sandbox — use `which` to verify it's on PATH
+PASS=0; FAIL=0; TOTAL=0
+for bin in $BINS; do
+  TOTAL=$((TOTAL+1))
+  if sudo docker exec --user node "$FIRST_CLAW" \
+    docker exec "$SANDBOX" which "$bin" > /dev/null 2>&1; then
+    echo "  ✓ $bin"
+    PASS=$((PASS+1))
+  else
+    echo "  ✗ $bin — NOT FOUND"
+    FAIL=$((FAIL+1))
+  fi
+done
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
+[ "$FAIL" -eq 0 ] && echo "All sandbox toolkit binaries operational" || echo "FAILED — some binaries missing"
+```
+
+**Expected:** All binaries found on PATH. `0 failed`.
+
+**If tools are missing:**
+
+- Rebuild the sandbox image: `sudo docker exec --user node $FIRST_CLAW /app/deploy/rebuild-sandboxes.sh --force`
+- Then recreate containers: `sudo docker exec --user node $FIRST_CLAW openclaw sandbox recreate --all --force`
+
+---
+
 ## 7.5 Verify Host Alerter & Maintenance Checker
 
 ```bash
 # Test the alerter script manually (should not send alerts if everything is healthy)
-sudo /home/openclaw/scripts/host-alert.sh
+sudo <INSTALL_DIR>/scripts/host-alert.sh
 echo $?  # Should be 0
 
-# Verify health.json was written (even without Telegram)
-cat /home/openclaw/.openclaw/workspace/host-status/health.json
+# Verify health.json was written (even without Telegram) — check first instance
+FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
+cat "${FIRST_INST}.openclaw/workspace/host-status/health.json"
 
 # Test the maintenance checker
-sudo /home/openclaw/scripts/host-maintenance-check.sh
+sudo <INSTALL_DIR>/scripts/host-maintenance-check.sh
 echo $?  # Should be 0
 
 # Verify maintenance.json was written
-cat /home/openclaw/.openclaw/workspace/host-status/maintenance.json
+cat "${FIRST_INST}.openclaw/workspace/host-status/maintenance.json"
 
 # Check host cron jobs are installed
 cat /etc/cron.d/openclaw-alerts
@@ -278,8 +398,8 @@ openclaw cron list
 
 ```bash
 # Test Telegram delivery (if configured)
-TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' /home/openclaw/openclaw/.env)
-TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' /home/openclaw/openclaw/.env)
+TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/openclaw/.env)
+TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/openclaw/.env)
 
 if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT" ]]; then
   RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
@@ -326,7 +446,10 @@ sudo logrotate -d /etc/logrotate.d/openclaw
 
 # Optional: force a rotation cycle to confirm .1 files appear
 sudo logrotate -f /etc/logrotate.d/openclaw
-sudo ls -la /home/openclaw/.openclaw/logs/
+for inst_dir in <INSTALL_DIR>/instances/*/; do
+  echo "=== $(basename "$inst_dir") ==="
+  sudo ls -la "${inst_dir}.openclaw/logs/" 2>/dev/null || echo "  (no logs yet)"
+done
 ```
 
 **Expected:** Config file exists with mode 644. Dry run shows no errors. After forced rotation, `.1` files appear alongside the originals. Log writers (`telemetry.log`, `backup.log`) continue appending to the truncated files.
@@ -336,7 +459,7 @@ sudo ls -la /home/openclaw/.openclaw/logs/
 ## 7.5b Verify CLI Pairing
 
 ```bash
-# Verify CLI is paired and can communicate with the gateway
+# Verify CLI is paired and can communicate with the claw
 openclaw devices list
 
 # Expected: command succeeds and shows at least one paired device (the CLI itself)
@@ -346,27 +469,37 @@ openclaw devices list
 
 **If it fails with "pairing required":**
 
-Re-run the CLI pairing step from `08-post-deploy.md` § 8.3:
+Re-run the CLI pairing step from `08b-pair-devices.md`:
 
 ```bash
-GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
-sudo docker exec --user node openclaw-gateway \
-  openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
+FIRST_CLAW=$(echo "$CLAWS" | head -1)
+# Read token from the claw's own openclaw.json (not shared .env)
+GATEWAY_TOKEN=$(sudo docker exec --user node "$FIRST_CLAW" \
+  node -e "console.log(require('/home/node/.openclaw/openclaw.json').gateway.auth.token)")
+# Discover the claw's gateway port
+PORT=$(sudo docker port "$FIRST_CLAW" | grep -oP '0\.0\.0\.0:\K\d+' | head -1)
+sudo docker exec --user node "$FIRST_CLAW" \
+  openclaw devices list --url ws://localhost:${PORT} --token "$GATEWAY_TOKEN"
 ```
 
 ---
 
 ## 7.5c Verify Resource Limits
 
-Verify deployed gateway resource limits match VPS hardware. Resource limits are configured via `GATEWAY_CPUS` and `GATEWAY_MEMORY` in `openclaw-config.env` (see § 0.4).
+Verify deployed claw resource limits match VPS hardware. Resource limits are configured via `GATEWAY_CPUS` and `GATEWAY_MEMORY` in `openclaw-config.env` (see § 0.4).
 
 ```bash
-# On VPS: query hardware and deployed limits in one command
-nproc && free -b | awk '/^Mem:/{print $2}' && \
-sudo docker inspect openclaw-gateway --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'
+# On VPS: query hardware and deployed limits
+nproc && free -b | awk '/^Mem:/{print $2}'
+
+# Check resource limits for each claw
+for CLAW in $CLAWS; do
+  echo "=== $CLAW ==="
+  sudo docker inspect "$CLAW" --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'
+done
 ```
 
-Compare: CPUs should equal `nproc`, memory should be total minus 500M–1GB. NanoCpus = CPUs × 1e9.
+Compare per-claw limits against VPS hardware divided by claw count (see `00-fresh-deploy-setup.md` § 0.4). NanoCpus = CPUs × 1e9, Memory is in bytes.
 
 **If match:** Report correctly sized and continue.
 
@@ -377,97 +510,17 @@ Compare: CPUs should equal `nproc`, memory should be total minus 500M–1GB. Nan
 ```bash
 # Update the .env on VPS with new resource limits
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c \"grep -q '^GATEWAY_CPUS=' /home/openclaw/openclaw/.env && \
-    sed -i 's/^GATEWAY_CPUS=.*/GATEWAY_CPUS=<NEW_CPUS>/' /home/openclaw/openclaw/.env || \
-    echo 'GATEWAY_CPUS=<NEW_CPUS>' >> /home/openclaw/openclaw/.env; \
-    grep -q '^GATEWAY_MEMORY=' /home/openclaw/openclaw/.env && \
-    sed -i 's/^GATEWAY_MEMORY=.*/GATEWAY_MEMORY=<NEW_MEMORY>/' /home/openclaw/openclaw/.env || \
-    echo 'GATEWAY_MEMORY=<NEW_MEMORY>' >> /home/openclaw/openclaw/.env\""
+  "sudo -u openclaw bash -c \"grep -q '^GATEWAY_CPUS=' <INSTALL_DIR>/openclaw/.env && \
+    sed -i 's/^GATEWAY_CPUS=.*/GATEWAY_CPUS=<NEW_CPUS>/' <INSTALL_DIR>/openclaw/.env || \
+    echo 'GATEWAY_CPUS=<NEW_CPUS>' >> <INSTALL_DIR>/openclaw/.env; \
+    grep -q '^GATEWAY_MEMORY=' <INSTALL_DIR>/openclaw/.env && \
+    sed -i 's/^GATEWAY_MEMORY=.*/GATEWAY_MEMORY=<NEW_MEMORY>/' <INSTALL_DIR>/openclaw/.env || \
+    echo 'GATEWAY_MEMORY=<NEW_MEMORY>' >> <INSTALL_DIR>/openclaw/.env\""
 
 # Recreate container to pick up new limits (up -d re-reads .env)
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'"
 ```
-
----
-
-## 7.6 Security Verification
-
-Comprehensive security check: system hardening, port exposure, and built-in audit.
-
-### System Hardening (on VPS)
-
-```bash
-# SSH, firewall, intrusion prevention, tunnel
-sudo ufw status
-sudo systemctl status fail2ban
-sudo systemctl status cloudflared
-ss -tlnp | grep <SSH_PORT>
-
-# Services and cron jobs
-sudo systemctl status sysbox
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
-sudo docker logs --tail 5 vector
-cat /etc/cron.d/openclaw-backup
-cat /etc/cron.d/openclaw-alerts
-```
-
-**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
-
-### Port Binding & External Reachability
-
-```bash
-# On VPS: verify gateway ports bind to localhost only (Docker bypasses UFW)
-sudo ss -tlnp | grep -E '187(89|90)'
-# Expected: 127.0.0.1:18789 and 127.0.0.1:18790 (NOT 0.0.0.0)
-
-# Full port audit — only <SSH_PORT> should be on 0.0.0.0 or [::]
-sudo ss -tlnp
-
-# Verify pids_limit set (prevents fork bombs)
-sudo docker inspect openclaw-gateway --format '{{.HostConfig.PidsLimit}}'
-# Expected: 1024
-```
-
-```bash
-# From LOCAL machine: confirm gateway ports aren't externally reachable
-nc -zv -w 5 <VPS1_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
-nc -zv -w 5 <VPS1_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
-```
-
-**Expected:** Both connections fail. If either succeeds, Docker daemon.json localhost binding is misconfigured — see `03-docker.md`.
-
-### OpenClaw Security Audit & Doctor (on VPS)
-
-```bash
-# Security scanner (no device pairing needed — local HTTP probes)
-openclaw security audit --deep
-
-# Diagnostic checker
-openclaw doctor --deep
-```
-
-**Security audit expected:** 0 critical, 0 warnings. 1 info finding is normal. If ECONNREFUSED on unexpected port, check `OPENCLAW_GATEWAY_PORT` in `.env` is `18789` (port only, not `IP:port`).
-
-**Doctor expected:** Only the `lan` binding warning (safe — required for Docker/Tunnel). No State integrity or Sandbox warnings.
-
-**If you see other doctor warnings:**
-
-- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.3 (Deploy Configuration). If missing, recreate: `sudo mkdir -p /home/openclaw/.openclaw/agents/main/sessions && echo '{}' | sudo tee /home/openclaw/.openclaw/agents/main/sessions/sessions.json > /dev/null && sudo chown -R 1000:1000 /home/openclaw/.openclaw/agents/main`
-- **Sandbox: base image missing** — restart gateway to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
-
-### Checklist
-
-- [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
-- [ ] UFW enabled (SSH only), port 443 closed
-- [ ] Fail2ban running, cloudflared active
-- [ ] Gateway + Sysbox running (+ Vector if `ENABLE_VECTOR_LOG_SHIPPING=true`)
-- [ ] Backup + host alerter + maintenance checker cron jobs configured
-- [ ] Host status JSON files written and readable from agent sandbox
-- [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
-- [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
-- [ ] AI Gateway Worker responding (+ Log Receiver if `ENABLE_VECTOR_LOG_SHIPPING=true`)
-- [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
 
 ---
 
@@ -501,7 +554,8 @@ curl -s -X POST "$LLEMTRY_URL" \
 **3. Plugin startup validation** (on VPS):
 
 ```bash
-sudo docker logs openclaw-gateway 2>&1 | grep -i '\[telemetry\]'
+FIRST_CLAW=$(echo "$CLAWS" | head -1)
+sudo docker logs "$FIRST_CLAW" 2>&1 | grep -i '\[telemetry\]'
 # Expected: "[telemetry] Plugin registered — outputs: [file:telemetry.log, events:/events, llemtry]"
 # If misconfigured: "[telemetry] events.enabled is true but events.url or events.authToken is missing..."
 ```
@@ -509,8 +563,9 @@ sudo docker logs openclaw-gateway 2>&1 | grep -i '\[telemetry\]'
 **4. End-to-end** (after sending a message to an agent):
 
 ```bash
-# Check local telemetry log on VPS
-sudo tail -5 /home/openclaw/.openclaw/logs/telemetry.log | jq .
+# Check local telemetry log on VPS (first instance)
+FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
+sudo tail -5 "${FIRST_INST}.openclaw/logs/telemetry.log" | jq .
 
 # Check Log Worker logs for event and llemtry entries
 npx wrangler tail --format json | jq 'select(.logs[].message | contains("[EVENTS]") or contains("[LLEMTRY]"))'
@@ -533,7 +588,7 @@ npx wrangler d1 execute <D1_DATABASE_NAME> --command="SELECT type, category, age
 
 1. **User: Access OpenClaw** via configured domain (authenticate through Cloudflare Access)
 2. **User: Send a test message** via webchat
-3. **User: Verify LLM response** comes back (confirms AI Gateway Worker is routing to a provider). May fail until provider API keys are configured — see `08-post-deploy.md` § 8.1.
+3. **User: Verify LLM response** comes back (confirms AI Gateway Worker is routing to a provider). May fail until provider API keys are configured — see `08a-configure-llm-proxy.md`.
 4. **(CF AI Gateway mode only)** Check Cloudflare AI Gateway dashboard for the request
 5. **Check Cloudflare Workers logs** for container log entries (Workers & Pages -> log-receiver -> Logs)
 
@@ -544,8 +599,8 @@ npx wrangler d1 execute <D1_DATABASE_NAME> --command="SELECT type, category, age
 ### Container Issues
 
 ```bash
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f <service>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose logs -f <service>'
 docker system df
 free -h
 ```
@@ -557,7 +612,7 @@ free -h
 sudo docker logs --tail 50 vector
 
 # Restart Vector (use `up -d` instead if .env values changed)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose restart'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose restart'
 
 # Check if Worker endpoint is reachable (strip /logs suffix for base URL)
 curl -s https://<LOG_WORKER_BASE_URL>/health
@@ -603,15 +658,15 @@ sudo journalctl -u <service> -f
 Deployment is complete when:
 
 1. VPS-1 accessible via SSH on port `<SSH_PORT>`
-2. OpenClaw gateway responding on localhost (internal health check)
+2. OpenClaw claws responding on localhost (internal health check)
 3. Vector running and shipping logs (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 4. Cloudflare Workers responding to health checks
 5. Container logs appearing in Cloudflare Workers dashboard (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
 6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
 8. Host alerter and maintenance checker cron jobs configured on VPS-1
-9. Gateway ports (18789, 18790) not reachable from external network
+9. Claw ports not reachable from external network (bound to localhost only)
 10. Security audit passes with no critical or warning findings
 11. All sandbox toolkit binaries operational in sandbox container (7.1a)
 
-> **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages) is covered in `08-post-deploy.md` (device pairing) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).
+> **Note:** Full end-to-end verification (user authenticating through Cloudflare Access, sending messages) is covered in `08b-pair-devices.md` (device pairing) and [`docs/TESTING.md`](../docs/TESTING.md) (browser automation via Chrome DevTools).

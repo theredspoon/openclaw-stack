@@ -1,21 +1,6 @@
-// Hot-reloadable (no restart needed):
-//   - hooks — reloads hook handlers
-//   - cron — restarts cron jobs
-//   - browser — restarts browser control
-//   - agents.defaults.heartbeat — restarts heartbeat
-//   - Channel configs (telegram, whatsapp, etc.)
-// Requires gateway restart (kind: "restart"):
-//   - gateway.* settings
-//   - plugins.* settings
-//   - discovery.*
-// Ignored (kind: "none" — detected but no action taken):
-//   - agents (agent configs, sandbox settings, env vars)
-//   - tools
-//   - routing
-//   - models
-//   - logging
-//   - skills
-//
+// Example OpenClaw Config — per-claw override
+// This completely replaces (not merges) the _defaults/openclaw.json shared template.
+// Remove this file to use the shared template from _defaults/ instead.
 {
   "commands": {
     "restart": true
@@ -59,31 +44,15 @@
     "consoleStyle": "json", // Send json logs to vector -> Log Worker
     "redactSensitive": "tools" // Redact sensitive info before shipping logs
   },
-  "hooks": {
-    "internal": {
-      "enabled": true,
-      "entries": {
-        // Bundled with openclaw - logs sessions to agent workspace/ dir
-        "session-memory": {
-          "enabled": true
-        },
-        // Bundled with openclaw - when enabled, commands will be logged and shipped to the Log Worker via vector
-        // If telemetry plugin is enabled, there's no need for the command-logger
-        "command-logger": {
-          "enabled": false
-        }
-      }
-    }
-  },
   "agents": {
     // Agent sandbox default settings - all agents inherit these settings & can override per agent
     "defaults": {
-      "userTimezone": "America/Los_Angeles", // Default timezone - can be updated by OpenClaw
       "sandbox": {
         // all: every agent session runs sandboxed by default.
         // Main agent overrides to "non-main" so operator DMs run on host.
         "mode": "all",
         "scope": "agent",
+        "workspaceAccess": "rw", // Persistent read/write access to workspace
         "docker": {
           "image": "openclaw-sandbox:bookworm-slim",
           "containerPrefix": "openclaw-sbx-",
@@ -181,23 +150,35 @@
               "/opt/skill-bins:/opt/skill-bins:ro",
               "/app/docs:/workspace/docs:ro", // Needed for main sandbox to read docs without making extra exec tool call
               // Make host-status reports available to any main agent sandbox tool
-              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
+              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro",
+              "/home/node/sandboxes-home/main:/home/sandbox"
             ]
           }
         },
-        "skills": [], // Intentionally empty, main delegates skills in this setup
-        "tools": {
-          // No allow list needed — main runs on host and gets all tools by default.
-          // gateway is available because the sandbox deny doesn't apply to host sessions.
-          // Deny tools main shouldn't use as a coordinator:
-          // browser: no Chrome in gateway container; OpenClaw defaults to trying host browser relay when running in non-main mode
-          // Main delegates browser tasks to other sandboxed agents with their own browser containers
-          // If main is running in sandbox.mode:"all" then optionally remove "browser" from deny list to allow spawning it's own browser container
-          // non-main -> host browser behavior is currently non-configurable here - can be somewhat controlled with a custom instruction in AGENTS.md
-          "deny": ["browser", "canvas", "nodes", "discord", "group:plugins"]
-        },
+        "skills": [
+          "blogwatcher",
+          "gifgrep",
+          "healthcheck",
+          "himalaya",
+          "nano-pdf",
+          "openai-image-gen",
+          "openai-whisper-api",
+          "oracle",
+          "ordercli",
+          "video-frames",
+          "wacli",
+          "weather"
+        ],
+        // Main runs on host container and gets all the tools by default
+        // "tools": {
+        //   "allow": [
+        //     "sessions_spawn"
+        //   ]
+        // },
         "subagents": {
-          "allowAgents": ["code", "skills"] // Add other agents here to allow main to spawn them; e.g. "personal", "work"
+          "allowAgents": [
+            "code"
+          ] // Add other agents here to allow main to spawn them; e.g. "personal", "work"
         }
       },
       // CODING AGENT
@@ -214,7 +195,6 @@
           "tmux"
         ],
         "sandbox": {
-          "workspaceAccess": "rw", // Code agent needs persistent read/write access to workspace
           "docker": {
             "image": "openclaw-sandbox-toolkit:bookworm-slim", // sandbox-toolkit has the full toolkit bins
             "network": "bridge", // enable network access for claude code, codex, etc. to work
@@ -235,69 +215,24 @@
             "maxAgeDays": 30
           }
         }
-      },
-      // MISC SKILLS AGENT — handles all non-coding skills
-      // Add new skills to this agent's "skills" array and restart — the coordinator
-      // plugin reads agent configs via loadConfig() and updates routing automatically.
-      {
-        "id": "skills",
-        "name": "Skills Agent",
-        "skills": [
-          "blogwatcher",
-          "gifgrep",
-          "healthcheck",
-          "himalaya",
-          "nano-pdf",
-          "openai-image-gen",
-          "openai-whisper-api",
-          "oracle",
-          "ordercli",
-          "video-frames",
-          "wacli",
-          "weather"
-        ],
-        "tools": {
-          // Skills agent doesn't need to spawn other agents — that's main's job in this configuration
-          "deny": ["sessions_spawn"]
-        },
-        "sandbox": {
-          "docker": {
-            "image": "openclaw-sandbox-toolkit:bookworm-slim",
-            "network": "bridge",
-            "memory": "1g", // Most skills are API-based, lightweight
-            "memorySwap": "2g",
-            "cpus": 1,
-            "pidsLimit": 256
-          }
-        }
       }
     ]
   },
   "plugins": {
     "enabled": true,
     "allow": [
-      "coordinator", // Coordinator plugin — builds routing table from agent configs
       "telemetry", // Unified telemetry — replaces llm-logger plugin and debug-logger hook
       "memory-core" // File-backed memory search tools
     ],
     "load": {
-      "paths": ["/app/deploy/plugins"] // Load directly from deploy dir — avoids copying into OpenClaw's namespace
+      "paths": [
+        "/app/deploy/plugins"
+      ] // Load directly from deploy dir — avoids copying into OpenClaw's namespace
     },
     "slots": {
       "memory": "memory-core" // Bundled memory plugin — provides memory_search and memory_get tools
     },
     "entries": {
-      // Coordinator Plugin
-      // Auto-discovers routes from agents.list[].skills via loadConfig() and writes
-      // a routing table to the coordinator's AGENTS.md (loaded into system prompt).
-      // No duplicate route config needed — the agent "skills" arrays are the source of truth.
-      // See deploy/plugins/coordinator/README.md for details.
-      "coordinator": {
-        "enabled": true,
-        "config": {
-          "coordinatorAgent": "main"
-        }
-      },
       // Telemetry Plugin
       // Unified telemetry — captures LLM, session, tool, message, agent, and gateway events.
       // Replaces both llm-logger plugin and debug-logger hook.
@@ -350,10 +285,9 @@
     "elevated": {
       "enabled": true,
       "allowFrom": {
-        "telegram": ["{{YOUR_TELEGRAM_ID}}"] // TEMPLATE: replace with numeric Telegram user ID from openclaw-config.env
-        // Add other channels as needed:
-        // "discord": ["your-discord-id"],
-        // "whatsapp": ["+15555550123"]
+        "telegram": [
+          "{{YOUR_TELEGRAM_ID}}"
+        ]
       }
     },
     "sandbox": {

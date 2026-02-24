@@ -2,7 +2,7 @@
 # Host resource monitoring — sends Telegram alerts on threshold breaches.
 # Runs via cron every 15 minutes: /etc/cron.d/openclaw-alerts
 #
-# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in /home/openclaw/openclaw/.env
+# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in ${INSTALL_DIR}/openclaw/.env
 # Only alerts on state *change* to avoid spam (tracks state in /tmp/host-alert-state).
 #
 # Writes health.json to the agent workspace directory, readable by both
@@ -18,9 +18,11 @@ if [[ "${1:-}" == "--report" ]]; then
   REPORT_MODE=true
 fi
 
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+
 STATE_FILE="/tmp/host-alert-state"
-CONFIG_FILE="/home/openclaw/openclaw/.env"
-STATUS_DIR="/home/openclaw/.openclaw/workspace/host-status"
+CONFIG_FILE="${INSTALL_DIR}/openclaw/.env"
+INSTANCES_DIR="${INSTALL_DIR}/instances"
 
 # Load config
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -68,11 +70,13 @@ if ! docker info >/dev/null 2>&1; then
   docker_ok=false
 fi
 
-# Gateway container check
+# Gateway container check (any openclaw-* container, excluding utility containers)
 gateway_ok=true
 if $docker_ok; then
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^openclaw-gateway$'; then
-    alerts+=("🔴 openclaw-gateway container is NOT running")
+  gateway_containers=$(docker ps --format '{{.Names}}' 2>/dev/null \
+    | grep '^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' || true)
+  if [[ -z "$gateway_containers" ]]; then
+    alerts+=("🔴 No OpenClaw gateway containers running")
     gateway_ok=false
   fi
 fi
@@ -88,42 +92,59 @@ if $docker_ok; then
 fi
 
 # Backup freshness (warn if no backup in last 36 hours)
-backup_dir="/home/openclaw/.openclaw/backups"
+# Check all instance backup directories
 backup_ok=true
 backup_age_hours=""
-if [[ -d "$backup_dir" ]]; then
+found_any_backup_dir=false
+for inst_dir in ${INSTALL_DIR}/instances/*/; do
+  [[ -d "$inst_dir" ]] || continue
+  backup_dir="${inst_dir}.openclaw/backups"
+  [[ -d "$backup_dir" ]] || continue
+  found_any_backup_dir=true
   latest_backup=$(find "$backup_dir" -name "openclaw_backup_*.tar.gz" -mmin -2160 | head -1)
   if [[ -z "$latest_backup" ]]; then
-    alerts+=("⚠️ No backup in last 36 hours")
+    inst_name=$(basename "$inst_dir")
+    alerts+=("⚠️ No backup in last 36 hours for ${inst_name}")
     backup_ok=false
   else
-    # Calculate age for report mode
     backup_age_seconds=$(( $(date +%s) - $(stat -c %Y "$latest_backup" 2>/dev/null || echo 0) ))
-    backup_age_hours=$(( backup_age_seconds / 3600 ))
+    age_hours=$(( backup_age_seconds / 3600 ))
+    # Track the most recent backup age across all instances
+    if [[ -z "$backup_age_hours" ]] || (( age_hours < backup_age_hours )); then
+      backup_age_hours=$age_hours
+    fi
   fi
+done
+if ! $found_any_backup_dir; then
+  alerts+=("⚠️ No backup directories found under ${INSTANCES_DIR}")
+  backup_ok=false
 fi
 
-# --- Write health snapshot for OpenClaw (always, regardless of Telegram config) ---
-mkdir -p "$STATUS_DIR"
-cat > "${STATUS_DIR}/health.json" << HEALTHEOF
-{
-  "timestamp": "$(date -Iseconds)",
-  "disk_pct": ${disk_pct},
-  "disk_total_gb": ${disk_total_gb},
-  "disk_threshold": ${DISK_THRESHOLD},
-  "memory_pct": ${mem_pct},
-  "memory_total_gb": ${mem_total_gb},
-  "memory_threshold": ${MEMORY_THRESHOLD},
-  "load_avg": "${load_avg}",
-  "cpu_count": ${cpu_count},
-  "docker_ok": ${docker_ok},
-  "gateway_ok": ${gateway_ok},
-  "crashed": "${crashed}",
-  "backup_ok": ${backup_ok},
-  "backup_age_hours": ${backup_age_hours:-null}
-}
-HEALTHEOF
-chmod 644 "${STATUS_DIR}/health.json"
+# --- Write health snapshot to all instances (always, regardless of Telegram config) ---
+health_json="{
+  \"timestamp\": \"$(date -Iseconds)\",
+  \"disk_pct\": ${disk_pct},
+  \"disk_total_gb\": ${disk_total_gb},
+  \"disk_threshold\": ${DISK_THRESHOLD},
+  \"memory_pct\": ${mem_pct},
+  \"memory_total_gb\": ${mem_total_gb},
+  \"memory_threshold\": ${MEMORY_THRESHOLD},
+  \"load_avg\": \"${load_avg}\",
+  \"cpu_count\": ${cpu_count},
+  \"docker_ok\": ${docker_ok},
+  \"gateway_ok\": ${gateway_ok},
+  \"crashed\": \"${crashed}\",
+  \"backup_ok\": ${backup_ok},
+  \"backup_age_hours\": ${backup_age_hours:-null}
+}"
+
+for inst_dir in "${INSTANCES_DIR}"/*/; do
+  [ -d "$inst_dir" ] || continue
+  status_dir="${inst_dir}.openclaw/workspace/host-status"
+  mkdir -p "$status_dir"
+  echo "$health_json" > "${status_dir}/health.json"
+  chmod 644 "${status_dir}/health.json"
+done
 
 # --- Check Telegram config (gates all Telegram-sending logic below) ---
 TELEGRAM_CONFIGURED=false
@@ -219,9 +240,17 @@ if $REPORT_MODE; then
     ((warn_count+=1))
   fi
 
-  # Maintenance section — read from maintenance.json if available
-  maint_file="${STATUS_DIR}/maintenance.json"
-  if [[ -f "$maint_file" ]]; then
+  # Maintenance section — read from maintenance.json (first instance found)
+  maint_file=""
+  for inst_dir in "${INSTANCES_DIR}"/*/; do
+    [ -d "$inst_dir" ] || continue
+    candidate="${inst_dir}.openclaw/workspace/host-status/maintenance.json"
+    if [[ -f "$candidate" ]]; then
+      maint_file="$candidate"
+      break
+    fi
+  done
+  if [[ -n "$maint_file" && -f "$maint_file" ]]; then
     maint_age_seconds=$(( $(date +%s) - $(stat -c %Y "$maint_file" 2>/dev/null || echo 0) ))
     maint_age_hours=$(( maint_age_seconds / 3600 ))
 
@@ -322,10 +351,13 @@ $(printf '  - %s\n' "${alerts[@]}")"
 fi
 
 hostname=$(hostname)
-curl -s "https://api.telegram.org/bot${HOSTALERT_TELEGRAM_BOT_TOKEN}/sendMessage" \
+response=$(curl -s "https://api.telegram.org/bot${HOSTALERT_TELEGRAM_BOT_TOKEN}/sendMessage" \
   -d "chat_id=${HOSTALERT_TELEGRAM_CHAT_ID}" \
   -d "text=${hostname}: ${message}" \
-  -d "parse_mode=HTML" \
-  >/dev/null 2>&1
+  -d "parse_mode=HTML")
+
+if ! echo "$response" | grep -q '"ok":true'; then
+  echo "$(date): Telegram alert send failed: $response" >&2
+fi
 
 exit 0

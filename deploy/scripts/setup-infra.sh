@@ -3,14 +3,18 @@ set -euo pipefail
 
 # setup-infra.sh — OpenClaw infrastructure setup (playbook 04, section 4.2)
 #
-# Creates Docker networks, directory structure, clones the OpenClaw repo,
-# and generates the gateway .env file with a random GATEWAY_TOKEN.
+# Creates Docker networks, per-claw directory structure, clones the OpenClaw repo,
+# and generates the gateway .env file.
+#
+# Always-multi-claw architecture: every deployment uses the same instance-based layout
+# under ${INSTALL_DIR}/instances/<name>/, even if running just one claw.
 #
 # Interface:
 #   Env vars in: AI_GATEWAY_WORKER_URL, AI_GATEWAY_AUTH_TOKEN,
 #                OPENCLAW_TELEGRAM_BOT_TOKEN, HOSTALERT_TELEGRAM_BOT_TOKEN,
 #                HOSTALERT_TELEGRAM_CHAT_ID, OPENCLAW_DASHBOARD_DOMAIN_PATH,
-#                OPENCLAW_DOMAIN_PATH, GATEWAY_CPUS, GATEWAY_MEMORY
+#                OPENCLAW_DOMAIN_PATH, GATEWAY_CPUS, GATEWAY_MEMORY,
+#                INSTANCE_NAMES (space-separated list of claw names)
 #   Stdout: single line OPENCLAW_GENERATED_TOKEN=<hex> (all other output -> stderr)
 #   Exit: 0 success, 1 failure
 
@@ -28,6 +32,11 @@ for var in AI_GATEWAY_WORKER_URL AI_GATEWAY_AUTH_TOKEN; do
 done
 [ "$missing" -eq 1 ] && exit 1
 
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+
+# INSTANCE_NAMES is required — always-multi-claw means at least "main-claw"
+INSTANCE_NAMES="${INSTANCE_NAMES:-main-claw}"
+
 # Part 1: Create Docker Networks
 # IMPORTANT: Use 172.30.x.x subnets to avoid conflicts with Docker's default bridge (172.17.0.0/16)
 
@@ -44,48 +53,59 @@ docker network create \
     --subnet 172.31.0.0/24 \
     openclaw-sandbox-net >&2
 
-# Part 2: Create Directory Structure
-sudo -u openclaw bash << 'DIREOF'
+# Part 2: Create Directory Structure (instance-based layout)
+# Each claw gets full isolation under ${INSTALL_DIR}/instances/<name>/
+sudo -u openclaw bash -s "$INSTALL_DIR" << 'DIREOF'
 set -euo pipefail
-OPENCLAW_HOME="/home/openclaw"
+OPENCLAW_HOME="$1"
 
 # NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in Part 3
-mkdir -p "${OPENCLAW_HOME}/.openclaw/workspace"
-mkdir -p "${OPENCLAW_HOME}/.openclaw/credentials"
-mkdir -p "${OPENCLAW_HOME}/.openclaw/logs"
-mkdir -p "${OPENCLAW_HOME}/.openclaw/backups"
 mkdir -p "${OPENCLAW_HOME}/scripts"
-
-# Persistent sandbox home directories — agents opt in via openclaw.json binds
-mkdir -p "${OPENCLAW_HOME}/sandboxes-home"
-
-chmod 700 "${OPENCLAW_HOME}/.openclaw"
-chmod 700 "${OPENCLAW_HOME}/.openclaw/credentials"
+mkdir -p "${OPENCLAW_HOME}/instances"
 DIREOF
 
-# Do NOT change 1000:1000 to openclaw:openclaw!
-# The container runs as uid 1000 (node user inside Docker), which is typically
-# 'ubuntu' on the host — NOT the openclaw user (uid 1002). Using the openclaw
-# UID breaks container write access to these directories.
-sudo chown -R 1000:1000 /home/openclaw/.openclaw
-sudo chown -R 1000:1000 /home/openclaw/sandboxes-home
+for inst_name in $INSTANCE_NAMES; do
+  # Pass inst_name and INSTALL_DIR as arguments (not heredoc interpolation) to prevent shell injection
+  sudo -u openclaw bash -s "$inst_name" "$INSTALL_DIR" << 'INSTEOF'
+set -euo pipefail
+inst_name="$1"
+OPENCLAW_HOME="$2"
+INST_DIR="${OPENCLAW_HOME}/instances/${inst_name}"
 
-# Host status directory — written by root cron scripts, read by agents via workspace
-# Lives under workspace/ so agents can read via relative path (host-status/health.json)
-# Root-owned with 755/644 permissions so both root can write and container can read
-sudo mkdir -p /home/openclaw/.openclaw/workspace/host-status
-sudo chmod 755 /home/openclaw/.openclaw/workspace/host-status
+mkdir -p "${INST_DIR}/.openclaw/workspace"
+mkdir -p "${INST_DIR}/.openclaw/credentials"
+mkdir -p "${INST_DIR}/.openclaw/logs"
+mkdir -p "${INST_DIR}/.openclaw/backups"
+mkdir -p "${INST_DIR}/sandboxes-home"
+mkdir -p "${INST_DIR}/docker"
+
+chmod 700 "${INST_DIR}/.openclaw"
+chmod 700 "${INST_DIR}/.openclaw/credentials"
+INSTEOF
+
+  # Do NOT change 1000:1000 to openclaw:openclaw!
+  # The container runs as uid 1000 (node user inside Docker), which is typically
+  # 'ubuntu' on the host — NOT the openclaw user (uid 1002). Using the openclaw
+  # UID breaks container write access to these directories.
+  sudo chown -R 1000:1000 "${INSTALL_DIR}/instances/${inst_name}/.openclaw"
+  sudo chown -R 1000:1000 "${INSTALL_DIR}/instances/${inst_name}/sandboxes-home"
+
+  # Host status directory — written by root cron scripts, read by agents via workspace
+  # Lives under workspace/ so agents can read via relative path (host-status/health.json)
+  # Root-owned with 755/644 permissions so both root can write and container can read
+  sudo mkdir -p "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/host-status"
+  sudo chmod 755 "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/host-status"
+
+  echo "  Created directories for claw: ${inst_name}" >&2
+done
 
 echo "Directory structure created." >&2
 
 # Part 3: Clone OpenClaw Repository
-sudo -u openclaw bash << 'CLONEEOF'
+sudo -u openclaw bash -s "$INSTALL_DIR" << 'CLONEEOF'
 set -euo pipefail
-cd /home/openclaw
+cd "$1"
 git clone https://github.com/openclaw/openclaw.git openclaw
-
-# Create data directory for bind mounts (not tracked by git)
-mkdir -p /home/openclaw/openclaw/data/docker
 CLONEEOF
 
 echo "Repository cloned." >&2
@@ -96,8 +116,8 @@ GATEWAY_TOKEN=$(openssl rand -hex 32)
 # Dashboard base path — direct from config, no parsing needed
 DASHBOARD_BASE_PATH="${OPENCLAW_DASHBOARD_DOMAIN_PATH:-}"
 
-sudo -u openclaw tee /home/openclaw/openclaw/.env > /dev/null << EOF
-# Gateway authentication
+sudo -u openclaw tee ${INSTALL_DIR}/openclaw/.env > /dev/null << EOF
+# Gateway authentication (shared default — per-claw tokens in openclaw.json)
 OPENCLAW_GATEWAY_TOKEN=${GATEWAY_TOKEN}
 
 # AI Gateway — all provider API keys and base URLs are mapped in compose override
@@ -125,8 +145,8 @@ GATEWAY_CPUS=${GATEWAY_CPUS:-}
 GATEWAY_MEMORY=${GATEWAY_MEMORY:-}
 
 # Docker compose variables (required by repo's docker-compose.yml)
-OPENCLAW_CONFIG_DIR=/home/openclaw/.openclaw
-OPENCLAW_WORKSPACE_DIR=/home/openclaw/.openclaw/workspace
+OPENCLAW_CONFIG_DIR=${INSTALL_DIR}/.openclaw
+OPENCLAW_WORKSPACE_DIR=${INSTALL_DIR}/.openclaw/workspace
 # Port numbers only — DO NOT use IP:port format (e.g. 127.0.0.1:18789)
 # OpenClaw CLI reads this env var and misparses IP:port as port number
 OPENCLAW_GATEWAY_PORT=18789
@@ -138,8 +158,8 @@ OPENCLAW_BRIDGE_PORT=18790
 OPENCLAW_GATEWAY_BIND=lan
 EOF
 
-sudo chmod 600 /home/openclaw/openclaw/.env
-sudo chown openclaw:openclaw /home/openclaw/openclaw/.env
+sudo chmod 600 ${INSTALL_DIR}/openclaw/.env
+sudo chown openclaw:openclaw ${INSTALL_DIR}/openclaw/.env
 
 echo "" >&2
 echo "Generated Credentials (save these):" >&2

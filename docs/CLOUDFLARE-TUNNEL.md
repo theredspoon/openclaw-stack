@@ -11,6 +11,50 @@ This document describes how to secure OpenClaw behind Cloudflare Tunnel, elimina
 | Direct IP access possible | Direct IP access blocked |
 | Cloudflare can be bypassed | All traffic through Cloudflare |
 
+## Setup Options
+
+There are two ways to configure the Cloudflare Tunnel:
+
+| Option | Config Variable | What You Do | What Claude Does |
+|--------|----------------|-------------|-----------------|
+| **A: Manual** | `CF_TUNNEL_TOKEN` | Create tunnel in CF Dashboard, copy token, configure routes + DNS | Installs cloudflared on VPS |
+| **B: Automated** | `CF_API_TOKEN` | Create an API token with the right permissions | Creates tunnel, configures routes, creates DNS records, installs cloudflared |
+
+### Option B: Automated Setup (CF_API_TOKEN)
+
+Create an API token at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with these permissions:
+
+| Scope | Permission | Level |
+|-------|-----------|-------|
+| Account | Account Settings | Read |
+| Account | Cloudflare Tunnel | Edit |
+| Zone | DNS | Edit (scoped to your domain's zone) |
+
+![Cloudflare API token setup](assets/cloudflare-api-key-setup.png)
+
+Set it in `openclaw-config.env`:
+
+```bash
+CF_API_TOKEN=<your-api-token>
+```
+
+During deployment (§ 0.2b), Claude will:
+1. Verify the token has the right permissions
+2. Show existing tunnels or create a new one
+3. Configure ingress rules for all OpenClaw instances
+4. Create DNS CNAME records pointing to the tunnel
+5. Write the derived `CF_TUNNEL_TOKEN` to your config
+
+**Cloudflare Access still requires manual setup** — see the [Cloudflare Access Configuration](#cloudflare-access-configuration) section below. For multi-instance deployments, a wildcard Access application (e.g., `openclaw*.example.com`) can cover all instances with one policy.
+
+**SSL constraint**: Cloudflare free SSL only covers 2nd-level subdomains (`*.example.com`). Each instance must use a single-level subdomain like `openclaw-personal.example.com`, not `personal.openclaw.example.com`.
+
+### Option A: Manual Setup (CF_TUNNEL_TOKEN)
+
+Follow the steps below to create a tunnel manually and paste the token.
+
+---
+
 ## Prerequisites
 
 - Cloudflare account with your domain added
@@ -291,6 +335,41 @@ The domain is now routable — and protected by Cloudflare Access from the first
 2. You should see the Cloudflare Access login page
 3. Authenticate with your configured method
 4. You should now see the OpenClaw UI
+
+---
+
+## Multi-Instance Tunnel Configuration
+
+When running multiple OpenClaw instances on the same VPS (via `openclaw-multi.sh`), each instance needs its own subdomain routed through the same Cloudflare tunnel. The OpenClaw frontend hardcodes WebSocket connections to `wss://<host>/` (root path), so subpath routing on a single subdomain is not possible — each instance must have a separate subdomain.
+
+### Setup
+
+Run `openclaw-multi.sh tunnel-config` to get the exact rules for your instances. The general pattern:
+
+| Subdomain | Path | Service | URL |
+|-----------|------|---------|-----|
+| `personal.openclaw` | `/dashboard/*` | HTTP | `localhost:6090` |
+| `personal.openclaw` | *(catch-all)* | HTTP | `localhost:18789` |
+| `work.openclaw` | `/dashboard/*` | HTTP | `localhost:6091` |
+| `work.openclaw` | *(catch-all)* | HTTP | `localhost:18790` |
+
+Each instance gets unique gateway and dashboard ports (auto-assigned by `openclaw-multi.sh` or set explicitly in the instance's `config.env`).
+
+### Cloudflare Access
+
+Each subdomain needs its own Cloudflare Access application (or extend a single application with wildcard subdomain matching like `*.openclaw.yourdomain.com`). Consider setting `CF_ACCESS_AUD` per dashboard instance to prevent cross-instance session access — see [DASHBOARD.md § Security](DASHBOARD.md#security).
+
+### Adding a New Instance
+
+1. Create `deploy/openclaws/<name>/config.env` with at least `OPENCLAW_DOMAIN` set
+2. Run `openclaw-multi.sh generate` to update compose and `.env` files
+3. Configure tunnel routes:
+   - **With `CF_API_TOKEN`:** Run `openclaw-multi.sh tunnel-config --apply` to auto-configure routes + DNS
+   - **Without:** Run `openclaw-multi.sh tunnel-config` to see the rules, then add them manually in CF Dashboard
+4. Create a Cloudflare Access application for the new subdomain (or use a wildcard policy)
+5. Start the instance: `openclaw-multi.sh start`
+
+---
 
 ## Maintenance
 

@@ -5,7 +5,8 @@
 # after config changes (e.g. adding env vars, changing auth settings).
 #
 # Usage:
-#   scripts/restart-gateway.sh
+#   scripts/restart-gateway.sh                      # auto-detect instance
+#   scripts/restart-gateway.sh --instance test-claw  # target specific instance
 
 set -euo pipefail
 
@@ -18,8 +19,9 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 source "$CONFIG_FILE"
+source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
-GATEWAY="openclaw-gateway"
+GATEWAY=$(resolve_gateway "$@") || exit 1
 
 # Check gateway container exists
 if ! ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
@@ -30,7 +32,7 @@ fi
 
 printf '\033[33mRestarting %s...\033[0m\n' "$GATEWAY"
 TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
-  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart $GATEWAY'"
+  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR:-/home/openclaw}/openclaw && docker compose restart $GATEWAY'"
 
 # Wait for gateway to be healthy
 printf '\033[33mWaiting for gateway to be healthy...\033[0m\n'

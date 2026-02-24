@@ -12,13 +12,21 @@ set -euo pipefail
 #
 # Prerequisites: Gateway container must be running and healthy.
 
+# Multi-claw: pass --instance <name> to target a specific claw
+INSTANCE_FLAG=""
+if [ "${1:-}" = "--instance" ] && [ -n "${2:-}" ]; then
+  INSTANCE_FLAG="--instance $2"
+  shift 2
+fi
+
 # Parse schedule from HOSTALERT_DAILY_REPORT_TIME
 # Default: "9:30 AM PST" → cron "30 9 * * *" in America/Los_Angeles
 CRON_EXPR="${CRON_EXPR:-30 9 * * *}"
 CRON_TZ="${CRON_TZ:-America/Los_Angeles}"
 
 # Check if already registered (idempotent)
-if openclaw cron list 2>/dev/null | grep -q "Daily VPS Health Check"; then
+# shellcheck disable=SC2086
+if openclaw ${INSTANCE_FLAG} cron list 2>/dev/null | grep -q "Daily VPS Health Check"; then
   echo "Cron job 'Daily VPS Health Check' already registered, skipping."
   exit 0
 fi
@@ -31,7 +39,7 @@ fi
 
 # Register the cron job
 # shellcheck disable=SC2086
-openclaw cron add \
+openclaw ${INSTANCE_FLAG} cron add \
   --name "Daily VPS Health Check" \
   --cron "${CRON_EXPR}" \
   --tz "${CRON_TZ}" \

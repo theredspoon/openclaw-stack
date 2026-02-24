@@ -1,5 +1,5 @@
-# OpenClaw application log rotation
-# Rotates hook-generated JSONL logs and backup cron log.
+# OpenClaw application log rotation (always-multi-claw layout)
+# Rotates hook-generated JSONL logs and backup cron log for all claw instances.
 # Docker container logs are rotated separately via json-file driver (docker-compose.override.yml).
 #
 # copytruncate: safe for append-only writers (fs.appendFile, >>)
@@ -8,9 +8,9 @@
 # delaycompress: keeps most recent rotated file (.1) uncompressed for easy inspection.
 # su: required to suppress logrotate's "insecure permissions" check — the logs/
 #   directory is owned by uid 1000 (group-writable). Using root:root so logrotate
-#   can traverse /home/openclaw (owned by openclaw user, mode 700).
+#   can traverse {{INSTALL_DIR}} (owned by openclaw user, mode 700).
 
-/home/openclaw/.openclaw/logs/backup.log
+{{INSTALL_DIR}}/instances/*/.openclaw/logs/backup.log
 {
     su root root
     weekly
@@ -24,8 +24,7 @@
 
 # Telemetry log — captures all event types (LLM, session, tool, agent, etc.).
 # More aggressive rotation: daily + 50M maxsize trigger for mid-day rotation.
-# Replaces previous separate debug.log and llm.log entries.
-/home/openclaw/.openclaw/logs/telemetry.log
+{{INSTALL_DIR}}/instances/*/.openclaw/logs/telemetry.log
 {
     su root root
     daily

@@ -1,14 +1,15 @@
-# Claude > OpenClaw > VPS
+# Claude > Multi OpenClaw > VPS
 
 > [!NOTE]
 > This project is in active development. Reach out if you need help.
 
-This project primarily solves the hard bits of deploying fully containerized OpenClaw, as securely as possible without crippling capabilities.
+This project packed full of useful debugging tools to assist you or `claude code` in modifying your OpenClaw setup.
 
-It's also packed full of useful debugging tools to assist you or `claude code` in modifying your OpenClaw setup.
+It enables automated deployment of one or more OpenClaw instances to a single VPS.
 
-You'll likely want to customize the agents in `deploy/openclaw.json` before deploying.
-The default agent is configured as a coordinator to hand off tasks to sub-agents.
+OpenClaw gateways are run inside of a Docker container for isolation from other claws & services.
+
+Sysbox runtime is used to enable the OpenClaw gateway containers to securely & efficiently spin up agent sandboxes.
 
 ---
 
@@ -51,6 +52,9 @@ Check out this guide on [OpenClaw hosting](https://proclaw.co/resources/openclaw
 
 1. Claude subscription - Pro/Max for Claude Code
 2. Cloudflare Account (free)
+3. A Cloudflare Tunnel token **or** API token:
+   - **`CF_TUNNEL_TOKEN`** — create a tunnel manually in the [CF Dashboard](https://one.dash.cloudflare.com/) and copy the token
+   - **`CF_API_TOKEN`** — create an [API token](https://dash.cloudflare.com/profile/api-tokens) with Tunnel Edit + DNS Edit permissions, and Claude automates the rest (tunnel creation, route config, DNS records)
 
 About 30 min for the first deploy. Claude does a LOT of work on your VPS to get OpenClaw securely deployed.
 
@@ -94,7 +98,7 @@ required config setup, git clone this repo, and automate the deploy.
 
 ### Manual Steps
 
-1. Create a **[new VPS](docs/VPS-SETUP-GUIDE.md)** and [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md)
+1. Create a **[new VPS](docs/VPS-SETUP-GUIDE.md)** and set up a [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md) (manual token or API token)
 2. Clone this repo
 3. Run `claude` in this repo dir, just say `start`
 
@@ -197,7 +201,7 @@ Each agent runs tools inside an isolated Docker container (via Sysbox for secure
   +-------------------------------------+-------+
   |  VPS                                         |
   |                                              |
-  |  +-- openclaw-gateway (Sysbox) ----------+   |
+  |  +-- openclaw-main-claw (Sysbox) --------+   |
   |  |  Gateway process (Node.js)            |   |
   |  |  Nested Docker daemon                 |   |
   |  |    -> sandbox containers (per agent)  |   |
@@ -333,7 +337,7 @@ ssh -i ~/.ssh/your_key -p 222 adminclaw@YOUR_VPS_IP
 # Gateway commands (run as openclaw user)
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'          # Status
 sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'      # Logs
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-gateway'  # Restart
+sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-main-claw'  # Restart
 ```
 
 **Or use the helper scripts:**
@@ -494,14 +498,14 @@ Then tell claude to scan through the local openclaw code to help you debug.
 openclaw-vps/
 ├── README.md                         # This file
 ├── CLAUDE.md                         # Deployment orchestration instructions (for Claude)
-├── REQUIREMENTS.md                   # Architecture reference and design decisions
 ├── openclaw-config.env               # Your deployment config (secrets, gitignored)
 ├── openclaw-config.env.example       # Template with all fields documented
 │
 ├── deploy/                           # Files deployed to the VPS
-│   ├── docker-compose.override.yml   # Container config (Sysbox, resource limits, ports)
-│   ├── openclaw.json                 # Gateway config (agents, plugins, security)
-│   ├── models.json                   # AI provider routing (baseUrl overrides)
+│   ├── openclaws/                    # Per-claw configuration
+│   │   ├── _defaults/                # Shared templates (openclaw.json, models.json)
+│   │   ├── main-claw/               # Default claw (inherits from openclaw-config.env)
+│   │   └── _example/                # Template for creating new claws
 │   ├── sandbox-toolkit.yaml          # Sandbox tool definitions
 │   ├── vector/                        # Vector log shipper (standalone compose project)
 │   │   ├── docker-compose.yml        # Independent of gateway — start/stop separately
@@ -539,7 +543,9 @@ openclaw-vps/
     ├── 04-vps1-openclaw.md           # Gateway deployment and configuration
     ├── 06-backup.md                  # Automated backup setup
     ├── 07-verification.md            # Security audit and service verification
-    ├── 08-post-deploy.md             # Domain, tunnel routes, device pairing
+    ├── 08a-configure-llm-proxy.md     # AI proxy provider key setup
+    ├── 08b-pair-devices.md            # Browser & Telegram device pairing
+    ├── 08c-deploy-report.md           # Deployment report generation
     └── maintenance.md                # Token rotation and maintenance procedures
 
 ```

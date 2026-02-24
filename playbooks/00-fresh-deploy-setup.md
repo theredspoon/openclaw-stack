@@ -11,7 +11,7 @@ This playbook validates the configuration needed to deploy OpenClaw on a fresh U
 - A fresh Ubuntu VPS (>= 24.04) with root/sudo access
 - An SSH key pair for VPS access
 - A Cloudflare account with a domain
-- Cloudflare Tunnel created with public hostname routes configured
+- Cloudflare Tunnel token (`CF_TUNNEL_TOKEN`, manual) OR Cloudflare API token (`CF_API_TOKEN`, automated)
 - Cloudflare Access application protecting the domain
 
 ---
@@ -39,7 +39,7 @@ Then ask the user to fill in the required values (see section 0.2).
 Validate all of these fields:
 
 1. **`VPS1_IP`** — Must be set and not a placeholder (not `x.x.x.x` or containing `<`).
-2. **`CF_TUNNEL_TOKEN`** — Must not be empty.
+2. **`CF_TUNNEL_TOKEN`** or **`CF_API_TOKEN`** — At least one must be non-empty. If both are empty, report: "Set `CF_TUNNEL_TOKEN` (manual — create tunnel in CF Dashboard) or `CF_API_TOKEN` (automated — Claude creates tunnel + routes + DNS). See [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md)."
 3. **`OPENCLAW_DOMAIN`** — Must not be a placeholder (no `<example>` or angle brackets).
 4. **`OPENCLAW_DASHBOARD_DOMAIN`** — Must not be a placeholder.
 5. **`OPENCLAW_DASHBOARD_DOMAIN_PATH`** — Validated (can be empty for separate subdomain, or a path like `/browser`).
@@ -54,8 +54,9 @@ Report **all** issues at once (don't stop at the first one). Present them as:
 > **Configuration issues found:**
 >
 > - `VPS1_IP` is still a placeholder (`x.x.x.x`) — set it to your VPS public IP
-> - `CF_TUNNEL_TOKEN` is empty — create a tunnel in Cloudflare Dashboard and paste
->   the token (see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md))
+> - `CF_TUNNEL_TOKEN` and `CF_API_TOKEN` are both empty — set one:
+>   `CF_TUNNEL_TOKEN` (manual — create tunnel in CF Dashboard) or
+>   `CF_API_TOKEN` (automated — see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md))
 > - `OPENCLAW_DOMAIN` is still a placeholder — set it to your actual domain
 >   (e.g., `openclaw.yourdomain.com`). You need to configure Cloudflare Tunnel
 >   public hostname routes first (see [`docs/CLOUDFLARE-TUNNEL.md`](../docs/CLOUDFLARE-TUNNEL.md))
@@ -67,6 +68,68 @@ Report **all** issues at once (don't stop at the first one). Present them as:
 > Update `openclaw-config.env` and let me know when ready.
 
 Wait for user to fix all issues before continuing. Re-validate after they confirm.
+
+---
+
+## 0.2b Automated Tunnel Setup (CF_API_TOKEN)
+
+**Skip this section entirely if `CF_API_TOKEN` is not set.** The manual flow (user already has `CF_TUNNEL_TOKEN`) is unchanged.
+
+When `CF_API_TOKEN` is set, automate tunnel creation, route configuration, and DNS setup:
+
+1. **Verify token permissions:**
+   ```bash
+   deploy/scripts/cf-tunnel-setup.sh verify
+   ```
+   If verification fails, report the missing permissions and link to the API token creation page.
+
+2. **List existing tunnels:**
+   ```bash
+   deploy/scripts/cf-tunnel-setup.sh list-tunnels
+   ```
+
+3. **Prompt user:** Use an existing tunnel or create a new one?
+   - If existing: user selects from the list, then fetch the tunnel token:
+     ```bash
+     deploy/scripts/cf-tunnel-setup.sh get-token <tunnel-id>
+     ```
+   - If new: ask for a tunnel name (default: `openclaw`), then create:
+     ```bash
+     deploy/scripts/cf-tunnel-setup.sh create-tunnel <name>
+     ```
+     This outputs `TUNNEL_ID=...` and `CF_TUNNEL_TOKEN=...`.
+
+4. **Write `CF_TUNNEL_TOKEN`** to `openclaw-config.env` (the value from step 3).
+
+5. **Configure routes + DNS:**
+   ```bash
+   deploy/scripts/cf-tunnel-setup.sh setup-routes
+   ```
+   This reads all instance configs, configures tunnel ingress rules, and creates DNS CNAME records.
+
+6. **Report** what was configured (routes, DNS records created). Remind the user that Cloudflare Access still needs manual setup (see § 0.5).
+
+> **Multi-instance note:** When using `CF_API_TOKEN` with multiple claws, a single Cloudflare Access
+> application with a wildcard domain (e.g., `openclaw*.example.com` or `*claw.example.com`) can
+> protect all instance subdomains. This must still be configured manually in the CF Dashboard.
+
+---
+
+## 0.2c Multi-Claw Detection
+
+Check for additional claws beyond the default `main-claw`:
+
+```bash
+ls -d deploy/openclaws/*/ 2>/dev/null | xargs -I{} basename {} | grep -v '^_'
+```
+
+If only `main-claw` is found (or no directories exist), this is a single-claw deployment — proceed normally. The deployment process is the same regardless of claw count.
+
+If multiple active claws are found, inform the user:
+
+> "Found N claw configurations: main-claw, personal-claw, ..."
+> "Each will get its own container, domain, and gateway token."
+> "Ensure each claw's `config.env` has the correct `OPENCLAW_DOMAIN` if using separate subdomains."
 
 ---
 
@@ -83,7 +146,7 @@ ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_U
 
 **"Connection refused" or "Connection timed out":**
 
-> "Can't reach the VPS on port 22. Possible causes:
+> "Can't reach the VPS on port <SSH_PORT>. Possible causes:
 >
 > - The VPS isn't running or hasn't finished booting
 > - The IP address is incorrect — double-check `VPS1_IP` in `openclaw-config.env`
@@ -129,15 +192,17 @@ Read current gateway resource limits from `GATEWAY_CPUS` and `GATEWAY_MEMORY` in
 
 ### Expected Values
 
-- **CPUs:** `GATEWAY_CPUS` should equal the VPS CPU count from `nproc`
-- **Memory:** `GATEWAY_MEMORY` should be total VPS memory minus 500M–1GB
-  - Vector uses ~128M, system/kernel needs ~500M
-  - Formula: `total_memory - 750M` (midpoint) is a good default
-  - Acceptable range: `total - 1G` to `total - 500M`
+`GATEWAY_CPUS` and `GATEWAY_MEMORY` are **per-container** limits — each claw gets these resources. With multiple claws, divide the available VPS resources by the number of active claws.
+
+1. Count active claws from § 0.2c (directories in `deploy/openclaws/` excluding `_`-prefixed).
+2. Calculate system overhead: Vector (~128M) + system/kernel (~500M) = ~750M total.
+3. Compute per-claw resources:
+   - **CPUs per claw:** `floor(nproc / claw_count)`
+   - **Memory per claw:** `floor((total_memory - 750M) / claw_count)`, rounded down to nearest 0.5G
 
 ### Action
 
-**If values match** (CPUs equal, memory within the 500M–1G buffer range): Report that resource limits look correct and continue.
+**If values match** (per-claw CPUs and memory within expected range): Report that resource limits look correct and continue.
 
 **If mismatch detected or not yet set:** Show the user a comparison:
 
@@ -145,14 +210,16 @@ Read current gateway resource limits from `GATEWAY_CPUS` and `GATEWAY_MEMORY` in
 VPS Resources:
   CPUs:   <nproc result>
   Memory: <total from free, human-readable>
+  Active claws: <count> (<names>)
 
-Current gateway limits (openclaw-config.env):
+Current per-claw limits (openclaw-config.env):
   GATEWAY_CPUS:   <current value or "(default: 6)">
   GATEWAY_MEMORY: <current value or "(default: 10.5G)">
 
-Recommended gateway limits:
-  GATEWAY_CPUS:   <nproc result>
-  GATEWAY_MEMORY: <total - 750M, rounded to nearest 0.5G>
+Recommended per-claw limits (<count> claws):
+  GATEWAY_CPUS:   <floor(nproc / claw_count)>
+  GATEWAY_MEMORY: <floor((total - 750M) / claw_count), rounded to 0.5G>
+  Total allocated: <cpus * count> CPUs, <memory * count> memory
 ```
 
 Ask the user if they want to adjust the limits. They may choose:
@@ -161,7 +228,7 @@ Ask the user if they want to adjust the limits. They may choose:
 - Enter custom values
 - Keep the current values (skip)
 
-If the user confirms changes, update `GATEWAY_CPUS` and `GATEWAY_MEMORY` in `openclaw-config.env`. Also check that `reservations.cpus` in `deploy/docker-compose.override.yml` does not exceed the new CPU limit (reservation cannot exceed limit).
+If the user confirms changes, update `GATEWAY_CPUS` and `GATEWAY_MEMORY` in `openclaw-config.env`. Per-claw overrides can also be set in each claw's `config.env` (e.g., `deploy/openclaws/main-claw/config.env`) using `GATEWAY_CPUS` and `GATEWAY_MEMORY` — these override the global defaults for that specific claw.
 
 ---
 
@@ -200,7 +267,11 @@ Wait for user to confirm. Re-run the curl check to verify.
 
 Wait for user. Re-check.
 
-### Also verify the browser VNC domain
+> **Multi-instance with CF_API_TOKEN:** When using automated tunnel setup with multiple claws,
+> a single Cloudflare Access application with a wildcard domain (e.g., `openclaw*.example.com`)
+> can protect all instance subdomains. This must still be configured manually in the CF Dashboard.
+
+### Also verify the dashboard domain
 
 ```bash
 curl -sI --connect-timeout 10 https://<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>/ 2>&1 | head -10
@@ -240,29 +311,29 @@ Deployment Plan:
   1. [Parallel]
      a. Deploy Cloudflare Workers (01-workers.md) — local              ~5 min
      b. Base setup & hardening (02-base-setup.md) — VPS               ~10 min
-  2. Docker installation (03-docker.md)
+  2. Docker + Sysbox (03-docker.md → 03b-sysbox.md)
   3. OpenClaw deployment (04-vps1-openclaw.md)
   4. Backup configuration (06-backup.md)
   5. Reboot & verification (07-verification.md)
-  6. Post-deploy: AI proxy configuration, device pairing & deployment report (08-post-deploy.md)
+  6. Post-deploy: AI proxy (08a) → device pairing (08b) → deployment report (08c)
 ```
 
 Domain and Cloudflare Access have been verified.
 
-> **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 6, `08-post-deploy.md` § 8.1), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
+> **Note:** AI proxy provider API keys (e.g., `ANTHROPIC_API_KEY`) are configured during post-deploy (step 6, `08a-configure-llm-proxy.md`), not during worker deployment (step 1). Worker deployment only sets up the infrastructure (`AUTH_TOKEN`).
 
 Ask the user to confirm before proceeding with the deployment.
 
 ### Automation directive
 
-After the user confirms, launch **01-workers and 02-base-setup as parallel subagents** (two Task tool calls in a single message). These have no shared dependencies — workers run locally via wrangler while base setup runs on the VPS via SSH. After both subagents return, execute playbooks 03 through 07 **continuously without pausing between steps**. Do not ask for confirmation between playbooks. Only stop if:
+After the user confirms, launch **01-workers and 02-base-setup as parallel subagents** (two Task tool calls in a single message). These have no shared dependencies — workers run locally via wrangler while base setup runs on the VPS via SSH. After both subagents return, execute playbooks 03, 03b, then 04 through 07 **continuously without pausing between steps**. Do not ask for confirmation between playbooks. Only stop if:
 
 - A command fails and the error requires user input to resolve
 - A playbook step explicitly says to wait for user input (e.g., a blocking error with multiple resolution paths)
 - **SSH verification (02-base-setup.md § 2.4 Step 3):** You MUST test SSH on port `<SSH_HARDENED_PORT>` from the local machine and confirm it works before proceeding. This is a mandatory stop point — do not skip it during automated deployment.
-- **07-verification.md:** Run in the main context (not a subagent) so the user sees real-time progress and errors can be handled directly. By this point, all heavy steps have been offloaded to subagents and the context window has room. Report the summary table before proceeding to 08-post-deploy.md.
+- **07-verification.md:** Run in the main context (not a subagent) so the user sees real-time progress and errors can be handled directly. By this point, all heavy steps have been offloaded to subagents and the context window has room. Report the summary table before proceeding to 08a-configure-llm-proxy.md.
 
-Normal informational output (progress updates, version notes, check results) should be reported inline without pausing. The first user interaction after confirmation should be device pairing in `08-post-deploy.md`.
+Normal informational output (progress updates, version notes, check results) should be reported inline without pausing. The first user interaction after confirmation should be device pairing in `08b-pair-devices.md`.
 
 ### Context window management
 
@@ -270,16 +341,17 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 
 **Delegate to subagents:** Steps that produce verbose output but only need pass/fail + key values back:
 
-| Step | Why it's heavy | Return values | Read range |
-|------|---------------|---------------|------------|
-| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | Full file |
-| 02: System update + package install | apt output (hundreds of lines) | pass/fail | Full file |
-| 02: System hardening (2.5–2.9) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | Full file |
-| 04: Sysbox + infra (4.1–4.2) | dpkg + network/directory creation + SCP | pass/fail, OPENCLAW_GENERATED_TOKEN | Lines 1–162 |
-| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | Lines 24–262 |
-| 04: Build + start (4.4) | Full Docker build log | pass/fail | Lines 263–447 |
+| Step | Why it's heavy | Return values | Log file | Scope |
+|------|---------------|---------------|----------|-------|
+| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | `01-workers.md` | Full file |
+| 02: System update + package install | apt output (hundreds of lines) | pass/fail | `02-base-setup.md` | Full file |
+| 02: System hardening (2.5–2.6) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | `02-base-setup.md` | Full file |
+| 03b: Sysbox runtime | dpkg install + AppArmor check | pass/fail | `03b-sysbox.md` | Full file |
+| 04: Infrastructure setup (4.2) | network/directory creation + SCP | pass/fail, OPENCLAW_GENERATED_TOKEN | `04-infra-config.md` | §4.2 |
+| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | `04-deploy-config.md` | §4.3 |
+| 04: Build + start (4.4) | Full Docker build log | pass/fail | `04-build-start.md` | §4.4 |
 
-> **Read ranges:** Use `offset` and `limit` parameters when telling subagents to read playbook sections. This prevents subagents from loading troubleshooting, updating, and verification sections they don't need (~250 lines saved per 04 subagent).
+> **Scoping:** Tell subagents which sections to read (e.g., "Read §4.2 of playbooks/04-vps1-openclaw.md"). This prevents subagents from loading troubleshooting, updating, and verification sections they don't need.
 
 > **Parallel launch:** 01 and 02 subagents should be launched together in a single message (multiple Task tool calls). Both must return their values before step 04 can begin — 04 needs worker URLs/tokens from 01 and requires Docker (step 03, which depends on 02).
 
@@ -288,37 +360,31 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 **Critical: avoid reading playbooks before delegating.** Do NOT read a playbook into main context and then pass its contents to a subagent — this doubles the context cost. Instead, tell the subagent to read the playbook section itself:
 
 ```
-Read playbooks/04-vps1-openclaw.md (offset: 1, limit: 162) for sections 4.1-4.2 and execute them.
+Read playbooks/04-vps1-openclaw.md §4.2 and execute the infrastructure setup.
 SSH: ssh -i <key> -p <port> <user>@<ip>
 Config values (pass as env vars to setup-infra.sh):
   AI_GATEWAY_WORKER_URL=<value>
   AI_GATEWAY_AUTH_TOKEN=<value>
   ...
+Log: Write detailed execution log (all commands, full output, errors, recovery steps)
+  to .deploy-logs/<timestamp>/04-infra-config.md
 Return: pass/fail, OPENCLAW_GENERATED_TOKEN from stdout.
 ```
 
 **Template substitution in subagents:** Sections 4.2 and 4.3 now use standalone scripts (`deploy/scripts/setup-infra.sh` and `deploy/scripts/deploy-config.sh`) that are bulk-copied to `/tmp/deploy-staging/` as part of the `deploy/` directory copy in § 4.2 Step 1, then run remotely. Config values are passed as env vars — the subagent just needs the variable values, not the script contents.
 
-**Subagent deploy logs:** Each subagent must write its detailed execution log to `.deploy-logs/<timestamp>/` before returning its summary. This preserves the full output for post-deploy review without consuming main context.
+**Deploy logs:** At the start of deployment (before launching subagents), create `.deploy-logs/YYYYMMDD-HHMMSS/`. The `.deploy-logs/` directory is gitignored. At the end of deployment, tell the user where the logs are.
 
-At the start of deployment (before launching subagents), create the log directory:
+*Subagent steps:* Every subagent prompt **must** include a `Log:` line with the file path (see template above). The subagent writes its full execution log there before returning a short summary. Log file names are in the "Log file" column of the delegation table.
 
-```
-.deploy-logs/YYYYMMDD-HHMMSS/
-```
+*Main-context steps:* After completing each main-context playbook step, append a log file to the same directory. Record all commands run, their output, and any errors or recovery steps. Main-context log files:
 
-Instruct each subagent to write its detailed report (all commands run, full output, errors encountered, recovery steps) to a file in this directory:
-
-```
-.deploy-logs/YYYYMMDD-HHMMSS/01-workers.md
-.deploy-logs/YYYYMMDD-HHMMSS/02-base-setup.md
-.deploy-logs/YYYYMMDD-HHMMSS/04-infra-config.md
-.deploy-logs/YYYYMMDD-HHMMSS/04-build-start.md
-```
-
-The subagent's return message to the main agent should still be a short summary (pass/fail + key values). The log file contains everything else. At the end of deployment, tell the user where the logs are so they can ask for review if needed.
-
-The `.deploy-logs/` directory is gitignored.
+| Step | Log file |
+|------|----------|
+| 03: Docker installation | `03-docker.md` |
+| 06: Backup configuration | `06-backup.md` |
+| 07: Verification | `07-verification.md` |
+| 08: Post-deploy report | `08-deploy-report.md` |
 
 **Additional techniques:**
 
