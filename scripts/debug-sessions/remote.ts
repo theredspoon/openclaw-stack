@@ -93,22 +93,27 @@ export function loadConfig(): Config {
   }
 }
 
-export async function resolveInstance(cfg: Config): Promise<Config> {
-  if (cfg.instance) {
-    const dir = `${cfg.installDir}/instances/${cfg.instance}/.openclaw`
-    return { ...cfg, baseDir: `${dir}/agents`, llmLogPath: `${dir}/logs/llm.log` }
-  }
-
-  // Auto-detect by listing instance directories on VPS
+/** List instance directories on VPS without throwing on multiple results. */
+export async function listInstances(cfg: Config): Promise<string[]> {
   // sudo: adminclaw can't traverse /home/openclaw (750 owned by openclaw)
   // grep -v '^\\.': exclude .shared-backups and other dotdirs
   const out = await sshExec(cfg, `sudo ls -1 ${cfg.installDir}/instances/ | grep -v '^\\.'`)
-  const instances = out.trim().split("\n").filter(Boolean)
+  return out.trim().split("\n").filter(Boolean)
+}
+
+/** Return a new config with instance paths set for the given claw name. */
+export function withInstance(cfg: Config, instance: string): Config {
+  const dir = `${cfg.installDir}/instances/${instance}/.openclaw`
+  return { ...cfg, instance, baseDir: `${dir}/agents`, llmLogPath: `${dir}/logs/llm.log` }
+}
+
+export async function resolveInstance(cfg: Config): Promise<Config> {
+  if (cfg.instance) return withInstance(cfg, cfg.instance)
+
+  const instances = await listInstances(cfg)
 
   if (instances.length === 1) {
-    const inst = instances[0]
-    const dir = `${cfg.installDir}/instances/${inst}/.openclaw`
-    return { ...cfg, instance: inst, baseDir: `${dir}/agents`, llmLogPath: `${dir}/logs/llm.log` }
+    return withInstance(cfg, instances[0])
   } else if (instances.length === 0) {
     throw new Error(`No claw instances found in ${cfg.installDir}/instances/`)
   } else {

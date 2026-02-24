@@ -11,7 +11,7 @@ import {
   type Key,
 } from "./terminal"
 import {
-  loadConfig, resolveInstance, uploadScript, fetchSessions, fetchLlmCalls, runCommand,
+  loadConfig, listInstances, withInstance, uploadScript, fetchSessions, fetchLlmCalls, runCommand,
   type SessionInfo, type LlmCallInfo, type Config,
 } from "./remote"
 
@@ -43,7 +43,7 @@ const SORTS: Sort[] = ["date", "cost", "errors", "size", "turns"]
 type LlmSort = "date" | "cost" | "duration" | "tokens"
 const LLM_SORTS: LlmSort[] = ["date", "cost", "duration", "tokens"]
 
-type Screen = "menu" | "sessions" | "actions" | "output" | "agents"
+type Screen = "instances" | "menu" | "sessions" | "actions" | "output" | "agents"
   | "llm-calls" | "llm-actions" | "models"
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -52,6 +52,7 @@ let cfg: Config
 let screen: Screen = "menu"
 let cursor = 0
 let scroll = 0
+let instanceList: string[] = []
 let sessions: SessionInfo[] = []
 let filtered: SessionInfo[] = []
 let agents: string[] = []
@@ -178,6 +179,7 @@ function render() {
   const [cols, rows] = termSize()
   let lines: string[]
   switch (screen) {
+    case "instances":   lines = rInstances(cols, rows); break
     case "menu":        lines = rMenu(cols, rows); break
     case "sessions":    lines = rSessions(cols, rows); break
     case "actions":     lines = rActions(cols, rows); break
@@ -188,6 +190,27 @@ function render() {
     case "models":      lines = rModels(cols, rows); break
   }
   renderFrame(lines, cols, rows)
+}
+
+function rInstances(w: number, h: number): string[] {
+  const L: string[] = []
+  L.push(hbar("Select Claw Instance", w))
+  L.push(statusLine())
+  L.push(st(`  VPS: ${cfg.host}  ${st(`${instanceList.length} instances found`, DIM)}`, DIM))
+  L.push("")
+
+  for (let i = 0; i < instanceList.length; i++) {
+    const sel = i === cursor
+    const name = instanceList[i]
+    L.push(sel
+      ? `  ${st("\u25b8", CYAN, BOLD)} ${st(name, BOLD, CYAN)}`
+      : `    ${name}`,
+    )
+  }
+
+  while (L.length < h - 1) L.push("")
+  L.push(fbar("\u2191\u2193 Navigate  Enter Select  q Quit", w))
+  return L
 }
 
 function rMenu(w: number, h: number): string[] {
@@ -480,6 +503,7 @@ function onKey(key: Key) {
   errorMsg = ""
 
   switch (screen) {
+    case "instances":   return onInstancesKey(key)
     case "menu":        return onMenuKey(key)
     case "sessions":    return onSessionsKey(key)
     case "actions":     return onActionsKey(key)
@@ -489,6 +513,28 @@ function onKey(key: Key) {
     case "llm-actions": return onLlmActionsKey(key)
     case "models":      return onModelsKey(key)
   }
+}
+
+async function onInstancesKey(key: Key) {
+  if (key.name === "up" || (key.name === "char" && key.ch === "k"))
+    cursor = clamp(cursor - 1, instanceList.length - 1)
+  else if (key.name === "down" || (key.name === "char" && key.ch === "j"))
+    cursor = clamp(cursor + 1, instanceList.length - 1)
+  else if (key.name === "enter" && instanceList.length > 0) {
+    cfg = withInstance(cfg, instanceList[cursor])
+    startSpinner("Uploading debug script...")
+    try {
+      await uploadScript(cfg)
+      stopSpinner()
+      screen = "menu"
+      cursor = 0
+    } catch (e: any) {
+      stopSpinner()
+      errorMsg = `Upload failed: ${e.message}`
+    }
+  }
+  else if (key.name === "escape" || (key.name === "char" && key.ch === "q")) return cleanup()
+  render()
 }
 
 function onMenuKey(key: Key) {
@@ -800,12 +846,31 @@ async function main() {
   // Initial render
   render()
 
-  // Resolve instance and upload Python script, then show menu
+  // Resolve instance: auto-select if pre-configured or single, otherwise show picker
   startSpinner("Connecting to VPS...")
   try {
-    cfg = await resolveInstance(cfg)
-    await uploadScript(cfg)
-    stopSpinner()
+    if (cfg.instance) {
+      // Instance set via env/flag — go straight to menu
+      cfg = withInstance(cfg, cfg.instance)
+      await uploadScript(cfg)
+      stopSpinner()
+    } else {
+      const found = await listInstances(cfg)
+      if (found.length === 1) {
+        cfg = withInstance(cfg, found[0])
+        await uploadScript(cfg)
+        stopSpinner()
+      } else if (found.length === 0) {
+        stopSpinner()
+        errorMsg = `No claw instances found in ${cfg.installDir}/instances/`
+      } else {
+        // Multiple instances — show picker
+        stopSpinner()
+        instanceList = found
+        screen = "instances"
+        cursor = 0
+      }
+    }
     render()
   } catch (e: any) {
     stopSpinner()
