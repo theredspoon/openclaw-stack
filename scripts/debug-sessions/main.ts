@@ -11,7 +11,7 @@ import {
   type Key,
 } from "./terminal"
 import {
-  loadConfig, uploadScript, fetchSessions, fetchLlmCalls, runCommand,
+  loadConfig, resolveInstance, uploadScript, fetchSessions, fetchLlmCalls, runCommand,
   type SessionInfo, type LlmCallInfo, type Config,
 } from "./remote"
 
@@ -194,7 +194,7 @@ function rMenu(w: number, h: number): string[] {
   const L: string[] = []
   L.push(hbar("OpenClaw Session Debug", w))
   L.push(statusLine())
-  L.push(st(`  VPS: ${cfg.host}`, DIM))
+  L.push(st(`  VPS: ${cfg.host}${cfg.instance ? `  Claw: ${cfg.instance}` : ""}`, DIM))
   L.push("")
 
   for (let i = 0; i < MENU_ITEMS.length; i++) {
@@ -800,9 +800,10 @@ async function main() {
   // Initial render
   render()
 
-  // Upload Python script in background, then show menu
+  // Resolve instance and upload Python script, then show menu
   startSpinner("Connecting to VPS...")
   try {
+    cfg = await resolveInstance(cfg)
     await uploadScript(cfg)
     stopSpinner()
     render()

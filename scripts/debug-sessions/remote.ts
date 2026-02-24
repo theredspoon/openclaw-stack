@@ -47,6 +47,8 @@ export interface Config {
   pythonScript: string
   baseDir: string
   llmLogPath: string
+  installDir: string
+  instance: string
 }
 
 function expandHome(p: string): string {
@@ -76,14 +78,42 @@ export function loadConfig(): Config {
     env[t.slice(0, eq)] = v
   }
 
+  const installDir = env.INSTALL_DIR || "/home/openclaw"
+
   return {
     host: env.VPS1_IP ?? "",
     port: env.SSH_PORT ?? "222",
     user: env.SSH_USER ?? "adminclaw",
     keyPath: expandHome(env.SSH_KEY_PATH ?? "~/.ssh/vps1_openclaw_ed25519"),
     pythonScript: resolve(scriptDir, "debug-sessions.py"),
-    baseDir: "/home/openclaw/.openclaw/agents",
-    llmLogPath: "/home/openclaw/.openclaw/logs/llm.log",
+    baseDir: "",      // resolved by resolveInstance()
+    llmLogPath: "",   // resolved by resolveInstance()
+    installDir,
+    instance: process.env.OPENCLAW_INSTANCE || "",
+  }
+}
+
+export async function resolveInstance(cfg: Config): Promise<Config> {
+  if (cfg.instance) {
+    const dir = `${cfg.installDir}/instances/${cfg.instance}/.openclaw`
+    return { ...cfg, baseDir: `${dir}/agents`, llmLogPath: `${dir}/logs/llm.log` }
+  }
+
+  // Auto-detect by listing instance directories on VPS
+  const out = await sshExec(cfg, `ls -1 ${cfg.installDir}/instances/ 2>/dev/null`)
+  const instances = out.trim().split("\n").filter(Boolean)
+
+  if (instances.length === 1) {
+    const inst = instances[0]
+    const dir = `${cfg.installDir}/instances/${inst}/.openclaw`
+    return { ...cfg, instance: inst, baseDir: `${dir}/agents`, llmLogPath: `${dir}/logs/llm.log` }
+  } else if (instances.length === 0) {
+    throw new Error(`No claw instances found in ${cfg.installDir}/instances/`)
+  } else {
+    throw new Error(
+      `Multiple claw instances found: ${instances.join(", ")}. ` +
+      `Set OPENCLAW_INSTANCE or use --instance.`,
+    )
   }
 }
 

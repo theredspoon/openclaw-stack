@@ -6,6 +6,7 @@
 #
 # Usage:
 #   scripts/debug-sessions.sh                              # Interactive TUI
+#   scripts/debug-sessions.sh --instance test-claw         # TUI for specific instance
 #   scripts/debug-sessions.sh list                         # Direct: list sessions
 #   scripts/debug-sessions.sh list --agent personal        # Direct: list filtered
 #   scripts/debug-sessions.sh trace 4e29832a               # Direct: trace session
@@ -19,6 +20,7 @@
 #
 # All flags (--full, --json, --no-color, --agent) are passed through in direct mode.
 # --base-dir and --llm-log are set automatically to the VPS paths.
+# --instance selects which claw to debug (auto-detects if only one is running).
 
 set -euo pipefail
 
@@ -30,11 +32,26 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
+# ─── Extract --instance flag early (before TUI/direct mode split) ────────────
+
+INSTANCE=""
+REMAINING_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --instance) INSTANCE="$2"; shift 2 ;;
+    *) REMAINING_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- ${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}
+
+# Fall back to env var
+INSTANCE="${INSTANCE:-${OPENCLAW_INSTANCE:-}}"
+
 # ─── No args or --tui: launch interactive TUI ────────────────────────────────
 
 if [[ $# -eq 0 ]] || [[ "${1:-}" == "--tui" ]]; then
   if command -v bun &>/dev/null; then
-    exec bun "$SCRIPT_DIR/debug-sessions/main.ts"
+    OPENCLAW_INSTANCE="${INSTANCE}" exec bun "$SCRIPT_DIR/debug-sessions/main.ts"
   else
     echo "Error: bun is required for the interactive TUI." >&2
     echo "Install: curl -fsSL https://bun.sh/install | bash" >&2
@@ -61,10 +78,36 @@ fi
 
 source "$CONFIG_FILE"
 
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+
+# Resolve instance if not specified
+if [[ -z "$INSTANCE" ]]; then
+  INSTANCES=$(ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
+    "${SSH_USER}@${VPS1_IP}" \
+    "ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null" || true)
+
+  COUNT=$(echo "$INSTANCES" | grep -c . || true)
+
+  if [[ "$COUNT" -eq 1 ]]; then
+    INSTANCE="$INSTANCES"
+    printf '\033[33mAuto-detected single claw: %s\033[0m\n' "$INSTANCE"
+  elif [[ "$COUNT" -eq 0 ]]; then
+    echo "Error: No claw instances found in ${INSTALL_DIR}/instances/" >&2
+    exit 1
+  else
+    echo "Error: Multiple claw instances found. Specify which one:" >&2
+    while IFS= read -r inst; do
+      echo "  --instance $inst" >&2
+    done <<< "$INSTANCES"
+    exit 1
+  fi
+fi
+
+INSTANCE_DIR="${INSTALL_DIR}/instances/${INSTANCE}/.openclaw"
 PYTHON_SCRIPT="$SCRIPT_DIR/debug-sessions/debug-sessions.py"
 REMOTE_SCRIPT="/tmp/debug-sessions.py"
-BASE_DIR="/home/openclaw/.openclaw/agents"
-LLM_LOG="/home/openclaw/.openclaw/logs/llm.log"
+BASE_DIR="${INSTANCE_DIR}/agents"
+LLM_LOG="${INSTANCE_DIR}/logs/llm.log"
 
 if [[ ! -f "$PYTHON_SCRIPT" ]]; then
   echo "Error: debug-sessions.py not found at $PYTHON_SCRIPT" >&2
