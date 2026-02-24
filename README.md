@@ -497,7 +497,6 @@ Then tell claude to scan through the local openclaw code to help you debug.
 openclaw-vps/
 ├── README.md                         # This file
 ├── CLAUDE.md                         # Deployment orchestration instructions (for Claude)
-├── REQUIREMENTS.md                   # Architecture reference and design decisions
 ├── openclaw-config.env               # Your deployment config (secrets, gitignored)
 ├── openclaw-config.env.example       # Template with all fields documented
 │

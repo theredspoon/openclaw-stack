@@ -105,5 +105,3 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose logs -f'    
 > **Note:** Docker Compose warns about unset `CLAUDE_AI_SESSION_KEY`/`CLAUDE_WEB_SESSION_KEY`/`CLAUDE_WEB_COOKIE` — harmless, these are optional.
 
 > **`restart` vs `up -d`:** `restart` does NOT reload `.env` values (baked at container creation). Use `up -d <service>` after `.env` changes. `restart` is fine for bind-mounted file changes (read from disk at startup).
-
-For detailed architecture, security model, and gotchas, see [REQUIREMENTS.md](REQUIREMENTS.md).
