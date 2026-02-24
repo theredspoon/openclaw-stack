@@ -298,7 +298,7 @@ HEADER
       - OPENAI_BASE_URL=\${${prefix}_AI_GATEWAY_WORKER_URL:-\${AI_GATEWAY_WORKER_URL}}
       - DASHBOARD_BASE_PATH=\${${prefix}_DASHBOARD_BASE_PATH:-}
       - OPENCLAW_DOMAIN_PATH=\${${prefix}_OPENCLAW_DOMAIN_PATH:-}
-      - TELEGRAM_BOT_TOKEN=\${${prefix}_TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_BOT_TOKEN=\${${prefix}_TELEGRAM_BOT_TOKEN:-\${OPENCLAW_TELEGRAM_BOT_TOKEN}}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${gw_port}/"]
 
