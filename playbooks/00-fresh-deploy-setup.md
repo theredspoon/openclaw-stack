@@ -341,15 +341,15 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 
 **Delegate to subagents:** Steps that produce verbose output but only need pass/fail + key values back:
 
-| Step | Why it's heavy | Return values | Scope |
-|------|---------------|---------------|-------|
-| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | Full file |
-| 02: System update + package install | apt output (hundreds of lines) | pass/fail | Full file |
-| 02: System hardening (2.5–2.6) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | Full file |
-| 03b: Sysbox runtime | dpkg install + AppArmor check | pass/fail | Full file |
-| 04: Infrastructure setup (4.2) | network/directory creation + SCP | pass/fail, OPENCLAW_GENERATED_TOKEN | §4.2 |
-| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | §4.3 |
-| 04: Build + start (4.4) | Full Docker build log | pass/fail | §4.4 |
+| Step | Why it's heavy | Return values | Log file | Scope |
+|------|---------------|---------------|----------|-------|
+| 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | `01-workers.md` | Full file |
+| 02: System update + package install | apt output (hundreds of lines) | pass/fail | `02-base-setup.md` | Full file |
+| 02: System hardening (2.5–2.6) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | `02-base-setup.md` | Full file |
+| 03b: Sysbox runtime | dpkg install + AppArmor check | pass/fail | `03b-sysbox.md` | Full file |
+| 04: Infrastructure setup (4.2) | network/directory creation + SCP | pass/fail, OPENCLAW_GENERATED_TOKEN | `04-infra-config.md` | §4.2 |
+| 04: Deploy configuration (4.3) | deploy-config.sh runs on VPS | pass/fail | `04-deploy-config.md` | §4.3 |
+| 04: Build + start (4.4) | Full Docker build log | pass/fail | `04-build-start.md` | §4.4 |
 
 > **Scoping:** Tell subagents which sections to read (e.g., "Read §4.2 of playbooks/04-vps1-openclaw.md"). This prevents subagents from loading troubleshooting, updating, and verification sections they don't need.
 
@@ -366,31 +366,25 @@ Config values (pass as env vars to setup-infra.sh):
   AI_GATEWAY_WORKER_URL=<value>
   AI_GATEWAY_AUTH_TOKEN=<value>
   ...
+Log: Write detailed execution log (all commands, full output, errors, recovery steps)
+  to .deploy-logs/<timestamp>/04-infra-config.md
 Return: pass/fail, OPENCLAW_GENERATED_TOKEN from stdout.
 ```
 
 **Template substitution in subagents:** Sections 4.2 and 4.3 now use standalone scripts (`deploy/scripts/setup-infra.sh` and `deploy/scripts/deploy-config.sh`) that are bulk-copied to `/tmp/deploy-staging/` as part of the `deploy/` directory copy in § 4.2 Step 1, then run remotely. Config values are passed as env vars — the subagent just needs the variable values, not the script contents.
 
-**Subagent deploy logs:** Each subagent must write its detailed execution log to `.deploy-logs/<timestamp>/` before returning its summary. This preserves the full output for post-deploy review without consuming main context.
+**Deploy logs:** At the start of deployment (before launching subagents), create `.deploy-logs/YYYYMMDD-HHMMSS/`. The `.deploy-logs/` directory is gitignored. At the end of deployment, tell the user where the logs are.
 
-At the start of deployment (before launching subagents), create the log directory:
+*Subagent steps:* Every subagent prompt **must** include a `Log:` line with the file path (see template above). The subagent writes its full execution log there before returning a short summary. Log file names are in the "Log file" column of the delegation table.
 
-```
-.deploy-logs/YYYYMMDD-HHMMSS/
-```
+*Main-context steps:* After completing each main-context playbook step, append a log file to the same directory. Record all commands run, their output, and any errors or recovery steps. Main-context log files:
 
-Instruct each subagent to write its detailed report (all commands run, full output, errors encountered, recovery steps) to a file in this directory:
-
-```
-.deploy-logs/YYYYMMDD-HHMMSS/01-workers.md
-.deploy-logs/YYYYMMDD-HHMMSS/02-base-setup.md
-.deploy-logs/YYYYMMDD-HHMMSS/04-infra-config.md
-.deploy-logs/YYYYMMDD-HHMMSS/04-build-start.md
-```
-
-The subagent's return message to the main agent should still be a short summary (pass/fail + key values). The log file contains everything else. At the end of deployment, tell the user where the logs are so they can ask for review if needed.
-
-The `.deploy-logs/` directory is gitignored.
+| Step | Log file |
+|------|----------|
+| 03: Docker installation | `03-docker.md` |
+| 06: Backup configuration | `06-backup.md` |
+| 07: Verification | `07-verification.md` |
+| 08: Post-deploy report | `08-deploy-report.md` |
 
 **Additional techniques:**
 
