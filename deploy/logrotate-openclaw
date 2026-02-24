@@ -8,9 +8,9 @@
 # delaycompress: keeps most recent rotated file (.1) uncompressed for easy inspection.
 # su: required to suppress logrotate's "insecure permissions" check — the logs/
 #   directory is owned by uid 1000 (group-writable). Using root:root so logrotate
-#   can traverse /home/openclaw (owned by openclaw user, mode 700).
+#   can traverse {{INSTALL_DIR}} (owned by openclaw user, mode 700).
 
-/home/openclaw/instances/*/.openclaw/logs/backup.log
+{{INSTALL_DIR}}/instances/*/.openclaw/logs/backup.log
 {
     su root root
     weekly
@@ -24,7 +24,7 @@
 
 # Telemetry log — captures all event types (LLM, session, tool, agent, etc.).
 # More aggressive rotation: daily + 50M maxsize trigger for mid-day rotation.
-/home/openclaw/instances/*/.openclaw/logs/telemetry.log
+{{INSTALL_DIR}}/instances/*/.openclaw/logs/telemetry.log
 {
     su root root
     daily

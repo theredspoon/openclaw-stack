@@ -2,7 +2,7 @@
 # Host resource monitoring — sends Telegram alerts on threshold breaches.
 # Runs via cron every 15 minutes: /etc/cron.d/openclaw-alerts
 #
-# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in /home/openclaw/openclaw/.env
+# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in ${INSTALL_DIR}/openclaw/.env
 # Only alerts on state *change* to avoid spam (tracks state in /tmp/host-alert-state).
 #
 # Writes health.json to the agent workspace directory, readable by both
@@ -18,9 +18,11 @@ if [[ "${1:-}" == "--report" ]]; then
   REPORT_MODE=true
 fi
 
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+
 STATE_FILE="/tmp/host-alert-state"
-CONFIG_FILE="/home/openclaw/openclaw/.env"
-INSTANCES_DIR="/home/openclaw/instances"
+CONFIG_FILE="${INSTALL_DIR}/openclaw/.env"
+INSTANCES_DIR="${INSTALL_DIR}/instances"
 
 # Load config
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -94,7 +96,7 @@ fi
 backup_ok=true
 backup_age_hours=""
 found_any_backup_dir=false
-for inst_dir in /home/openclaw/instances/*/; do
+for inst_dir in ${INSTALL_DIR}/instances/*/; do
   [[ -d "$inst_dir" ]] || continue
   backup_dir="${inst_dir}.openclaw/backups"
   [[ -d "$backup_dir" ]] || continue

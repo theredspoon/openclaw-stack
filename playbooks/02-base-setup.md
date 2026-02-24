@@ -165,7 +165,7 @@ echo "========================================="
 ssh -p <SSH_PORT> adminclaw@<VPS1_IP>
 
 # Run commands as openclaw (no direct SSH — adminclaw can't cd into openclaw's home)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 
 # Interactive shell as openclaw
 sudo su - openclaw

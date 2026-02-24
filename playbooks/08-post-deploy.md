@@ -187,7 +187,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> openclaw devices list 2>&1 || true"
 
 # 3. Approve the CLI device via file manipulation — moves CLI entry from pending.json to paired.json
-INST_DIR="/home/openclaw/instances/<CLAW_NAME>"
+INST_DIR="<INSTALL_DIR>/instances/<CLAW_NAME>"
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "sudo python3 -c \"
 import json, time, os
 pending_file = '${INST_DIR}/.openclaw/devices/pending.json'
@@ -231,7 +231,7 @@ As a last resort, restart the claw container and try again:
 
 ```bash
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-<CLAW_NAME>'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart openclaw-<CLAW_NAME>'"
 ```
 
 Wait 30-60 seconds for full startup (sandbox images are cached, so restarts are faster

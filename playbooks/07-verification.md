@@ -54,7 +54,7 @@ CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -
 echo "Claw containers: $CLAWS"
 
 # Check containers are running
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
 
 # Check claw logs for errors
 for CLAW in $CLAWS; do
@@ -77,7 +77,7 @@ done
 > "Containers didn't auto-start after reboot. Start them manually:"
 
 ```bash
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 ```
 
 > If they fail to start, check logs: `for CLAW in $CLAWS; do sudo docker logs "$CLAW"; done`
@@ -163,13 +163,13 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 ```bash
 # Check Vector is running (separate compose project)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose ps'
 
 # Check Vector logs for errors
 sudo docker logs --tail 20 vector
 
 # Check checkpoint data exists
-sudo ls -la /home/openclaw/vector/data/
+sudo ls -la <INSTALL_DIR>/vector/data/
 ```
 
 **Expected:** Vector running, no errors in logs, checkpoint files present.
@@ -264,15 +264,15 @@ curl -sI --connect-timeout 10 https://<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHB
 
 ```bash
 # Test the alerter script manually (should not send alerts if everything is healthy)
-sudo /home/openclaw/scripts/host-alert.sh
+sudo <INSTALL_DIR>/scripts/host-alert.sh
 echo $?  # Should be 0
 
 # Verify health.json was written (even without Telegram) — check first instance
-FIRST_INST=$(ls -d /home/openclaw/instances/*/ | head -1)
+FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
 cat "${FIRST_INST}.openclaw/workspace/host-status/health.json"
 
 # Test the maintenance checker
-sudo /home/openclaw/scripts/host-maintenance-check.sh
+sudo <INSTALL_DIR>/scripts/host-maintenance-check.sh
 echo $?  # Should be 0
 
 # Verify maintenance.json was written
@@ -292,8 +292,8 @@ openclaw cron list
 
 ```bash
 # Test Telegram delivery (if configured)
-TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' /home/openclaw/openclaw/.env)
-TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' /home/openclaw/openclaw/.env)
+TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/openclaw/.env)
+TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/openclaw/.env)
 
 if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT" ]]; then
   RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
@@ -340,7 +340,7 @@ sudo logrotate -d /etc/logrotate.d/openclaw
 
 # Optional: force a rotation cycle to confirm .1 files appear
 sudo logrotate -f /etc/logrotate.d/openclaw
-for inst_dir in /home/openclaw/instances/*/; do
+for inst_dir in <INSTALL_DIR>/instances/*/; do
   echo "=== $(basename "$inst_dir") ==="
   sudo ls -la "${inst_dir}.openclaw/logs/" 2>/dev/null || echo "  (no logs yet)"
 done
@@ -367,7 +367,7 @@ Re-run the CLI pairing step from `08-post-deploy.md` § 8.3:
 
 ```bash
 FIRST_CLAW=$(echo "$CLAWS" | head -1)
-GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN /home/openclaw/openclaw/.env | cut -d= -f2)
+GATEWAY_TOKEN=$(sudo grep OPENCLAW_GATEWAY_TOKEN <INSTALL_DIR>/openclaw/.env | cut -d= -f2)
 sudo docker exec --user node "$FIRST_CLAW" \
   openclaw devices list --url ws://localhost:18789 --token "$GATEWAY_TOKEN"
 ```
@@ -400,16 +400,16 @@ Compare: CPUs should equal `nproc`, memory should be total minus 500M–1GB. Nan
 ```bash
 # Update the .env on VPS with new resource limits
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c \"grep -q '^GATEWAY_CPUS=' /home/openclaw/openclaw/.env && \
-    sed -i 's/^GATEWAY_CPUS=.*/GATEWAY_CPUS=<NEW_CPUS>/' /home/openclaw/openclaw/.env || \
-    echo 'GATEWAY_CPUS=<NEW_CPUS>' >> /home/openclaw/openclaw/.env; \
-    grep -q '^GATEWAY_MEMORY=' /home/openclaw/openclaw/.env && \
-    sed -i 's/^GATEWAY_MEMORY=.*/GATEWAY_MEMORY=<NEW_MEMORY>/' /home/openclaw/openclaw/.env || \
-    echo 'GATEWAY_MEMORY=<NEW_MEMORY>' >> /home/openclaw/openclaw/.env\""
+  "sudo -u openclaw bash -c \"grep -q '^GATEWAY_CPUS=' <INSTALL_DIR>/openclaw/.env && \
+    sed -i 's/^GATEWAY_CPUS=.*/GATEWAY_CPUS=<NEW_CPUS>/' <INSTALL_DIR>/openclaw/.env || \
+    echo 'GATEWAY_CPUS=<NEW_CPUS>' >> <INSTALL_DIR>/openclaw/.env; \
+    grep -q '^GATEWAY_MEMORY=' <INSTALL_DIR>/openclaw/.env && \
+    sed -i 's/^GATEWAY_MEMORY=.*/GATEWAY_MEMORY=<NEW_MEMORY>/' <INSTALL_DIR>/openclaw/.env || \
+    echo 'GATEWAY_MEMORY=<NEW_MEMORY>' >> <INSTALL_DIR>/openclaw/.env\""
 
 # Recreate container to pick up new limits (up -d re-reads .env)
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'"
 ```
 
 ---
@@ -429,7 +429,7 @@ ss -tlnp | grep <SSH_PORT>
 
 # Services and cron jobs
 sudo systemctl status sysbox
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
 sudo docker logs --tail 5 vector
 cat /etc/cron.d/openclaw-backup
 cat /etc/cron.d/openclaw-alerts
@@ -478,7 +478,7 @@ openclaw doctor --deep
 
 **If you see other doctor warnings:**
 
-- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.3 (Deploy Configuration). If missing, recreate per-instance: `for inst_dir in /home/openclaw/instances/*/; do sudo mkdir -p "${inst_dir}.openclaw/agents/main/sessions" && echo '{}' | sudo tee "${inst_dir}.openclaw/agents/main/sessions/sessions.json" > /dev/null && sudo chown -R 1000:1000 "${inst_dir}.openclaw"; done`
+- **State integrity: session store dir missing** — session dirs are pre-created during `04-vps1-openclaw.md` § 4.3 (Deploy Configuration). If missing, recreate per-instance: `for inst_dir in <INSTALL_DIR>/instances/*/; do sudo mkdir -p "${inst_dir}.openclaw/agents/main/sessions" && echo '{}' | sudo tee "${inst_dir}.openclaw/agents/main/sessions/sessions.json" > /dev/null && sudo chown -R 1000:1000 "${inst_dir}.openclaw"; done`
 - **Sandbox: base image missing** — restart the claw container to retry build, then run sandbox verification in `04-vps1-openclaw.md`.
 
 ### Checklist
@@ -536,7 +536,7 @@ sudo docker logs "$FIRST_CLAW" 2>&1 | grep -i '\[telemetry\]'
 
 ```bash
 # Check local telemetry log on VPS (first instance)
-FIRST_INST=$(ls -d /home/openclaw/instances/*/ | head -1)
+FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
 sudo tail -5 "${FIRST_INST}.openclaw/logs/telemetry.log" | jq .
 
 # Check Log Worker logs for event and llemtry entries
@@ -571,8 +571,8 @@ npx wrangler d1 execute <D1_DATABASE_NAME> --command="SELECT type, category, age
 ### Container Issues
 
 ```bash
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f <service>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose logs -f <service>'
 docker system df
 free -h
 ```
@@ -584,7 +584,7 @@ free -h
 sudo docker logs --tail 50 vector
 
 # Restart Vector (use `up -d` instead if .env values changed)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose restart'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose restart'
 
 # Check if Worker endpoint is reachable (strip /logs suffix for base URL)
 curl -s https://<LOG_WORKER_BASE_URL>/health

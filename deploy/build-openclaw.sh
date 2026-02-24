@@ -8,10 +8,11 @@
 #   4. .dockerignore: exclude local runtime dirs (data/, deploy/) from build context
 #   5. .git-info: snapshot recent commit history for stats dashboard git log panel
 #
-# Usage: sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
+# Usage: sudo -u openclaw ${INSTALL_DIR}/scripts/build-openclaw.sh
 set -euo pipefail
 
-cd /home/openclaw/openclaw
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+cd "${INSTALL_DIR}/openclaw"
 
 # ── 1. Patch Dockerfile to install Docker + gosu (nested Docker for sandboxes) ──
 # docker.io includes: docker CLI, dockerd, containerd, runc

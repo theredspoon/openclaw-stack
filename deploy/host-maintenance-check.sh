@@ -8,7 +8,8 @@
 # Runs as root (needs apt and systemctl access). No Telegram dependency.
 set -euo pipefail
 
-INSTANCES_DIR="/home/openclaw/instances"
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+INSTANCES_DIR="${INSTALL_DIR}/instances"
 
 # --- Security updates ---
 # Simulate upgrade and count packages from security sources

@@ -89,15 +89,15 @@ All docker compose commands run as openclaw (adminclaw can't cd into openclaw's 
 
 ```bash
 # Gateway (main compose project):
-# Pattern: sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose <cmd>'
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'       # Start gateway
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose ps'           # Status
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose logs -f'      # Follow logs
+# Pattern: sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose <cmd>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'       # Start gateway
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose ps'           # Status
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose logs -f'      # Follow logs
 
 # Vector (separate compose project — independent lifecycle):
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'       # Start Vector
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose ps'          # Status
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose logs -f'     # Follow logs
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose up -d'       # Start Vector
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose ps'          # Status
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose logs -f'     # Follow logs
 ```
 
 > **Multi-claw:** `docker compose up -d` starts ALL claws. To target one: `docker compose restart openclaw-<name>`. Use `openclaw --instance <name> <cmd>` for per-claw CLI commands.

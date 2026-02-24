@@ -202,7 +202,7 @@ Capture the Worker URL from the deploy output and update `LOG_WORKER_URL` in `op
 ```bash
 # On VPS-1: update LOG_WORKER_URL and LOG_WORKER_TOKEN in vector/.env, then recreate Vector
 # IMPORTANT: `restart` does NOT reload .env — use `up -d` to recreate with new env vars
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose up -d'
 ```
 
 ### Verify

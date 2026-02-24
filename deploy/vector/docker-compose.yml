@@ -3,8 +3,8 @@
 # vector needs ~128M RAM, minimal CPU
 #
 # Usage:
-#   cd /home/openclaw/vector && docker compose up -d
-#   cd /home/openclaw/vector && docker compose logs -f
+#   cd <INSTALL_DIR>/vector && docker compose up -d
+#   cd <INSTALL_DIR>/vector && docker compose logs -f
 
 services:
   vector:

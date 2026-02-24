@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 INSTANCES_DIR="${DEPLOY_DIR}/openclaws"
-OPENCLAW_HOME="/home/openclaw"
+OPENCLAW_HOME="${INSTALL_DIR:-/home/openclaw}"
 
 # Port bases for auto-assignment
 GATEWAY_PORT_BASE=18789
@@ -285,10 +285,10 @@ HEADER
       - "127.0.0.1:${dash_port}:6090"
     volumes:
       - ./scripts/entrypoint-gateway.sh:/app/scripts/entrypoint-gateway.sh:ro
-      - /home/openclaw/instances/${name}/sandboxes-home:/home/node/sandboxes-home
-      - /home/openclaw/instances/${name}/docker:/var/lib/docker
+      - ${OPENCLAW_HOME}/instances/${name}/sandboxes-home:/home/node/sandboxes-home
+      - ${OPENCLAW_HOME}/instances/${name}/docker:/var/lib/docker
       - ./deploy:/app/deploy:ro
-      - /home/openclaw/instances/${name}/.openclaw:/home/node/.openclaw
+      - ${OPENCLAW_HOME}/instances/${name}/.openclaw:/home/node/.openclaw
     environment:
       - NODE_ENV=production
       - TZ=UTC

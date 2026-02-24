@@ -20,7 +20,7 @@ fi
 source "$CONFIG_FILE"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
-OPENCLAW_DIR="/home/openclaw/openclaw"
+OPENCLAW_DIR="${INSTALL_DIR:-/home/openclaw}/openclaw"
 GATEWAY=$(resolve_gateway "$@") || exit 1
 
 printf '\033[32mUpdating OpenClaw on %s...\033[0m\n' "$VPS1_IP"

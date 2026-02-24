@@ -2,12 +2,13 @@
 # Session & log pruning — deletes old session transcripts and stale log files.
 # Runs daily via cron: /etc/cron.d/openclaw-session-prune
 #
-# Always-multi-claw: iterates all instances under /home/openclaw/instances/
+# Always-multi-claw: iterates all instances under ${INSTALL_DIR}/instances/
 # Must run as root because .openclaw is owned by uid 1000 (container's node user),
 # not the host's openclaw user (uid 1002).
 set -euo pipefail
 
-INSTANCES_DIR="/home/openclaw/instances"
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+INSTANCES_DIR="${INSTALL_DIR}/instances"
 RETENTION_DAYS="${1:-30}"
 
 session_count=0

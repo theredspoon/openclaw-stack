@@ -49,6 +49,8 @@ resolve_gateway() {
   count=$(echo "$containers" | grep -c . || true)
 
   if [[ "$count" -eq 1 ]]; then
+    echo "" >&2
+    echo "Auto-detected single claw: ${containers#openclaw-}" >&2
     echo "$containers"
     return 0
   elif [[ "$count" -eq 0 ]]; then

@@ -13,7 +13,7 @@ set -euo pipefail
 #   Stderr: progress
 #   Exit: 0 success, 1 failure
 
-OPENCLAW_HOME="/home/openclaw"
+OPENCLAW_HOME="${INSTALL_DIR:-/home/openclaw}"
 
 # Discover configured instances from staging dir
 STAGING_DIR="/tmp/deploy-staging"

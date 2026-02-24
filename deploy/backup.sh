@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # backup.sh — OpenClaw backup (always-multi-claw layout)
-# Backs up all claw instances under /home/openclaw/instances/
+# Backs up all claw instances under ${INSTALL_DIR}/instances/
 
-INSTANCES_DIR="/home/openclaw/instances"
+INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+INSTANCES_DIR="${INSTALL_DIR}/instances"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=30
 
@@ -50,10 +51,10 @@ for inst_dir in "${INSTANCES_DIR}"/*/; do
 done
 
 # Back up shared .env file
-SHARED_BACKUP_DIR="/home/openclaw/instances/.shared-backups"
+SHARED_BACKUP_DIR="${INSTALL_DIR}/instances/.shared-backups"
 mkdir -p "${SHARED_BACKUP_DIR}"
-if [ -f /home/openclaw/openclaw/.env ]; then
-  cp /home/openclaw/openclaw/.env "${SHARED_BACKUP_DIR}/.env.${TIMESTAMP}"
+if [ -f ${INSTALL_DIR}/openclaw/.env ]; then
+  cp ${INSTALL_DIR}/openclaw/.env "${SHARED_BACKUP_DIR}/.env.${TIMESTAMP}"
   # Keep only last 10 .env backups
   find "${SHARED_BACKUP_DIR}" -name ".env.*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm
   echo "$(date): Shared .env backed up"

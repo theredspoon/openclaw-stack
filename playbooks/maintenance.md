@@ -10,7 +10,7 @@ All secrets should be rotated on a regular cadence. If a token is suspected comp
 
 | Token | Location | Rotation Cadence |
 |-------|----------|-----------------|
-| `OPENCLAW_GATEWAY_TOKEN` | VPS `/home/openclaw/openclaw/.env` | 90 days |
+| `OPENCLAW_GATEWAY_TOKEN` | VPS `<INSTALL_DIR>/openclaw/.env` | 90 days |
 | `AI_GATEWAY_AUTH_TOKEN` | VPS `.env` + AI Gateway Worker secret | 90 days |
 | `LOG_WORKER_TOKEN` | VPS `.env` + Log Receiver Worker secret | 90 days |
 | Provider API keys (Anthropic, OpenAI, etc.) | AI Gateway Worker secrets (Cloudflare Dashboard) | Per provider policy |
@@ -28,14 +28,14 @@ Each claw has its own `GATEWAY_TOKEN` baked into its `openclaw.json` by `deploy-
 NEW_TOKEN=$(openssl rand -hex 32)
 
 # 2. Update .env on VPS
-# Edit /home/openclaw/openclaw/.env — change OPENCLAW_GATEWAY_TOKEN value
+# Edit <INSTALL_DIR>/openclaw/.env — change OPENCLAW_GATEWAY_TOKEN value
 
 # 3. Update the claw's openclaw.json on VPS
-# Edit /home/openclaw/instances/<CLAW_NAME>/.openclaw/openclaw.json
+# Edit <INSTALL_DIR>/instances/<CLAW_NAME>/.openclaw/openclaw.json
 #   — update gateway.auth.token and gateway.remote.token
 
 # 4. Recreate the claw to pick up new .env values (see CLAUDE.md: restart vs up -d)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d openclaw-<CLAW_NAME>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d openclaw-<CLAW_NAME>'
 
 # 5. Update all paired devices with new token (existing browser URLs will need the new token parameter)
 # Repeat steps 3-5 for each claw being rotated
@@ -54,7 +54,7 @@ echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 # 3. Update VPS .env — change AI_GATEWAY_AUTH_TOKEN value
 
 # 4. Recreate all claws to pick up new .env values (no rebuild needed — token is an env var)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 ```
 
 #### Log Worker Token
@@ -72,7 +72,7 @@ echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
 # 3. Update VPS vector/.env — change LOG_WORKER_TOKEN value
 
 # 4. Recreate Vector to pick up new .env values (see CLAUDE.md: restart vs up -d)
-sudo -u openclaw bash -c 'cd /home/openclaw/vector && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose up -d'
 ```
 
 #### Provider API Keys
@@ -160,11 +160,11 @@ scp -i <SSH_KEY_PATH> -P <SSH_PORT> [-r] deploy/<path> adminclaw@<VPS1_IP>:/tmp/
 
 # Move into place, fix ownership, and restart all claws (single SSH session)
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP> "
-  sudo rm -rf /home/openclaw/openclaw/deploy/<path>
-  sudo cp -r /tmp/deploy-update /home/openclaw/openclaw/deploy/<path>
-  sudo chown -R 1000:1000 /home/openclaw/openclaw/deploy/<path>
+  sudo rm -rf <INSTALL_DIR>/openclaw/deploy/<path>
+  sudo cp -r /tmp/deploy-update <INSTALL_DIR>/openclaw/deploy/<path>
+  sudo chown -R 1000:1000 <INSTALL_DIR>/openclaw/deploy/<path>
   rm -rf /tmp/deploy-update
-  sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart'
+  sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart'
 "
 ```
 
@@ -210,7 +210,7 @@ ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
   bash /tmp/deploy-staging/scripts/deploy-config.sh"
 
 # 3. Restart that claw to pick up new config
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart openclaw-personal-claw'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart openclaw-personal-claw'
 ```
 
 ---
@@ -238,6 +238,6 @@ sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose restart o
    ```
 7. Start the new claw:
    ```bash
-   sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d openclaw-<name>'
+   sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d openclaw-<name>'
    ```
 8. Clean up secrets: `ssh ... "rm -f /tmp/openclaw-config.env"`
