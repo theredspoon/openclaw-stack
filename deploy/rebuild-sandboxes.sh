@@ -24,6 +24,12 @@
 #   /app/deploy/rebuild-sandboxes.sh --force --all      # force rebuild all including browser
 #   /app/deploy/rebuild-sandboxes.sh --quick <toolname> # layer a single tool on top of toolkit image
 #   /app/deploy/rebuild-sandboxes.sh --dry-run          # show what would be rebuilt
+#
+# Sysbox build gotchas:
+#   - Do NOT use `docker build -f - /dev/null` — Sysbox needs a real build context.
+#     Use `printf '...' | docker build -t tag -` instead (stdin as Dockerfile, CWD as context).
+#   - Do NOT use `docker run` + `docker commit` to build images — creates dirty single-layer
+#     images that break caching. Always use multi-stage `docker build` with FROM.
 
 set -uo pipefail
 

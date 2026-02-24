@@ -35,6 +35,7 @@
     "remote": {
       "token": "{{GATEWAY_TOKEN}}" // TEMPLATE: same token as auth.token above
     },
+    // cloudflared connects via Docker bridge gateway IP. Must be exact IPs — CIDR ranges NOT supported.
     "trustedProxies": [
       "172.30.0.1"
     ],
@@ -91,6 +92,8 @@
           "containerPrefix": "openclaw-sbx-",
           "workdir": "/workspace",
           "readOnlyRoot": true,
+          // Writable scratch dirs. Per-agent tmpfs for $HOME MUST include :uid=1000,gid=1000
+          // or it mounts as root-owned and the sandbox user can't write to it.
           "tmpfs": [
             "/tmp",
             "/var/tmp",

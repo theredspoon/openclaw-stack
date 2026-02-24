@@ -746,6 +746,6 @@ done
 
 ## Security Notes
 
-- `read_only: false` + `user: "0:0"` — required for Sysbox Docker-in-Docker. Sysbox user namespace isolation provides equivalent protection. Entrypoint drops to node via gosu.
+- `read_only: false` + `user: "0:0"` — required for Sysbox Docker-in-Docker. `read_only: true` breaks because Sysbox auto-mounts (for `/var/lib/docker`, `/proc`, `/sys`) inherit the flag, giving dockerd a read-only filesystem. Sysbox user namespace isolation provides equivalent protection. Entrypoint drops to node via gosu.
 - `no-new-privileges` prevents escalation; resource limits (cpus, memory, pids) prevent runaway containers
 - tmpfs mounts limit persistent writable paths; inner Docker socket group set to `docker`
