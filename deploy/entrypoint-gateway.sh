@@ -151,16 +151,26 @@ if command -v dockerd > /dev/null 2>&1; then
     # archive and loaded into each instance's nested Docker on first boot.
     # This reduces first-boot time from ~15min (build) to ~30s (load).
     # rebuild-sandboxes.sh still runs after and verifies/rebuilds if needed.
-    SANDBOX_ARCHIVE="/app/deploy/sandbox-images.tar"
-    if [ -f "$SANDBOX_ARCHIVE" ]; then
-      if ! docker image inspect openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
-        echo "[entrypoint] Loading pre-built sandbox images from archive..."
-        docker load < "$SANDBOX_ARCHIVE"
-        echo "[entrypoint] Sandbox images loaded"
-      else
-        echo "[entrypoint] Sandbox images already present, skipping archive load"
+    # Check both locations:
+    #   /app/deploy/sandbox-images.tar      — read-only deploy mount (pre-packaged)
+    #   /var/lib/docker/sandbox-images.tar  — writable per-claw dir (placed by sync-images)
+    for SANDBOX_ARCHIVE in "/app/deploy/sandbox-images.tar" "/var/lib/docker/sandbox-images.tar"; do
+      if [ -f "$SANDBOX_ARCHIVE" ]; then
+        if ! docker image inspect openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
+          echo "[entrypoint] Loading pre-built sandbox images from ${SANDBOX_ARCHIVE}..."
+          docker load < "$SANDBOX_ARCHIVE"
+          echo "[entrypoint] Sandbox images loaded"
+        else
+          echo "[entrypoint] Sandbox images already present, skipping archive load"
+        fi
+        # Clean up writable archive after loading (don't delete read-only deploy mount copy)
+        if [ "$SANDBOX_ARCHIVE" = "/var/lib/docker/sandbox-images.tar" ]; then
+          rm -f "$SANDBOX_ARCHIVE"
+          echo "[entrypoint] Cleaned up sandbox archive from Docker data dir"
+        fi
+        break  # Only load from first found archive
       fi
-    fi
+    done
 
     # Sandbox builds are non-fatal — gateway starts even if builds fail.
     # Failures are logged but don't prevent the gateway from running.

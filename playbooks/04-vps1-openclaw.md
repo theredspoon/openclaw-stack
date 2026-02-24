@@ -329,8 +329,22 @@ To add a new skill to an agent, add it to the agent's `skills` array in `opencla
 # Build image with auto-patching
 sudo -u openclaw /home/openclaw/scripts/build-openclaw.sh
 
-# Start all services (gateway + all claws defined in docker-compose.override.yml)
-sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+# Discover configured instance names
+INSTANCE_NAMES=$(ls -d /tmp/deploy-staging/openclaws/*/ 2>/dev/null | xargs -I{} basename {} | grep -v '^_' | tr '\n' ' ')
+INSTANCE_NAMES="${INSTANCE_NAMES:-main-claw}"
+CLAW_COUNT=$(echo "$INSTANCE_NAMES" | wc -w)
+FIRST_CLAW=$(echo "$INSTANCE_NAMES" | awk '{print $1}')
+
+if [ "$CLAW_COUNT" -gt 1 ]; then
+  # Multi-claw: staggered startup — build sandbox images once, sync to others
+  echo "Multi-claw deploy (${CLAW_COUNT} claws). Starting ${FIRST_CLAW} first for sandbox builds..."
+
+  # Start only the first claw
+  sudo -u openclaw bash -c "cd /home/openclaw/openclaw && docker compose up -d openclaw-${FIRST_CLAW}"
+else
+  # Single-claw: start normally
+  sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+fi
 
 # Start Vector (separate compose project — skip if disabled)
 if [ "${ENABLE_VECTOR_LOG_SHIPPING}" = "true" ]; then
@@ -405,6 +419,34 @@ Print the result as a status update to the user (e.g., `[entrypoint] Building to
 3. **Check background task completion** between polls using `TaskOutput` with `block: false`. When the background task returns `READY`, proceed to the next step.
 
 > **Note:** Check for the "Executing as node" log line, not the health endpoint — health responds before sandbox builds complete.
+
+### Sync sandbox images to other claws (multi-claw only)
+
+If multiple claws were configured (staggered startup above), sync sandbox images from the first claw to the others before starting them. This avoids redundant ~15-25 min builds in each additional claw.
+
+```bash
+#!/bin/bash
+# Only needed for multi-claw deployments
+CLAW_COUNT=$(echo "$INSTANCE_NAMES" | wc -w)
+if [ "$CLAW_COUNT" -gt 1 ]; then
+  FIRST_CLAW=$(echo "$INSTANCE_NAMES" | awk '{print $1}')
+  echo "Syncing sandbox images from ${FIRST_CLAW} to other claws..."
+  bash /tmp/deploy-staging/scripts/openclaw-multi.sh sync-images --source "${FIRST_CLAW}"
+
+  # Start remaining claws (entrypoints will load pre-placed tar instead of building)
+  echo "Starting remaining claws..."
+  sudo -u openclaw bash -c 'cd /home/openclaw/openclaw && docker compose up -d'
+
+  # Wait briefly for remaining claws to start
+  sleep 10
+
+  # Refresh running claws list
+  CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+  echo "All claws running: $CLAWS"
+fi
+```
+
+> **Single-claw:** This step is skipped — there are no other claws to sync to.
 
 ### Fix .openclaw ownership
 

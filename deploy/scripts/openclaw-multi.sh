@@ -15,6 +15,9 @@ set -euo pipefail
 #   start           Generate + docker compose up -d
 #   stop            Docker compose down
 #   status          Show running claw containers
+#   sync-images     Export sandbox images from one claw, load into others
+#     --source <name>   Source claw (default: auto-detect first with images)
+#     --force           Overwrite even if target already has images
 #   tunnel-config   Print Cloudflare tunnel rules for all claws
 #     --apply         Apply routes via CF API (requires CF_API_TOKEN)
 
@@ -464,6 +467,109 @@ cmd_tunnel_config() {
   echo "Each claw also needs a Cloudflare Access application for its subdomain."
 }
 
+cmd_sync_images() {
+  local source_name="" force=false
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --source) source_name="$2"; shift 2 ;;
+      --force)  force=true; shift ;;
+      *)        die "Unknown flag: $1" ;;
+    esac
+  done
+
+  # Discover running claw containers
+  local running_claws
+  mapfile -t running_claws < <(sudo docker ps --format '{{.Names}}' \
+    --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+
+  # Discover all configured claws (may include stopped ones)
+  local configured_claws
+  mapfile -t configured_claws < <(discover_instances)
+
+  # Find source claw
+  local source_container=""
+  if [ -n "$source_name" ]; then
+    source_container="openclaw-${source_name}"
+  else
+    # Auto-detect: first running claw with sandbox images
+    for claw in "${running_claws[@]}"; do
+      if sudo docker exec "$claw" docker image inspect \
+        openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
+        source_container="$claw"
+        source_name="${claw#openclaw-}"
+        break
+      fi
+    done
+  fi
+
+  [ -n "$source_container" ] || die "No source claw with sandbox images found"
+
+  # Verify source has all 3 sandbox images
+  local images=(
+    "openclaw-sandbox:bookworm-slim"
+    "openclaw-sandbox-toolkit:bookworm-slim"
+    "openclaw-sandbox-browser:bookworm-slim"
+  )
+  for img in "${images[@]}"; do
+    sudo docker exec "$source_container" docker image inspect "$img" > /dev/null 2>&1 \
+      || die "Source $source_container missing image: $img"
+  done
+
+  echo "Source: $source_container" >&2
+
+  # Export images from source's nested Docker
+  local export_host_path="${OPENCLAW_HOME}/instances/${source_name}/docker/sandbox-export.tar"
+  echo "Exporting sandbox images..." >&2
+  sudo docker exec "$source_container" docker save \
+    "${images[@]}" -o /var/lib/docker/sandbox-export.tar
+  local tar_size
+  tar_size=$(sudo du -h "$export_host_path" | cut -f1)
+  echo "Exported (${tar_size})" >&2
+
+  # Sync to each target claw
+  local synced=0
+  for name in "${configured_claws[@]}"; do
+    [ "$name" = "$source_name" ] && continue
+    local target_container="openclaw-${name}"
+    local target_docker_dir="${OPENCLAW_HOME}/instances/${name}/docker"
+
+    # Check if target is running
+    local target_running=false
+    for rc in "${running_claws[@]}"; do
+      [ "$rc" = "$target_container" ] && target_running=true && break
+    done
+
+    # Skip if target already has images (unless --force)
+    if [ "$target_running" = true ] && [ "$force" = false ]; then
+      if sudo docker exec "$target_container" docker image inspect \
+        openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
+        echo "  $target_container: images already present, skipping (use --force to overwrite)" >&2
+        continue
+      fi
+    fi
+
+    if [ "$target_running" = true ]; then
+      # Load directly into running claw's nested Docker
+      echo "  $target_container: loading (running)..." >&2
+      sudo cp "$export_host_path" "${target_docker_dir}/sandbox-images.tar"
+      sudo chown 1000:1000 "${target_docker_dir}/sandbox-images.tar"
+      sudo docker exec "$target_container" docker load -i /var/lib/docker/sandbox-images.tar
+      sudo rm -f "${target_docker_dir}/sandbox-images.tar"
+    else
+      # Pre-place tar for entrypoint to load on next start
+      echo "  $target_container: pre-placing tar (not running)..." >&2
+      sudo cp "$export_host_path" "${target_docker_dir}/sandbox-images.tar"
+      sudo chown 1000:1000 "${target_docker_dir}/sandbox-images.tar"
+    fi
+    synced=$((synced + 1))
+  done
+
+  # Cleanup export tar from source
+  sudo rm -f "$export_host_path"
+  echo "Synced to ${synced} claw(s)." >&2
+}
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 usage() {
@@ -476,6 +582,9 @@ Commands:
   start                   Generate + docker compose up -d
   stop                    Docker compose down
   status                  Show running claw containers
+  sync-images [opts]      Export sandbox images from one claw, load into others
+                            --source <name>  Source claw (default: auto-detect)
+                            --force          Overwrite even if target has images
   tunnel-config [--apply] Print Cloudflare tunnel rules (--apply to configure via CF API)
 
 Claw directories: deploy/openclaws/<name>/
@@ -494,6 +603,7 @@ case "$command" in
   start)          cmd_start ;;
   stop)           cmd_stop ;;
   status)         cmd_status ;;
+  sync-images)    cmd_sync_images "$@" ;;
   tunnel-config)  cmd_tunnel_config "$@" ;;
   -h|--help|"")   usage ;;
   *)              die "Unknown command: ${command}. Run with --help for usage." ;;
