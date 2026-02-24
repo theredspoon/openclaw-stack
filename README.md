@@ -1,14 +1,15 @@
-# Claude > OpenClaw > VPS
+# Claude > Multi OpenClaw > VPS
 
 > [!NOTE]
 > This project is in active development. Reach out if you need help.
 
-This project primarily solves the hard bits of deploying fully containerized OpenClaw, as securely as possible without crippling capabilities.
+This project packed full of useful debugging tools to assist you or `claude code` in modifying your OpenClaw setup.
 
-It's also packed full of useful debugging tools to assist you or `claude code` in modifying your OpenClaw setup.
+It enables automated deployment of one or more OpenClaw instances to a single VPS.
 
-You'll likely want to customize the agents in `deploy/openclaws/_defaults/openclaw.json` before deploying.
-The default agent is configured as a coordinator to hand off tasks to sub-agents.
+OpenClaw gateways are run inside of a Docker container for isolation from other claws & services.
+
+Sysbox runtime is used to enable the OpenClaw gateway containers to securely & efficiently spin up agent sandboxes.
 
 ---
 
