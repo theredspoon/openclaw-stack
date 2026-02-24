@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Run openclaw CLI commands on the VPS via SSH
-# Usage: scripts/openclaw.sh <command> [args...]
+#
+# Usage:
+#   scripts/openclaw.sh <command> [args...]              # auto-detect instance
+#   scripts/openclaw.sh --instance test-claw <command>   # target specific instance
+#
 # Examples:
 #   scripts/openclaw.sh status
 #   scripts/openclaw.sh doctor --deep
 #   scripts/openclaw.sh security audit --deep
 #   scripts/openclaw.sh devices list
+#   scripts/openclaw.sh --instance test-claw health
 
 set -euo pipefail
 
@@ -18,11 +23,26 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 source "$CONFIG_FILE"
+source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
-if [[ $# -eq 0 ]]; then
-  echo "Usage: $(basename "$0") <command> [args...]" >&2
+# Extract --instance before passing remaining args to openclaw
+INSTANCE_ARGS=()
+REMAINING_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --instance) INSTANCE_ARGS=(--instance "$2"); shift 2 ;;
+    *) REMAINING_ARGS+=("$1"); shift ;;
+  esac
+done
+
+if [[ ${#REMAINING_ARGS[@]} -eq 0 ]]; then
+  echo "Usage: $(basename "$0") [--instance <name>] <command> [args...]" >&2
   echo "Runs 'openclaw <command>' on the VPS via SSH." >&2
   exit 1
 fi
 
-TERM=xterm-256color ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" "openclaw $*"
+GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
+INSTANCE_NAME="${GATEWAY#openclaw-}"
+
+TERM=xterm-256color ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+  "openclaw --instance $INSTANCE_NAME ${REMAINING_ARGS[*]}"
