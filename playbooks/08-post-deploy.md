@@ -136,7 +136,7 @@ Pair the user's browser with **each claw**. Each claw maintains its own device r
 
 ### Approach 1: Standard CLI Pairing (try first)
 
-The `openclaw` host wrapper uses `docker exec` which bypasses WebSocket device pairing — no CLI pairing is needed.
+The `openclaw` host wrapper runs via `docker exec` inside the container, where the CLI connects to the gateway over loopback. Loopback connections are auto-approved silently — no manual CLI pairing step is needed.
 
 ```bash
 # List pending device requests for a specific claw
@@ -158,7 +158,7 @@ Tell the user to wait ~15 seconds for browser auto-retry.
 
 ### Approach 2: Re-pair CLI with Explicit Token
 
-If `openclaw --instance <CLAW_NAME> devices list` fails with "pairing required", the CLI identity was lost.
+If `openclaw --instance <CLAW_NAME> devices list` fails with "pairing required", the CLI's device identity was lost (e.g., bind-mount issue or identity file corruption). Force a loopback re-pair:
 
 ```bash
 # Discover the claw's gateway port (each claw gets a unique port: 18789, 18790, ...)
@@ -171,7 +171,7 @@ TOKEN=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> \
     node -e \"console.log(require('/home/node/.openclaw/openclaw.json').gateway.auth.token)\"")
 
-# Re-pair CLI with explicit token and port
+# Re-pair CLI with explicit token and port (loopback triggers auto-approval)
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> \
     openclaw devices list --url ws://localhost:${PORT} --token $TOKEN"
@@ -179,71 +179,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 > **Port assignment:** The first claw (alphabetically) gets port 18789, the second gets 18790, etc. You can also check `docker compose ps` to see assigned ports.
 
-This re-pairs the CLI. Now retry Approach 1.
-
-### Approach 3: File-Based Pairing
-
-If the CLI pairing keeps failing, bypass WebSocket pairing entirely via file manipulation.
-
-```bash
-# 1. Fix .openclaw ownership (claw creates dirs as root before gosu drops to node)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec openclaw-<CLAW_NAME> chown -R 1000:1000 /home/node/.openclaw"
-
-# 2. Trigger a pending CLI pairing request (expected to fail, but registers the device)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo docker exec --user node openclaw-<CLAW_NAME> openclaw devices list 2>&1 || true"
-
-# 3. Approve the CLI device via file manipulation — moves CLI entry from pending.json to paired.json
-INST_DIR="<INSTALL_DIR>/instances/<CLAW_NAME>"
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "sudo python3 -c \"
-import json, time, os
-pending_file = '${INST_DIR}/.openclaw/devices/pending.json'
-paired_file = '${INST_DIR}/.openclaw/devices/paired.json'
-if not os.path.exists(pending_file):
-    print('No pending.json found'); exit(1)
-with open(pending_file) as f: pending = json.load(f)
-paired = {}
-if os.path.exists(paired_file):
-    with open(paired_file) as f: paired = json.load(f)
-for req_id, req in list(pending.items()):
-    if req.get('clientId') == 'cli':
-        now = int(time.time() * 1000)
-        paired[req['deviceId']] = {
-            'deviceId': req['deviceId'], 'publicKey': req['publicKey'],
-            'platform': req['platform'], 'clientId': req['clientId'],
-            'clientMode': req['clientMode'], 'role': req['role'],
-            'roles': req['roles'], 'scopes': req['scopes'],
-            'remoteIp': req['remoteIp'],
-            'createdAtMs': now, 'approvedAtMs': now, 'tokens': {},
-        }
-        del pending[req_id]; break
-else:
-    print('No CLI pending request found'); exit(1)
-with open(paired_file, 'w') as f: json.dump(paired, f, indent=2)
-with open(pending_file, 'w') as f: json.dump(pending, f, indent=2)
-print('CLI device approved')
-\""
-
-# 4. Verify CLI is paired (claw reads files on each connection — no restart needed)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "openclaw --instance <CLAW_NAME> devices list"
-```
-
-**Expected:** Shows 1 paired device with role `operator`. Now retry Approach 1 to
-approve the browser device.
-
-### Approach 4: Container Restart + Fresh Pairing
-
-As a last resort, restart the claw container and try again:
-
-```bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart openclaw-<CLAW_NAME>'"
-```
-
-Wait 30-60 seconds for full startup (sandbox images are cached, so restarts are faster
-than first boot), then retry from Approach 1.
+This re-pairs the CLI via loopback auto-approval. Now retry Approach 1.
 
 ### Tips for Users
 
@@ -256,6 +192,9 @@ than first boot), then retry from Approach 1.
   needs to wait — no manual refresh needed.
 - **Check the browser console** (F12 → Console) if the page doesn't connect after
   approval. Look for WebSocket errors.
+- **File ownership issues:** If the CLI fails with permission errors, the `.openclaw`
+  directory may be owned by root (created before gosu drops to node). Fix with:
+  `sudo docker exec openclaw-<CLAW_NAME> chown -R 1000:1000 /home/node/.openclaw`
 
 ---
 
