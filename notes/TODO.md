@@ -2,6 +2,8 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
+- [ ] Replace most of scripts/* with a single CLI - with multi claw support, the individual scripts no longer make much sense
+
 - [ ] Verify if the health cron in log worker can reach the VPS over the tunnel, if not, remove from README
 
 - [ ] Add seccompProfile, apparmorProfile to sandbox configs in openclaw.json
