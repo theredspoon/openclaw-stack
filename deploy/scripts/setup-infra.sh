@@ -76,6 +76,29 @@ sudo chown -R 1000:1000 /home/openclaw/sandboxes-home
 sudo mkdir -p /home/openclaw/.openclaw/workspace/host-status
 sudo chmod 755 /home/openclaw/.openclaw/workspace/host-status
 
+# Part 2b: Multi-instance directories
+# When INSTANCE_NAMES is set, create per-instance storage directories.
+# Each instance gets isolated Docker storage, sandbox homes, and config dirs.
+# When empty, single-instance behavior is unchanged.
+if [ -n "${INSTANCE_NAMES:-}" ]; then
+  for inst_name in $INSTANCE_NAMES; do
+    # Pass inst_name as argument (not heredoc interpolation) to prevent shell injection
+    sudo -u openclaw bash -s "$inst_name" << 'INSTEOF'
+set -euo pipefail
+inst_name="$1"
+mkdir -p "/home/openclaw/openclaw/data/${inst_name}/docker"
+mkdir -p "/home/openclaw/sandboxes-home/${inst_name}"
+INSTEOF
+    sudo mkdir -p /home/openclaw/.openclaw/instances/${inst_name}/{workspace,credentials,logs}
+    sudo chown -R 1000:1000 /home/openclaw/.openclaw/instances/${inst_name}
+    sudo chown -R 1000:1000 /home/openclaw/sandboxes-home/${inst_name}
+    # Host status directory for this instance — same pattern as single-instance
+    sudo mkdir -p /home/openclaw/.openclaw/instances/${inst_name}/workspace/host-status
+    sudo chmod 755 /home/openclaw/.openclaw/instances/${inst_name}/workspace/host-status
+    echo "  Created directories for instance: ${inst_name}" >&2
+  done
+fi
+
 echo "Directory structure created." >&2
 
 # Part 3: Clone OpenClaw Repository

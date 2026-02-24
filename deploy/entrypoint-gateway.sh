@@ -146,6 +146,22 @@ if command -v dockerd > /dev/null 2>&1; then
   if docker info > /dev/null 2>&1; then
     echo "[entrypoint] Nested Docker daemon ready (took ${elapsed:-0}s)"
 
+    # ── 2a. Load pre-built sandbox images from archive ──────────────
+    # Optional optimization: pre-built sandbox images can be saved as a tar
+    # archive and loaded into each instance's nested Docker on first boot.
+    # This reduces first-boot time from ~15min (build) to ~30s (load).
+    # rebuild-sandboxes.sh still runs after and verifies/rebuilds if needed.
+    SANDBOX_ARCHIVE="/app/deploy/sandbox-images.tar"
+    if [ -f "$SANDBOX_ARCHIVE" ]; then
+      if ! docker image inspect openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
+        echo "[entrypoint] Loading pre-built sandbox images from archive..."
+        docker load < "$SANDBOX_ARCHIVE"
+        echo "[entrypoint] Sandbox images loaded"
+      else
+        echo "[entrypoint] Sandbox images already present, skipping archive load"
+      fi
+    fi
+
     # Sandbox builds are non-fatal — gateway starts even if builds fail.
     # Failures are logged but don't prevent the gateway from running.
     # Missing images will surface during deployment verification or when agents run.

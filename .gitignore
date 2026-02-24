@@ -2,6 +2,13 @@
 certs/
 *.env
 *.key
+
+# Multi-instance configs: only track the example, ignore real instances
+# Copy _example-claw/ to create your own (e.g., deploy/openclaws/personal-claw/)
+deploy/openclaws/*
+!deploy/openclaws/_example/
+!deploy/openclaws/_example/config.env
+
 tmp/
 _bak/
 source/

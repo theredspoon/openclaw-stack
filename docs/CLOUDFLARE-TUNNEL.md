@@ -292,6 +292,40 @@ The domain is now routable — and protected by Cloudflare Access from the first
 3. Authenticate with your configured method
 4. You should now see the OpenClaw UI
 
+---
+
+## Multi-Instance Tunnel Configuration
+
+When running multiple OpenClaw instances on the same VPS (via `openclaw-multi.sh`), each instance needs its own subdomain routed through the same Cloudflare tunnel. The OpenClaw frontend hardcodes WebSocket connections to `wss://<host>/` (root path), so subpath routing on a single subdomain is not possible — each instance must have a separate subdomain.
+
+### Setup
+
+Run `openclaw-multi.sh tunnel-config` to get the exact rules for your instances. The general pattern:
+
+| Subdomain | Path | Service | URL |
+|-----------|------|---------|-----|
+| `personal.openclaw` | `/dashboard/*` | HTTP | `localhost:6090` |
+| `personal.openclaw` | *(catch-all)* | HTTP | `localhost:18789` |
+| `work.openclaw` | `/dashboard/*` | HTTP | `localhost:6091` |
+| `work.openclaw` | *(catch-all)* | HTTP | `localhost:18790` |
+
+Each instance gets unique gateway and dashboard ports (auto-assigned by `openclaw-multi.sh` or set explicitly in the instance's `config.env`).
+
+### Cloudflare Access
+
+Each subdomain needs its own Cloudflare Access application (or extend a single application with wildcard subdomain matching like `*.openclaw.yourdomain.com`). Consider setting `CF_ACCESS_AUD` per dashboard instance to prevent cross-instance session access — see [DASHBOARD.md § Security](DASHBOARD.md#security).
+
+### Adding a New Instance
+
+1. Create `deploy/openclaws/<name>/config.env` with at least `OPENCLAW_DOMAIN` set
+2. Run `openclaw-multi.sh generate` to update compose and `.env` files
+3. Run `openclaw-multi.sh tunnel-config` to see the new tunnel rules
+4. Add the rules in CF Dashboard → Zero Trust → Networks → Tunnels → Configure
+5. Create a Cloudflare Access application for the new subdomain
+6. Start the instance: `openclaw-multi.sh start`
+
+---
+
 ## Maintenance
 
 ### Updating cloudflared
