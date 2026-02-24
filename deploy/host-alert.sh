@@ -20,7 +20,7 @@ fi
 
 STATE_FILE="/tmp/host-alert-state"
 CONFIG_FILE="/home/openclaw/openclaw/.env"
-STATUS_DIR="/home/openclaw/.openclaw/workspace/host-status"
+INSTANCES_DIR="/home/openclaw/instances"
 
 # Load config
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -113,42 +113,36 @@ for inst_dir in /home/openclaw/instances/*/; do
     fi
   fi
 done
-# Fallback: check legacy single-instance backup path
 if ! $found_any_backup_dir; then
-  backup_dir="/home/openclaw/.openclaw/backups"
-  if [[ -d "$backup_dir" ]]; then
-    latest_backup=$(find "$backup_dir" -name "openclaw_backup_*.tar.gz" -mmin -2160 | head -1)
-    if [[ -z "$latest_backup" ]]; then
-      alerts+=("⚠️ No backup in last 36 hours")
-      backup_ok=false
-    else
-      backup_age_seconds=$(( $(date +%s) - $(stat -c %Y "$latest_backup" 2>/dev/null || echo 0) ))
-      backup_age_hours=$(( backup_age_seconds / 3600 ))
-    fi
-  fi
+  alerts+=("⚠️ No backup directories found under ${INSTANCES_DIR}")
+  backup_ok=false
 fi
 
-# --- Write health snapshot for OpenClaw (always, regardless of Telegram config) ---
-mkdir -p "$STATUS_DIR"
-cat > "${STATUS_DIR}/health.json" << HEALTHEOF
-{
-  "timestamp": "$(date -Iseconds)",
-  "disk_pct": ${disk_pct},
-  "disk_total_gb": ${disk_total_gb},
-  "disk_threshold": ${DISK_THRESHOLD},
-  "memory_pct": ${mem_pct},
-  "memory_total_gb": ${mem_total_gb},
-  "memory_threshold": ${MEMORY_THRESHOLD},
-  "load_avg": "${load_avg}",
-  "cpu_count": ${cpu_count},
-  "docker_ok": ${docker_ok},
-  "gateway_ok": ${gateway_ok},
-  "crashed": "${crashed}",
-  "backup_ok": ${backup_ok},
-  "backup_age_hours": ${backup_age_hours:-null}
-}
-HEALTHEOF
-chmod 644 "${STATUS_DIR}/health.json"
+# --- Write health snapshot to all instances (always, regardless of Telegram config) ---
+health_json="{
+  \"timestamp\": \"$(date -Iseconds)\",
+  \"disk_pct\": ${disk_pct},
+  \"disk_total_gb\": ${disk_total_gb},
+  \"disk_threshold\": ${DISK_THRESHOLD},
+  \"memory_pct\": ${mem_pct},
+  \"memory_total_gb\": ${mem_total_gb},
+  \"memory_threshold\": ${MEMORY_THRESHOLD},
+  \"load_avg\": \"${load_avg}\",
+  \"cpu_count\": ${cpu_count},
+  \"docker_ok\": ${docker_ok},
+  \"gateway_ok\": ${gateway_ok},
+  \"crashed\": \"${crashed}\",
+  \"backup_ok\": ${backup_ok},
+  \"backup_age_hours\": ${backup_age_hours:-null}
+}"
+
+for inst_dir in "${INSTANCES_DIR}"/*/; do
+  [ -d "$inst_dir" ] || continue
+  status_dir="${inst_dir}.openclaw/workspace/host-status"
+  mkdir -p "$status_dir"
+  echo "$health_json" > "${status_dir}/health.json"
+  chmod 644 "${status_dir}/health.json"
+done
 
 # --- Check Telegram config (gates all Telegram-sending logic below) ---
 TELEGRAM_CONFIGURED=false
@@ -244,9 +238,17 @@ if $REPORT_MODE; then
     ((warn_count+=1))
   fi
 
-  # Maintenance section — read from maintenance.json if available
-  maint_file="${STATUS_DIR}/maintenance.json"
-  if [[ -f "$maint_file" ]]; then
+  # Maintenance section — read from maintenance.json (first instance found)
+  maint_file=""
+  for inst_dir in "${INSTANCES_DIR}"/*/; do
+    [ -d "$inst_dir" ] || continue
+    candidate="${inst_dir}.openclaw/workspace/host-status/maintenance.json"
+    if [[ -f "$candidate" ]]; then
+      maint_file="$candidate"
+      break
+    fi
+  done
+  if [[ -n "$maint_file" && -f "$maint_file" ]]; then
     maint_age_seconds=$(( $(date +%s) - $(stat -c %Y "$maint_file" 2>/dev/null || echo 0) ))
     maint_age_hours=$(( maint_age_seconds / 3600 ))
 

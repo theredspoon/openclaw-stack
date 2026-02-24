@@ -8,10 +8,7 @@
 # Runs as root (needs apt and systemctl access). No Telegram dependency.
 set -euo pipefail
 
-STATUS_DIR="/home/openclaw/.openclaw/workspace/host-status"
-OUTPUT_FILE="${STATUS_DIR}/maintenance.json"
-
-mkdir -p "$STATUS_DIR"
+INSTANCES_DIR="/home/openclaw/instances"
 
 # --- Security updates ---
 # Simulate upgrade and count packages from security sources
@@ -45,17 +42,22 @@ uptime_seconds=$(awk '{print int($1)}' /proc/uptime)
 uptime_days=$(( uptime_seconds / 86400 ))
 uptime_hours=$(( (uptime_seconds % 86400) / 3600 ))
 
-# --- Write maintenance.json ---
-cat > "$OUTPUT_FILE" << EOF
-{
-  "timestamp": "$(date -Iseconds)",
-  "security_updates": ${security_updates},
-  "total_upgradable": ${total_upgradable},
-  "reboot_required": ${reboot_required},
-  "failed_services": "${failed_services}",
-  "uptime_seconds": ${uptime_seconds},
-  "uptime_days": ${uptime_days},
-  "uptime_hours": ${uptime_hours}
-}
-EOF
-chmod 644 "$OUTPUT_FILE"
+# --- Write maintenance.json to all instances ---
+maintenance_json="{
+  \"timestamp\": \"$(date -Iseconds)\",
+  \"security_updates\": ${security_updates},
+  \"total_upgradable\": ${total_upgradable},
+  \"reboot_required\": ${reboot_required},
+  \"failed_services\": \"${failed_services}\",
+  \"uptime_seconds\": ${uptime_seconds},
+  \"uptime_days\": ${uptime_days},
+  \"uptime_hours\": ${uptime_hours}
+}"
+
+for inst_dir in "${INSTANCES_DIR}"/*/; do
+  [ -d "$inst_dir" ] || continue
+  status_dir="${inst_dir}.openclaw/workspace/host-status"
+  mkdir -p "$status_dir"
+  echo "$maintenance_json" > "${status_dir}/maintenance.json"
+  chmod 644 "${status_dir}/maintenance.json"
+done
