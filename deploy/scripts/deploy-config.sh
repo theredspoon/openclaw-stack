@@ -129,10 +129,50 @@ deploy_claw_config() {
     -e "s|{{ALLOWED_ORIGIN}}|${allowed_origin}|g" \
     "${config_target}/openclaw.json"
 
-  # Verify no unsubstituted {{VAR}} placeholders remain (exclude comments)
-  if sudo grep -v '^\s*//' "${config_target}/openclaw.json" | grep -q '{{'; then
+  # Strip JS-style comments — the template uses // for developer documentation
+  # but JSON doesn't support comments. Remove full-line and inline comments.
+  sudo python3 -c "
+import re, sys
+path = sys.argv[1]
+with open(path, 'r') as f:
+    lines = f.readlines()
+clean = []
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith('//'):
+        continue
+    in_string = False
+    escape = False
+    cut = None
+    for i, ch in enumerate(line):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\\\':
+            escape = True
+            continue
+        if ch == '\"':
+            in_string = not in_string
+            continue
+        if not in_string and ch == '/' and i + 1 < len(line) and line[i+1] == '/':
+            cut = i
+            break
+    if cut is not None:
+        line = line[:cut].rstrip() + '\n'
+    clean.append(line)
+result = ''.join(clean)
+result = re.sub(r',(\s*[}\]])', r'\1', result)
+import json
+json.loads(result)
+with open(path, 'w') as f:
+    f.write(result)
+" "${config_target}/openclaw.json"
+  echo "  Stripped JS comments from openclaw.json" >&2
+
+  # Verify no unsubstituted {{VAR}} placeholders remain
+  if sudo grep -q '{{' "${config_target}/openclaw.json"; then
     echo "ERROR: Unsubstituted template placeholders found in ${name}:" >&2
-    sudo grep -n '{{' "${config_target}/openclaw.json" | grep -v '^\s*//' >&2
+    sudo grep -n '{{' "${config_target}/openclaw.json" >&2
     exit 1
   fi
 
@@ -360,7 +400,33 @@ sudo -u openclaw mkdir -p ${INSTALL_DIR}/openclaw/deploy/dashboard
 sudo -u openclaw cp -r "${STAGING}/dashboard/"* ${INSTALL_DIR}/openclaw/deploy/dashboard/
 echo "Deployed sandbox toolkit, rebuild script, and dashboard." >&2
 
-# 11. Log rotation config (template — {{INSTALL_DIR}} substituted at deploy time)
+# 11. Auto-start containers after reboot (systemd unit)
+# Sysbox services must be fully ready before Docker can start sysbox-runc containers.
+# Without this, containers fail to start on boot due to race conditions.
+sudo tee /etc/systemd/system/openclaw-autostart.service > /dev/null << STARTEOF
+[Unit]
+Description=OpenClaw container auto-start
+After=docker.service sysbox.service
+Requires=docker.service sysbox.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# Wait for sysbox to be fully ready (FUSE mounts take a moment)
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/bin/su - openclaw -c 'cd ${INSTALL_DIR}/openclaw && docker compose up -d'
+ExecStop=/usr/bin/su - openclaw -c 'cd ${INSTALL_DIR}/openclaw && docker compose down'
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+STARTEOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable openclaw-autostart.service
+echo "Deployed openclaw-autostart.service (containers start after reboot)." >&2
+
+# 12. Log rotation config (template — {{INSTALL_DIR}} substituted at deploy time)
 sudo cp "${STAGING}/logrotate-openclaw" /etc/logrotate.d/openclaw
 sudo sed -i "s|{{INSTALL_DIR}}|${INSTALL_DIR}|g" /etc/logrotate.d/openclaw
 sudo chmod 644 /etc/logrotate.d/openclaw
@@ -372,7 +438,7 @@ echo "Deployed logrotate configuration." >&2
 fi  # DEPLOY_SHARED
 
 # Cleanup
-rm -rf "${STAGING}"
+sudo rm -rf "${STAGING}"
 
 echo "" >&2
 echo "Configuration deployment complete." >&2

@@ -54,6 +54,8 @@
       "groupPolicy": "allowlist", // Only respond in explicitly allowed groups
       "streamMode": "partial" // Stream partial responses to Telegram
       // botToken read from TELEGRAM_BOT_TOKEN env var (set in docker-compose.override.yml)
+      // WARNING: Each claw MUST use a unique bot token. Sharing tokens causes getUpdates 409 conflicts.
+      // Set OPENCLAW_TELEGRAM_BOT_TOKEN in each claw's config.env, or disable Telegram on secondary claws.
     }
   },
   "logging": {

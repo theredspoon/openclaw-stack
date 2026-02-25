@@ -205,6 +205,26 @@ cmd_generate() {
   generate_env "$port_info"
   echo "Updated ${env_file}" >&2
 
+  # ── Patch gateway.port into each claw's openclaw.json ──
+  # The CLI inside each container needs to know the gateway port.
+  # deploy-config.sh runs before port assignment, so we patch after generate.
+  while IFS=' ' read -r name gw_port dash_port; do
+    local config_json="${OPENCLAW_HOME}/instances/${name}/.openclaw/openclaw.json"
+    if sudo test -f "$config_json"; then
+      sudo python3 -c "
+import json, sys
+path, port = sys.argv[1], int(sys.argv[2])
+with open(path) as f:
+    cfg = json.load(f)
+cfg.setdefault('gateway', {})['port'] = port
+with open(path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+    f.write('\n')
+" "$config_json" "$gw_port" 2>/dev/null \
+        && echo "  Patched gateway.port=${gw_port} for ${name}" >&2
+    fi
+  done <<< "$port_info"
+
   echo ""
   echo "Next steps:" >&2
   echo "  1. Deploy configs: deploy-config.sh" >&2
@@ -298,6 +318,7 @@ HEADER
       - DASHBOARD_BASE_PATH=\${${prefix}_DASHBOARD_BASE_PATH:-}
       - OPENCLAW_DOMAIN_PATH=\${${prefix}_OPENCLAW_DOMAIN_PATH:-}
       - TELEGRAM_BOT_TOKEN=\${${prefix}_TELEGRAM_BOT_TOKEN:-\${OPENCLAW_TELEGRAM_BOT_TOKEN}}
+      - OPENCLAW_GATEWAY_TOKEN=\${${prefix}_GATEWAY_TOKEN:-\${OPENCLAW_GATEWAY_TOKEN}}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${gw_port}/"]
 
@@ -334,6 +355,14 @@ generate_env() {
     local instance_config="${INSTANCES_DIR}/${name}/config.env"
 
     instance_section+=$'\n'"# Claw: ${name}"$'\n'
+
+    # Extract gateway token from deployed openclaw.json (set by deploy-config.sh)
+    local config_json="${OPENCLAW_HOME}/instances/${name}/.openclaw/openclaw.json"
+    if sudo test -f "$config_json"; then
+      local gw_token
+      gw_token=$(sudo grep -o '"token": *"[^"]*"' "$config_json" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+      [ -n "$gw_token" ] && instance_section+="${prefix}_GATEWAY_TOKEN=${gw_token}"$'\n'
+    fi
 
     # Extract specific vars from instance config
     # Check for key presence (not value emptiness) so explicit empty overrides work
