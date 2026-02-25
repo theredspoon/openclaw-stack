@@ -188,7 +188,7 @@ This returns two lines: CPU count (e.g., `6`) and total memory in bytes (e.g., `
 
 ### Compare Against Config
 
-Read `GATEWAY_CPUS` and `GATEWAY_MEMORY` via `source-config.sh`. If not set, the compose file defaults apply (6 CPUs, 10.5G).
+Read current gateway resource limits: `source-config.sh GATEWAY_CPUS` and `source-config.sh GATEWAY_MEMORY`. If not set, the compose file defaults apply (6 CPUs, 10.5G).
 
 ### Expected Values
 

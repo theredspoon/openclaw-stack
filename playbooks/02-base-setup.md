@@ -29,7 +29,7 @@ This playbook configures:
 
 ## Variables
 
-Config variables (read via `source-config.sh`):
+Config variables (read each via `source-config.sh VAR_NAME`):
 
 - `VPS1_IP` - Public IP of VPS-1
 - `SSH_KEY_PATH` - Path to SSH private key
@@ -79,7 +79,7 @@ sudo apt install -y \
 
 ## 2.1a Set Hostname
 
-If `VPS_HOSTNAME` is set (read via `source-config.sh`), replace the provider's default hostname (e.g., `vps-54a00e96`) with a friendly name. Skip if empty.
+If `source-config.sh VPS_HOSTNAME` returns a value, replace the provider's default hostname (e.g., `vps-54a00e96`) with a friendly name. Skip if empty.
 
 ```bash
 #!/bin/bash
@@ -399,7 +399,7 @@ rm -f /tmp/system-hardening.sh
 
 Run on: **VPS-1**
 
-Install cloudflared and register the tunnel as a systemd service. The tunnel token must already be set — read `CF_TUNNEL_TOKEN` via `source-config.sh`.
+Install cloudflared and register the tunnel as a systemd service. Read the token via `source-config.sh CF_TUNNEL_TOKEN`.
 
 ```bash
 # Download and install cloudflared

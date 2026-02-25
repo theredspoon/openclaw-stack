@@ -486,7 +486,7 @@ sudo docker exec --user node "$FIRST_CLAW" \
 
 ## 7.5c Verify Resource Limits
 
-Verify deployed claw resource limits match VPS hardware. Resource limits are configured via `GATEWAY_CPUS` and `GATEWAY_MEMORY` (read via `source-config.sh`, see § 0.4).
+Verify deployed claw resource limits match VPS hardware. Read `source-config.sh GATEWAY_CPUS` and `source-config.sh GATEWAY_MEMORY` (see § 0.4).
 
 ```bash
 # On VPS: query hardware and deployed limits
@@ -526,7 +526,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 ## 7.6a Telemetry (unified plugin)
 
-> Skip this section if `ENABLE_LLEMTRY_LOGGING` is not `true` (read via `source-config.sh`).
+> Skip this section if `source-config.sh ENABLE_LLEMTRY_LOGGING` is not `true`.
 
 **1. Events endpoint (D1 storage):**
 

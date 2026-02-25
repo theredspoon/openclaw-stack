@@ -22,7 +22,7 @@ This playbook configures:
 
 ## Variables
 
-Config variables (read via `source-config.sh`):
+Config variables (read each via `source-config.sh VAR_NAME`):
 
 - `INSTALL_DIR` - Base installation directory on VPS (default: `/home/openclaw`)
 - `VPS1_IP` - Required, public IP of VPS-1
@@ -139,7 +139,7 @@ Capture the `OPENCLAW_GENERATED_TOKEN=<hex>` line from stdout (all other output 
 
 ### Template variables
 
-These are substituted server-side via `sed` after copying from staging. All config values are read via `source-config.sh` and passed as SSH env vars:
+These are substituted server-side via `sed` after copying from staging. All config values are read via `source-config.sh VAR_NAME` and passed as SSH env vars:
 
 | Variable | Source | Used in |
 |----------|--------|---------|
@@ -217,7 +217,7 @@ This reads `openclaws/*/` from staging, assigns ports, and writes `docker-compos
 
 - **Cron runs in the server's local timezone**, not necessarily UTC. Before converting `HOSTALERT_DAILY_REPORT_TIME` to cron fields, check the server timezone: `timedatectl show -p Timezone --value` (or `cat /etc/timezone` as fallback). Convert the user's specified time to the server's local timezone, then write the cron minute/hour fields in that timezone. Include the server timezone and original user time in the cron comment for clarity.
 - If `HOSTALERT_DAILY_REPORT_TIME` is not set, default to `9:30 AM PST` — still convert to the server's local timezone.
-- Only include the daily report cron line (`--report`) if both `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` are set (read via `source-config.sh`). If Telegram is not configured, write only the alerter line (the script exits silently without Telegram credentials, but there's no point scheduling the report).
+- Only include the daily report cron line (`--report`) if both `source-config.sh HOSTALERT_TELEGRAM_BOT_TOKEN` and `source-config.sh HOSTALERT_TELEGRAM_CHAT_ID` return values. If Telegram is not configured, write only the alerter line (the script exits silently without Telegram credentials, but there's no point scheduling the report).
 
 **Maintenance cron generation rules:**
 

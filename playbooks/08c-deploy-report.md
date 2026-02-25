@@ -31,7 +31,7 @@ Collect the following values and present them in a single, neatly formatted repo
    done
    ```
 
-3. **Domain and URLs** — read via `source-config.sh` (`OPENCLAW_DOMAIN`, `OPENCLAW_DOMAIN_PATH`, `OPENCLAW_DASHBOARD_DOMAIN`) and per-claw tunnel routes.
+3. **Domain and URLs** — read `source-config.sh OPENCLAW_DOMAIN`, `source-config.sh OPENCLAW_DOMAIN_PATH`, `source-config.sh OPENCLAW_DASHBOARD_DOMAIN`, and per-claw tunnel routes.
 
 ## AI proxy status
 
@@ -114,7 +114,7 @@ All URLs are protected by Cloudflare Access.
 | Maintenance checker | Daily (30 min before daily report) | Active |
 ```
 
-Read `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` via `source-config.sh`.
+Read `source-config.sh HOSTALERT_TELEGRAM_BOT_TOKEN` and `source-config.sh HOSTALERT_TELEGRAM_CHAT_ID`.
 
 **If both are set:** Host alerter and daily report are active. Show status as `Active` in both rows. For the daily report schedule, use the value of `HOSTALERT_DAILY_REPORT_TIME` (default: `9:00 AM UTC`).
 
