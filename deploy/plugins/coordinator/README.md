@@ -76,7 +76,7 @@ Only step 2 is manual — deciding which agent handles the new skill.
 
 ## Deployment
 
-The entrypoint (section 1h) copies this plugin from `/app/deploy/plugins/coordinator/` to `~/.openclaw/extensions/coordinator/` on boot. The compose override bind-mounts `deploy/plugins/` read-only into the container.
+The compose override bind-mounts `deploy/plugins/` read-only into the container at `/app/deploy/plugins/`. OpenClaw loads plugins from there on startup.
 
 To update after changes: SCP to VPS, restart the gateway.
 
