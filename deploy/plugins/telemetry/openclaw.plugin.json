@@ -1,7 +1,7 @@
 {
   "id": "telemetry",
   "name": "Telemetry",
-  "description": "Unified telemetry — captures LLM, session, tool, message, agent, and gateway events. Ships to local file, D1 (via Log Worker /events), and Langfuse (via /llemtry).",
+  "description": "Unified telemetry — captures LLM, session, tool, message, agent, and gateway events. Ships to local file, D1 (via Log Worker /openclaw/events), and Langfuse (via /llemtry).",
   "version": "1.0.0",
   "configSchema": {
     "type": "object",
@@ -22,22 +22,22 @@
       },
       "events": {
         "type": "object",
-        "description": "Remote event shipping to Log Worker /events endpoint for D1 storage",
+        "description": "Remote event shipping to Log Worker /openclaw/events endpoint for D1 storage",
         "additionalProperties": false,
         "properties": {
           "enabled": {
             "type": ["boolean", "string"],
             "enum": [true, false, "true", "false"],
-            "description": "Enable batched event shipping to /events endpoint",
+            "description": "Enable batched event shipping to /openclaw/events endpoint",
             "default": false
           },
           "url": {
             "type": "string",
-            "description": "Full URL of the /events endpoint (e.g. https://log-receiver.xxx.workers.dev/events)"
+            "description": "Full URL of the /openclaw/events endpoint (e.g. https://log-receiver.xxx.workers.dev/openclaw/events)"
           },
           "authToken": {
             "type": "string",
-            "description": "Bearer token for /events endpoint authentication"
+            "description": "Bearer token for /openclaw/events endpoint authentication"
           },
           "batchSize": {
             "type": "number",

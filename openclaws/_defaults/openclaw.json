@@ -304,7 +304,7 @@
       // Telemetry Plugin
       // Unified telemetry — captures LLM, session, tool, message, agent, and gateway events.
       // Replaces both llm-logger plugin and debug-logger hook.
-      // Ships to: local JSONL file, Log Worker /events (D1), and Log Worker /llemtry (Langfuse).
+      // Ships to: local JSONL file, Log Worker /openclaw/events (D1), and Log Worker /llemtry (Langfuse).
       // Requires gateway restart (plugins.* not hot-reloadable).
       "telemetry": {
         "enabled": true,
@@ -312,7 +312,7 @@
           "instanceId": "{{OPENCLAW_INSTANCE_ID}}", // TEMPLATE: from openclaw-config.env
           "hostname": "{{VPS_HOSTNAME}}", // TEMPLATE: from openclaw-config.env
           "logFile": "telemetry.log", // Set to empty string to disable file logging
-          // Remote event shipping to Log Worker /events → D1 database
+          // Remote event shipping to Log Worker /openclaw/events → D1 database
           "events": {
             "enabled": "{{ENABLE_EVENTS_LOGGING}}",
             "url": "{{EVENTS_URL}}",

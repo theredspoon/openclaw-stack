@@ -150,7 +150,7 @@ These are substituted server-side via `sed` after copying from staging. All conf
 | `VPS_HOSTNAME` | Config | `openclaw.json` |
 | `ENABLE_EVENTS_LOGGING` | Config | `openclaw.json` |
 | `ENABLE_LLEMTRY_LOGGING` | Config | `openclaw.json` |
-| `EVENTS_URL` | Derived: `LOG_WORKER_URL` with `/logs` → `/events` | `openclaw.json` |
+| `EVENTS_URL` | Derived: `LOG_WORKER_URL` with `/logs` → `/openclaw/events` | `openclaw.json` |
 | `LLEMTRY_URL` | Derived: `LOG_WORKER_URL` with `/logs` → `/llemtry` | `openclaw.json` |
 | `LOG_WORKER_TOKEN` | Config | `openclaw.json` |
 | `OPENCLAW_DOMAIN` | Config (or per-claw `config.env`) | Used to derive `ALLOWED_ORIGIN` |

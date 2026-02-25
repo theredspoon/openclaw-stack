@@ -108,7 +108,7 @@ deploy_claw_config() {
 
   # Re-derive URLs with potentially updated LOG_WORKER_URL
   local llemtry_url="${LOG_WORKER_URL/\/logs/\/llemtry}"
-  local events_url="${LOG_WORKER_URL/\/logs/\/events}"
+  local events_url="${LOG_WORKER_URL/\/logs/\/openclaw\/events}"
 
   # Determine openclaw.json source — claw-specific overrides _defaults
   local json_source="${INSTANCES_DIR}/${name}/openclaw.json"

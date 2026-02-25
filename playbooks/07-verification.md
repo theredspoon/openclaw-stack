@@ -531,7 +531,7 @@ ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
 
 ```bash
 # Derive events URL from LOG_WORKER_URL
-EVENTS_URL="${LOG_WORKER_URL/\/logs/\/events}"
+EVENTS_URL="${LOG_WORKER_URL/\/logs/\/openclaw\/events}"
 curl -s -X POST "$EVENTS_URL" \
   -H "Authorization: Bearer $LOG_WORKER_TOKEN" \
   -H "Content-Type: application/json" \
@@ -555,7 +555,7 @@ curl -s -X POST "$LLEMTRY_URL" \
 ```bash
 FIRST_CLAW=$(echo "$CLAWS" | head -1)
 sudo docker logs "$FIRST_CLAW" 2>&1 | grep -i '\[telemetry\]'
-# Expected: "[telemetry] Plugin registered — outputs: [file:telemetry.log, events:/events, llemtry]"
+# Expected: "[telemetry] Plugin registered — outputs: [file:telemetry.log, events:/openclaw/events, llemtry]"
 # If misconfigured: "[telemetry] events.enabled is true but events.url or events.authToken is missing..."
 ```
 

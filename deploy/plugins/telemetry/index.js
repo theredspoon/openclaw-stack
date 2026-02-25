@@ -12,7 +12,7 @@
 //
 // Output destinations (all independently configurable):
 //   1. Local file (~/.openclaw/logs/telemetry.log) — JSONL
-//   2. Log Worker /events — batched event shipping for D1 storage
+//   2. Log Worker /openclaw/events — batched event shipping for D1 storage
 //   3. Log Worker /llemtry — existing Langfuse span format (LLM events only)
 //
 // Configuration: openclaw.json → plugins.entries.telemetry.config
@@ -186,7 +186,7 @@ function makeSendSpan(url, token, instanceId, hostname) {
   }
 }
 
-// ── Event batch sender for /events ──────────────────────────────────
+// ── Event batch sender for /openclaw/events ─────────────────────────
 
 function makeEventSender(url, token, instanceId, hostname) {
   const buffer = []
@@ -216,10 +216,10 @@ function makeEventSender(url, token, instanceId, hostname) {
         }),
       })
       if (!res.ok) {
-        console.error(`[telemetry] /events flush failed: HTTP ${res.status}`)
+        console.error(`[telemetry] /openclaw/events flush failed: HTTP ${res.status}`)
       }
     } catch (err) {
-      console.error(`[telemetry] /events flush error: ${err.message}`)
+      console.error(`[telemetry] /openclaw/events flush error: ${err.message}`)
     }
   }
 
@@ -289,7 +289,7 @@ export default {
     const INSTANCE_ID = cfg.instanceId || undefined
     const HOSTNAME = cfg.hostname || undefined
 
-    // ── Events output (/events endpoint) ────────────────────────
+    // ── Events output (/openclaw/events endpoint) ───────────────
     const eventsWanted = eventsCfg.enabled === true || eventsCfg.enabled === 'true'
     const eventsUrl = eventsCfg.url || undefined
     const eventsToken = eventsCfg.authToken || undefined
@@ -347,7 +347,7 @@ export default {
     }
 
     // ── Shared emit function ────────────────────────────────────
-    // All event handlers call this to write to file and enqueue for /events
+    // All event handlers call this to write to file and enqueue for /openclaw/events
     function emit(type, category, event, ctx, data) {
       const level = granularity[category]
       if (level === 'off') return
@@ -367,7 +367,7 @@ export default {
       // Write to local file
       writeLine(entry)
 
-      // Ship to /events
+      // Ship to /openclaw/events
       if (eventSender) {
         eventSender.enqueue(entry)
       }
@@ -574,7 +574,7 @@ export default {
     // ── Registration log ────────────────────────────────────────
     const outputs = []
     if (fileLoggingEnabled) outputs.push(`file:${logFileName}`)
-    if (eventSender) outputs.push('events:/events')
+    if (eventSender) outputs.push('events:/openclaw/events')
     if (llemtryEnabled) outputs.push('llemtry')
     api.logger.info(`[telemetry] Plugin registered — outputs: [${outputs.join(', ')}]`)
   },

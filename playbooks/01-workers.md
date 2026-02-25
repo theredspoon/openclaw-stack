@@ -220,7 +220,7 @@ curl -X POST https://<worker-url>/logs \
 # Expected: {"status":"ok","count":1}
 
 # Test events endpoint (D1 storage)
-curl -s -X POST https://<worker-url>/events \
+curl -s -X POST https://<worker-url>/openclaw/events \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"instance":{"id":"test"},"events":[]}'
