@@ -66,7 +66,7 @@ Output the report using exactly this structure:
 
 | User | Password | Purpose |
 |------|----------|---------|
-| `adminclaw` | `<password>` | SSH admin, passwordless sudo |
+| `adminclaw` | `<password>` | SSH admin, passwordless sudo, use for emergency KVM login |
 | `openclaw` | `<password>` | App runtime, no SSH, no sudo |
 
 > These passwords are for emergency VNC/console access only. Normal access is via SSH key.
