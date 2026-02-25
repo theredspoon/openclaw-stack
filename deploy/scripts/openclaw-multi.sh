@@ -319,6 +319,8 @@ HEADER
       - OPENCLAW_DOMAIN_PATH=\${${prefix}_OPENCLAW_DOMAIN_PATH:-}
       - TELEGRAM_BOT_TOKEN=\${${prefix}_TELEGRAM_BOT_TOKEN:-\${OPENCLAW_TELEGRAM_BOT_TOKEN}}
       - OPENCLAW_GATEWAY_TOKEN=\${${prefix}_GATEWAY_TOKEN:-\${OPENCLAW_GATEWAY_TOKEN}}
+      # Unique mDNS hostname per claw (avoids Bonjour hostname conflicts)
+      - OPENCLAW_MDNS_HOSTNAME=${name}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${gw_port}/"]
 
