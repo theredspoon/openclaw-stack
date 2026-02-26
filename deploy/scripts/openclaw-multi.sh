@@ -205,26 +205,6 @@ cmd_generate() {
   generate_env "$port_info"
   echo "Updated ${env_file}" >&2
 
-  # ── Patch gateway.port into each claw's openclaw.json ──
-  # The CLI inside each container needs to know the gateway port.
-  # deploy-config.sh runs before port assignment, so we patch after generate.
-  while IFS=' ' read -r name gw_port dash_port; do
-    local config_json="${OPENCLAW_HOME}/instances/${name}/.openclaw/openclaw.json"
-    if sudo test -f "$config_json"; then
-      sudo python3 -c "
-import json, sys
-path, port = sys.argv[1], int(sys.argv[2])
-with open(path) as f:
-    cfg = json.load(f)
-cfg.setdefault('gateway', {})['port'] = port
-with open(path, 'w') as f:
-    json.dump(cfg, f, indent=2)
-    f.write('\n')
-" "$config_json" "$gw_port" 2>/dev/null \
-        && echo "  Patched gateway.port=${gw_port} for ${name}" >&2
-    fi
-  done <<< "$port_info"
-
   echo ""
   echo "Next steps:" >&2
   echo "  1. Deploy configs: deploy-config.sh" >&2
@@ -318,6 +298,8 @@ HEADER
       - OPENCLAW_DOMAIN_PATH=\${${prefix}_OPENCLAW_DOMAIN_PATH:-}
       - TELEGRAM_BOT_TOKEN=\${${prefix}_TELEGRAM_BOT_TOKEN:-\${OPENCLAW_TELEGRAM_BOT_TOKEN}}
       - OPENCLAW_GATEWAY_TOKEN=\${${prefix}_GATEWAY_TOKEN:-\${OPENCLAW_GATEWAY_TOKEN}}
+      # CLI reads this env var to find the gateway port (highest priority in resolveGatewayPort)
+      - OPENCLAW_GATEWAY_PORT=${gw_port}
       # Unique mDNS hostname per claw (avoids Bonjour hostname conflicts)
       - OPENCLAW_MDNS_HOSTNAME=${name}
     healthcheck:
