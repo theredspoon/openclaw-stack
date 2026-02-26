@@ -442,9 +442,6 @@ echo "Deployed logrotate configuration." >&2
 
 fi  # DEPLOY_SHARED
 
-# Cleanup
-sudo rm -rf "${STAGING}"
-
 echo "" >&2
 echo "Configuration deployment complete." >&2
 

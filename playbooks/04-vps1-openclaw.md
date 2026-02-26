@@ -211,7 +211,7 @@ This reads `openclaws/*/` from staging, assigns ports, and writes `docker-compos
 
 > **Multi-claw:** If multiple claws exist (e.g., `main-claw/` and `personal-claw/`), each gets its own service in the override file with auto-assigned ports.
 
-**Cleanup:** `openclaw-config.env` contains secrets (`AI_GATEWAY_AUTH_TOKEN`). It was SCP'd into the staging directory alongside deploy files. The staging directory cleanup at the end of `deploy-config.sh` (`rm -rf ${INSTALL_DIR}/.deploy-staging`) removes it along with everything else — no separate cleanup needed.
+**Cleanup:** `openclaw-config.env` contains secrets (`AI_GATEWAY_AUTH_TOKEN`). It was SCP'd into the staging directory alongside deploy files. Staging is cleaned up explicitly after the Verification section — scripts in §4.4 and §4.5 also read from staging.
 
 **Cron generation rules:**
 
@@ -470,6 +470,17 @@ done
 # Check Vector is running (separate compose project)
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/vector && docker compose ps'
 sudo docker logs --tail 10 vector
+```
+
+---
+
+## 4.6 Clean Up Staging
+
+Staging contains secrets (`openclaw-config.env`) and deploy scripts. Remove it now that all steps are complete.
+
+```bash
+ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+  "sudo rm -rf ${INSTALL_DIR}/.deploy-staging"
 ```
 
 ---

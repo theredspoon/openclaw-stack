@@ -369,7 +369,8 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 ```bash
 # Test the alerter script manually (should not send alerts if everything is healthy)
-sudo <INSTALL_DIR>/scripts/host-alert.sh
+# Pass INSTALL_DIR explicitly — sudo strips environment variables set by cron.d
+sudo INSTALL_DIR=<INSTALL_DIR> <INSTALL_DIR>/scripts/host-alert.sh
 echo $?  # Should be 0
 
 # Verify health.json was written (even without Telegram) — check first instance
@@ -377,7 +378,7 @@ FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
 cat "${FIRST_INST}.openclaw/workspace/host-status/health.json"
 
 # Test the maintenance checker
-sudo <INSTALL_DIR>/scripts/host-maintenance-check.sh
+sudo INSTALL_DIR=<INSTALL_DIR> <INSTALL_DIR>/scripts/host-maintenance-check.sh
 echo $?  # Should be 0
 
 # Verify maintenance.json was written
