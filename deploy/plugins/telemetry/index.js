@@ -29,8 +29,16 @@ const SENSITIVE_KEYS = /token|secret|password|apiKey|api_key|authorization/i
 // Token metric fields — these contain "token" in the name but are numeric metrics,
 // not secrets. Checked before SENSITIVE_KEYS to avoid false-positive redaction.
 const METRIC_FIELDS = new Set([
-  'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'totalTokens',
-  'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens', 'total_tokens',
+  'inputTokens',
+  'outputTokens',
+  'cacheReadTokens',
+  'cacheWriteTokens',
+  'totalTokens',
+  'input_tokens',
+  'output_tokens',
+  'cache_read_tokens',
+  'cache_write_tokens',
+  'total_tokens',
   'tokenCount',
 ])
 
@@ -134,7 +142,10 @@ function buildLlemtrySpan(input, outputEvent, ctx) {
       'gen_ai.usage.output_tokens': outputEvent.usage?.output,
       'gen_ai.request.max_tokens': input?.event?.maxTokens,
       'gen_ai.request.temperature': input?.event?.temperature,
-      'gen_ai.response.stop_reason': outputEvent.stopReason ?? outputEvent.lastAssistant?.stopReason ?? outputEvent.lastAssistant?.stop_reason,
+      'gen_ai.response.stop_reason':
+        outputEvent.stopReason ??
+        outputEvent.lastAssistant?.stopReason ??
+        outputEvent.lastAssistant?.stop_reason,
       'openclaw.agent.id': ctx.agentId,
       'openclaw.session.id': outputEvent.sessionId ?? ctx.sessionId,
       'openclaw.session.key': ctx.sessionKey,
@@ -297,7 +308,7 @@ export default {
 
     if (eventsWanted) {
       if (!eventsUrl || !eventsToken) {
-        api.logger.error(
+        api.logger.error?.(
           '[telemetry] events.enabled is true but events.url or events.authToken is missing. ' +
             'Event shipping to D1 will NOT be active.'
         )
@@ -307,7 +318,7 @@ export default {
           batchSize: eventsCfg.batchSize || 50,
           flushIntervalMs: eventsCfg.flushIntervalMs || 10000,
         })
-        api.logger.info(`[telemetry] Event shipping enabled → ${eventsUrl}`)
+        api.logger.debug?.(`[telemetry] Event shipping enabled → ${eventsUrl}`)
       }
     }
 
@@ -320,12 +331,12 @@ export default {
 
     if (llemtryWanted) {
       if (!llemtryUrl || !llemtryToken) {
-        api.logger.error(
+        api.logger.error?.(
           '[telemetry] llemtry.enabled is true but url or authToken is missing. ' +
             'LLM telemetry will NOT be sent.'
         )
       } else {
-        api.logger.info(`[telemetry] LLM telemetry enabled → ${llemtryUrl}`)
+        api.logger.debug?.(`[telemetry] LLM telemetry enabled → ${llemtryUrl}`)
         llemtryEnabled = true
         sendSpan = makeSendSpan(llemtryUrl, llemtryToken, INSTANCE_ID, HOSTNAME)
       }
@@ -576,6 +587,6 @@ export default {
     if (fileLoggingEnabled) outputs.push(`file:${logFileName}`)
     if (eventSender) outputs.push('events:/openclaw/events')
     if (llemtryEnabled) outputs.push('llemtry')
-    api.logger.info(`[telemetry] Plugin registered — outputs: [${outputs.join(', ')}]`)
+    api.logger.debug?.(`[telemetry] Plugin registered — outputs: [${outputs.join(', ')}]`)
   },
 }

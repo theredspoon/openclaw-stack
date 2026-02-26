@@ -24,7 +24,7 @@ const ROUTING_END = '<!-- coordinator-plugin:end -->'
 
 function buildRoutingSection(routes) {
   const table = routes
-    .map(r => `- **${r.name}** (agentId: \`${r.id}\`): ${r.skills.join(', ')}`)
+    .map((r) => `- **${r.name}** (agentId: \`${r.id}\`): ${r.skills.join(', ')}`)
     .join('\n')
 
   return (
@@ -59,7 +59,8 @@ function updateAgentsMd(filePath, routingSection, logger) {
       return false // unchanged
     }
     // Replace existing section
-    content = content.slice(0, startIdx) + routingSection + content.slice(endIdx + ROUTING_END.length)
+    content =
+      content.slice(0, startIdx) + routingSection + content.slice(endIdx + ROUTING_END.length)
   } else {
     // Append routing section
     content = content.trimEnd() + '\n\n' + routingSection + '\n'
@@ -77,15 +78,17 @@ function discoverRoutes(api, coordinatorAgent) {
     const agents = config?.agents?.list
     if (Array.isArray(agents) && agents.length > 0) {
       const routes = agents
-        .filter(a => a.id !== coordinatorAgent && Array.isArray(a.skills) && a.skills.length > 0)
-        .map(a => ({ id: a.id, name: a.name || a.id, skills: a.skills }))
+        .filter((a) => a.id !== coordinatorAgent && Array.isArray(a.skills) && a.skills.length > 0)
+        .map((a) => ({ id: a.id, name: a.name || a.id, skills: a.skills }))
       if (routes.length > 0) {
-        api.logger.info(`[coordinator] Auto-discovered ${routes.length} routes from agent configs`)
+        api.logger.debug?.(
+          `[coordinator] Auto-discovered ${routes.length} routes from agent configs`
+        )
         return routes
       }
     }
   } catch (e) {
-    api.logger.warn(`[coordinator] Failed to read agent configs via loadConfig: ${e.message}`)
+    api.logger.warn?.(`[coordinator] Failed to read agent configs via loadConfig: ${e.message}`)
   }
   return null
 }
@@ -108,7 +111,7 @@ export default {
     }
 
     if (routes.length === 0) {
-      api.logger.warn('[coordinator] No routes found (no agents with skills configured)')
+      api.logger.warn?.('[coordinator] No routes found (no agents with skills configured)')
       return
     }
 
@@ -122,10 +125,10 @@ export default {
     const templateAgents = join(ocDir, 'workspace', 'AGENTS.md')
     try {
       if (updateAgentsMd(templateAgents, routingSection, api.logger)) {
-        api.logger.info('[coordinator] Updated template workspace AGENTS.md')
+        api.logger.debug?.('[coordinator] Updated template workspace AGENTS.md')
       }
     } catch (e) {
-      api.logger.warn(`[coordinator] Failed to update template AGENTS.md: ${e.message}`)
+      api.logger.warn?.(`[coordinator] Failed to update template AGENTS.md: ${e.message}`)
     }
 
     // 2. Existing sandboxes for the coordinator agent
@@ -137,13 +140,13 @@ export default {
           if (entry.startsWith(prefix)) {
             const sandboxAgents = join(sandboxesDir, entry, 'AGENTS.md')
             if (updateAgentsMd(sandboxAgents, routingSection, api.logger)) {
-              api.logger.info(`[coordinator] Updated sandbox AGENTS.md: ${entry}`)
+              api.logger.debug?.(`[coordinator] Updated sandbox AGENTS.md: ${entry}`)
             }
           }
         }
       }
     } catch (e) {
-      api.logger.warn(`[coordinator] Failed to update sandbox AGENTS.md files: ${e.message}`)
+      api.logger.warn?.(`[coordinator] Failed to update sandbox AGENTS.md files: ${e.message}`)
     }
 
     // Hook catches new sandboxes created between registration and next restart
@@ -153,13 +156,15 @@ export default {
 
       try {
         if (updateAgentsMd(join(ctx.workspaceDir, 'AGENTS.md'), routingSection, api.logger)) {
-          api.logger.info('[coordinator] Updated AGENTS.md via hook (new sandbox)')
+          api.logger.info?.('[coordinator] Updated AGENTS.md via hook (new sandbox)')
         }
       } catch (e) {
-        api.logger.warn(`[coordinator] Hook failed to update AGENTS.md: ${e.message}`)
+        api.logger.warn?.(`[coordinator] Hook failed to update AGENTS.md: ${e.message}`)
       }
     })
 
-    api.logger.info(`[coordinator] Plugin registered (${routes.length} routes, agent: ${coordinatorAgent})`)
-  }
+    api.logger.debug?.(
+      `[coordinator] Plugin registered (${routes.length} routes, agent: ${coordinatorAgent})`
+    )
+  },
 }
