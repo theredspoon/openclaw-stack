@@ -56,12 +56,9 @@ export PATH="$npm_global/bin:$PATH"
 echo "[entrypoint] npm global prefix set to $npm_global"
 
 # ── 1g. Auto-generate gateway shims from sandbox-toolkit.yaml ──────
-# Skills check bins on the gateway (load-time) AND inside the sandbox (runtime).
-# Shims live inside workspace-code so they're within the sandbox's allowed bind
-# source roots — no separate bind mount needed. Inside sandboxes, workspace-code
-# is mounted at /workspace, so shims appear at /workspace/.skill-bins/.
-# Shims satisfy the gateway preflight check; real binaries live in sandbox images.
-SKILL_BINS="/home/node/.openclaw/workspace-code/.skill-bins"
+# Shims satisfy the gateway's load-time skill binary preflight checks.
+# Real binaries live in sandbox images — shims are gateway-only (not bind-mounted).
+SKILL_BINS="/opt/skill-bins"
 mkdir -p "$SKILL_BINS"
 
 TOOLKIT_CONFIG="/app/deploy/sandbox-toolkit.yaml"
@@ -70,37 +67,26 @@ TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
 if [ -f "$TOOLKIT_CONFIG" ] && [ -f "$TOOLKIT_PARSER" ]; then
   TOOLKIT_JSON=$(node "$TOOLKIT_PARSER" "$TOOLKIT_CONFIG")
 
-  # Generate a shim for each declared binary.
-  # Shims are pass-through: if the real binary exists elsewhere in PATH (i.e. inside
-  # a sandbox where tools are installed), the shim execs it. On the gateway (where only
-  # shims exist), they print an error. This prevents shims from shadowing real binaries
-  # when shims dir is part of the workspace mount.
   for bin in $(echo "$TOOLKIT_JSON" | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).allBins.join(' ')))"); do
     if [ ! -f "$SKILL_BINS/$bin" ]; then
       cat > "$SKILL_BINS/$bin" << 'SHIM'
 #!/bin/sh
-# Auto-generated shim — pass through to real binary if available
-SELF_DIR=$(dirname "$(readlink -f "$0")")
-ORIG_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$SELF_DIR" | tr '\n' ':' | sed 's/:$//')
-REAL=$(PATH="$ORIG_PATH" command -v "$(basename "$0")" 2>/dev/null)
-if [ -n "$REAL" ]; then
-  exec "$REAL" "$@"
-fi
-echo "ERROR: $(basename "$0") is a shim — run inside sandbox" >&2
+# Gateway shim — satisfies preflight check. Real binary is in sandbox image.
+echo "ERROR: $(basename "$0") is a gateway shim — run inside sandbox" >&2
 exit 1
 SHIM
       chmod +x "$SKILL_BINS/$bin"
     fi
   done
-  chown -R 1000:1000 "$SKILL_BINS"
+  # Symlink shims into /usr/local/bin so they're on the default PATH
+  # for all contexts — gateway process, docker exec sessions, openclaw doctor.
+  for shim in "$SKILL_BINS"/*; do
+    bin_name=$(basename "$shim")
+    [ ! -L "/usr/local/bin/$bin_name" ] && ln -sf "$shim" "/usr/local/bin/$bin_name"
+  done
   echo "[entrypoint] Auto-shimmed $(ls "$SKILL_BINS" | wc -l) binaries from sandbox-toolkit.yaml"
 else
   echo "[entrypoint] WARNING: sandbox-toolkit.yaml or parser not found, skipping shim generation"
-fi
-
-# Add to gateway PATH for load-time skill checks
-if ! echo "$PATH" | grep -q '.skill-bins'; then
-  export PATH="$SKILL_BINS:$PATH"
 fi
 
 # ── 2. Start nested Docker daemon (Sysbox provides isolation) ───────

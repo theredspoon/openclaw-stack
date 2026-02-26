@@ -118,7 +118,7 @@ STEP=2
 printf '\033[33m[%d/%d] Regenerating gateway shims...\033[0m\n' "$STEP" "$TOTAL_STEPS"
 
 # Reuses the same shim logic from entrypoint-gateway.sh.
-# Shims live in workspace-code/.skill-bins/ (owned by node, within sandbox allowed roots).
+# Shims are gateway-only (satisfy preflight checks). Real binaries live in sandbox images.
 # Only creates shims for binaries that don't already exist (idempotent).
 # Piped via heredoc to avoid quoting issues with sh -c through SSH + docker exec.
 
@@ -133,7 +133,7 @@ if [ ! -f "$TOOLKIT_CONFIG" ] || [ ! -f "$TOOLKIT_PARSER" ]; then
   echo "  WARNING: toolkit files not found in container"
   exit 0
 fi
-SKILL_BINS="/home/node/.openclaw/workspace-code/.skill-bins"
+SKILL_BINS="/opt/skill-bins"
 mkdir -p "$SKILL_BINS"
 TOOLKIT_JSON=$(node "$TOOLKIT_PARSER" "$TOOLKIT_CONFIG")
 NEW_SHIMS=0
@@ -141,22 +141,20 @@ for bin in $(echo "$TOOLKIT_JSON" | node -e "process.stdin.on('data',d=>console.
   if [ ! -f "$SKILL_BINS/$bin" ]; then
     cat > "$SKILL_BINS/$bin" << 'SHIM'
 #!/bin/sh
-# Auto-generated shim — pass through to real binary if available
-SELF_DIR=$(dirname "$(readlink -f "$0")")
-ORIG_PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$SELF_DIR" | tr '\n' ':' | sed 's/:$//')
-REAL=$(PATH="$ORIG_PATH" command -v "$(basename "$0")" 2>/dev/null)
-if [ -n "$REAL" ]; then
-  exec "$REAL" "$@"
-fi
-echo "ERROR: $(basename "$0") is a shim — run inside sandbox" >&2
+# Gateway shim — satisfies preflight check. Real binary is in sandbox image.
+echo "ERROR: $(basename "$0") is a gateway shim — run inside sandbox" >&2
 exit 1
 SHIM
     chmod +x "$SKILL_BINS/$bin"
     NEW_SHIMS=$((NEW_SHIMS + 1))
   fi
 done
-chown -R 1000:1000 "$SKILL_BINS"
 TOTAL=$(ls "$SKILL_BINS" | wc -l)
+# Symlink into /usr/local/bin so they're on default PATH (docker exec, openclaw doctor)
+for shim in "$SKILL_BINS"/*; do
+  bin_name=$(basename "$shim")
+  [ ! -L "/usr/local/bin/$bin_name" ] && ln -sf "$shim" "/usr/local/bin/$bin_name"
+done
 echo "  $NEW_SHIMS new shims created ($TOTAL total)"
 SHIM_SCRIPT
 fi

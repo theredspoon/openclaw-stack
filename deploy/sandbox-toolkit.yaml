@@ -111,6 +111,9 @@ tools:
   # it to run as the linuxbrew user with HOMEBREW_NO_AUTO_UPDATE=1.
   # /home/linuxbrew/.linuxbrew/bin is on PATH (set in openclaw.json sandbox env).
 
+  yt-dlp:
+    install: brew install yt-dlp
+
   # apt has ffmpeg 5.1 (3 major versions behind) and imagemagick 6.9 (IM6, not IM7)
   ffmpeg:
     install: brew install ffmpeg
@@ -143,6 +146,9 @@ tools:
   # Terminal screen recording — brew gives 3.x (Rust rewrite), apt has 2.2 (old Python version)
   asciinema:
     install: brew install asciinema
+
+  pandoc:
+    install: brew install pandoc
 
   # --- Skills: uv + Python tools ---
   # uv installed via brew; nano-pdf via uv tool install (must come after uv in this file).

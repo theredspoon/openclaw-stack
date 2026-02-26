@@ -50,7 +50,8 @@
         "scope": "agent",
         "workspaceAccess": "rw", // Persistent read/write access to workspace
         "docker": {
-          "image": "openclaw-sandbox:bookworm-slim",
+          // Give all agent sandboxes the full sandbox-toolkit
+          "image": "openclaw-sandbox-toolkit:bookworm-slim",
           "containerPrefix": "openclaw-sbx-",
           "workdir": "/workspace",
           "readOnlyRoot": true,
@@ -59,7 +60,7 @@
             "/var/tmp",
             "/run"
           ],
-          "network": "none", // Disable network access by default; each agent must enable
+          "network": "bridge", // enable network access for all sandboxes by default
           "user": "1000:1000", // Gets mapped to sandbox user - don't change this unless you know what you're doing
           "capDrop": [
             "ALL" // Drop all docker container privileges by default
@@ -74,11 +75,8 @@
             "LANG": "C.UTF-8",
             // Writable HOME inside workspace — persists across sandbox restarts via
             // the workspace bind mount chain (host → gateway .openclaw → sandbox /workspace).
-            // Replaces the old sandboxes-home bind mount approach.
-            "HOME": "/workspace/.home",
-            // Skill-bin shims live in workspace-code/.skill-bins/ on the gateway;
-            // inside sandboxes, workspace-code is mounted at /workspace.
-            "PATH": "/workspace/.skill-bins:/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            // This allows bins that save config files (claude, codex, etc.) to HOME dir to work when readOnlyRoot is enabled
+            "HOME": "/workspace/.home"
           },
           "pidsLimit": 512, // Add fork-bomb protection
           "memory": "2g", // Default agent container RAM - browser containers also inherit this setting
@@ -132,35 +130,8 @@
         "sandbox": {
           // Override default "all" — operator DM runs on host for full filesystem/docker access.
           // Group chats and subagent spawns still get sandboxed.
-          "mode": "non-main",
-          "docker": {
-            // Per-agent binds replace (not merge) defaults — repeat all needed binds
-            "binds": [
-              // Make host-status reports available to any main agent sandbox tool
-              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
-            ]
-          }
+          "mode": "non-main"
         },
-        "skills": [
-          "blogwatcher",
-          "gifgrep",
-          "healthcheck",
-          "himalaya",
-          "nano-pdf",
-          "openai-image-gen",
-          "openai-whisper-api",
-          "oracle",
-          "ordercli",
-          "video-frames",
-          "wacli",
-          "weather"
-        ],
-        // Main runs on host container and gets all the tools by default
-        // "tools": {
-        //   "allow": [
-        //     "sessions_spawn"
-        //   ]
-        // },
         "subagents": {
           "allowAgents": [
             "code"
@@ -182,8 +153,6 @@
         ],
         "sandbox": {
           "docker": {
-            "image": "openclaw-sandbox-toolkit:bookworm-slim", // sandbox-toolkit has the full toolkit bins
-            "network": "bridge", // enable network access for claude code, codex, etc. to work
             "memory": "4g", // Coding tasks need more headroom (claude code, LSPs, builds)
             "memorySwap": "8g",
             "cpus": 4

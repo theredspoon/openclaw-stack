@@ -15,6 +15,7 @@
     "ordercli",
     "pids",
     "reloadable",
+    "tmpfs",
     "urlencode",
     "wacli",
     "webchat",
