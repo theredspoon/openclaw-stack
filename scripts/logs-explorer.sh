@@ -71,6 +71,7 @@ fi
 # ─── Direct mode: SCP + SSH ──────────────────────────────────────────────────
 
 source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/lib/select-claw.sh"
 
 # Common SSH/SCP options (scp uses -P for port, ssh uses -p)
 SSH_COMMON=(-i "${SSH_KEY_PATH}" -o ConnectTimeout=10)
@@ -88,21 +89,12 @@ if [[ -z "$INSTANCE" ]]; then
     exit 1
   }
 
-  COUNT=$(echo "$INSTANCES" | grep -c . || true)
-
-  if [[ "$COUNT" -eq 1 ]]; then
-    INSTANCE="$INSTANCES"
-    printf '\033[33mAuto-detected single claw: %s\033[0m\n' "$INSTANCE"
-  elif [[ "$COUNT" -eq 0 ]]; then
+  if [[ -z "$INSTANCES" ]]; then
     echo "Error: No claw instances found in ${INSTALL_DIR}/instances/" >&2
     exit 1
-  else
-    echo "Error: Multiple claw instances found. Specify which one:" >&2
-    while IFS= read -r inst; do
-      echo "  --instance $inst" >&2
-    done <<< "$INSTANCES"
-    exit 1
   fi
+
+  INSTANCE=$(select_claw "$INSTANCES") || exit 1
 fi
 
 INSTANCE_DIR="${INSTALL_DIR}/instances/${INSTANCE}/.openclaw"

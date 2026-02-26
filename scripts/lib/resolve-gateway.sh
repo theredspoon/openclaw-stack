@@ -6,9 +6,13 @@
 #   1. --instance <name> flag (scanned from arguments)
 #   2. OPENCLAW_INSTANCE env var
 #   3. Auto-detect: list running openclaw-* containers on the VPS;
-#      if exactly one, use it; if zero or multiple, error with guidance.
+#      if exactly one, use it; if multiple, show interactive picker;
+#      if zero, error with guidance.
 #
 # Requires SSH_KEY_PATH, SSH_PORT, SSH_USER, VPS1_IP to be set (from openclaw-config.env).
+
+# shellcheck source=select-claw.sh
+source "$(dirname "${BASH_SOURCE[0]}")/select-claw.sh"
 
 resolve_gateway() {
   local instance=""
@@ -45,23 +49,17 @@ resolve_gateway() {
     | grep -v '^openclaw-sbx-' \
     || true)
 
-  local count
-  count=$(echo "$containers" | grep -c . || true)
-
-  if [[ "$count" -eq 1 ]]; then
-    echo "" >&2
-    echo "Auto-detected single claw: ${containers#openclaw-}" >&2
-    echo "$containers"
-    return 0
-  elif [[ "$count" -eq 0 ]]; then
+  if [[ -z "$containers" ]]; then
     echo "Error: No OpenClaw gateway containers running." >&2
     echo "  Start with: openclaw-multi.sh start" >&2
     return 1
-  else
-    echo "Error: Multiple OpenClaw gateway containers running. Specify which one:" >&2
-    while IFS= read -r c; do
-      echo "  --instance ${c#openclaw-}" >&2
-    done <<< "$containers"
-    return 1
   fi
+
+  # Strip openclaw- prefix for the picker, then re-add it
+  local names
+  names=$(echo "$containers" | sed 's/^openclaw-//')
+
+  local selected
+  selected=$(select_claw "$names") || return 1
+  echo "openclaw-${selected}"
 }
