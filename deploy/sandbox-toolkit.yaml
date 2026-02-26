@@ -143,6 +143,10 @@ tools:
   goplaces:
     install: brew install steipete/tap/goplaces
 
+  # Google workspace CLI: Gmail, Calendar, Docs, etc.
+  gog:
+    install: brew install steipete/tap/gogcli
+
   # Terminal screen recording — brew gives 3.x (Rust rewrite), apt has 2.2 (old Python version)
   asciinema:
     install: brew install asciinema
