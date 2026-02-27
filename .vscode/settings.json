@@ -22,6 +22,6 @@
     "websockify"
   ],
   "files.associations": {
-    "openclaws/_defaults/openclaw.json": "jsonc"
+    "openclaw.json": "jsonc"
   }
 }
