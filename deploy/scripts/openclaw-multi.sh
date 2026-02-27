@@ -302,6 +302,8 @@ HEADER
       - OPENCLAW_GATEWAY_PORT=${gw_port}
       # Unique mDNS hostname per claw (avoids Bonjour hostname conflicts)
       - OPENCLAW_MDNS_HOSTNAME=${name}
+      # In-container auto-updates (opt-in per claw via config.env)
+      - ALLOW_OPENCLAW_UPDATES=\${${prefix}_ALLOW_OPENCLAW_UPDATES:-\${ALLOW_OPENCLAW_UPDATES:-false}}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${gw_port}/"]
 
@@ -352,7 +354,8 @@ generate_env() {
     # Check for key presence (not value emptiness) so explicit empty overrides work
     local var_value
     for var in GATEWAY_CPUS GATEWAY_MEMORY AI_GATEWAY_AUTH_TOKEN AI_GATEWAY_WORKER_URL \
-               OPENCLAW_TELEGRAM_BOT_TOKEN OPENCLAW_DASHBOARD_DOMAIN_PATH OPENCLAW_DOMAIN_PATH; do
+               OPENCLAW_TELEGRAM_BOT_TOKEN OPENCLAW_DASHBOARD_DOMAIN_PATH OPENCLAW_DOMAIN_PATH \
+               ALLOW_OPENCLAW_UPDATES; do
       if grep -qE "^${var}=" "$instance_config" 2>/dev/null; then
         var_value=$(grep -E "^${var}=" "$instance_config" | cut -d= -f2- || true)
         local target_var="${prefix}_${var}"
@@ -362,6 +365,7 @@ generate_env() {
           GATEWAY_MEMORY)  target_var="${prefix}_MEMORY" ;;
           OPENCLAW_TELEGRAM_BOT_TOKEN) target_var="${prefix}_TELEGRAM_BOT_TOKEN" ;;
           OPENCLAW_DASHBOARD_DOMAIN_PATH) target_var="${prefix}_DASHBOARD_BASE_PATH" ;;
+          ALLOW_OPENCLAW_UPDATES) target_var="${prefix}_ALLOW_OPENCLAW_UPDATES" ;;
           *) target_var="${prefix}_${var}" ;;
         esac
         instance_section+="${target_var}=${var_value}"$'\n'

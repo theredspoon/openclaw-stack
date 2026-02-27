@@ -3,8 +3,8 @@
 // Ported from openclaw-dashboard/refresh.sh (Python). Zero dependencies.
 // Exports getData() with a 30-second debounce cache.
 
-import { readFileSync, readdirSync } from 'node:fs'
-import { execFile } from 'node:child_process'
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { execFile, execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import JSON5 from 'json5'
 
@@ -387,14 +387,11 @@ function parseTokens(knownSids, sidToKey, today, d7, d30) {
 
 // ── Version ──────────────────────────────────────────────────────────
 
-let cachedVersion = null
+// Always read live from package.json so in-container updates are detected
 function getVersion() {
-  if (cachedVersion) return cachedVersion
   try {
-    const pkg = JSON.parse(readFileSync('/app/package.json', 'utf8'))
-    cachedVersion = pkg.version || '—'
-  } catch { cachedVersion = '—' }
-  return cachedVersion
+    return JSON.parse(readFileSync('/app/package.json', 'utf8')).version || '—'
+  } catch { return '—' }
 }
 
 // ── Gateway health ───────────────────────────────────────────────────
@@ -463,17 +460,37 @@ function fmtUptime(ms) {
 
 // ── Git log ──────────────────────────────────────────────────────────
 
+function parseGitInfo(content) {
+  const now = Date.now()
+  return content.split('\n').filter(l => l.includes('\t')).map(l => {
+    const parts = l.split('\t')
+    const hash = parts[0]
+    const message = parts.slice(1, -1).join('\t')
+    const dateStr = parts[parts.length - 1]
+    return { hash, message, ago: relTime(now - new Date(dateStr).getTime()) }
+  })
+}
+
 function getGit() {
+  const version = getVersion()
+  const cacheFile = `/app/.git-info-${version}`
+
+  // 1. Try versioned cache (written by entrypoint or previous dashboard run)
   try {
-    const content = readFileSync('/app/.git-info', 'utf8')
-    const now = Date.now()
-    return content.split('\n').filter(l => l.includes('\t')).map(l => {
-      const parts = l.split('\t')
-      const hash = parts[0]
-      const message = parts.slice(1, -1).join('\t')
-      const dateStr = parts[parts.length - 1]
-      return { hash, message, ago: relTime(now - new Date(dateStr).getTime()) }
-    })
+    return parseGitInfo(readFileSync(cacheFile, 'utf8'))
+  } catch { /* no cache */ }
+
+  // 2. Try live git (available when ALLOW_OPENCLAW_UPDATES=true)
+  try {
+    const out = execFileSync('git', ['log', '--format=%h%x09%s%x09%aI', '-50'], { cwd: '/app', timeout: 5000 }).toString()
+    // Cache for next time
+    try { writeFileSync(cacheFile, out) } catch { /* read-only fs */ }
+    return parseGitInfo(out)
+  } catch { /* no .git */ }
+
+  // 3. Fallback: legacy .git-info (pre-update builds)
+  try {
+    return parseGitInfo(readFileSync('/app/.git-info', 'utf8'))
   } catch { return [] }
 }
 

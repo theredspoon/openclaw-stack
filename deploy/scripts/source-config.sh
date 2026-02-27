@@ -52,6 +52,8 @@ fi
 
 # ── Defaults (all VPS paths derive from INSTALL_DIR) ──
 INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-stable}"
+ALLOW_OPENCLAW_UPDATES="${ALLOW_OPENCLAW_UPDATES:-false}"
 VPS_INSTANCES_DIR="${INSTALL_DIR}/instances"
 STAGING_DIR="${INSTALL_DIR}/.deploy-staging"
 
