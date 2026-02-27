@@ -159,8 +159,9 @@
     <div style="display:flex;flex-wrap:wrap;gap:5px" id="skillsGrid"></div>
   </div>
   <div class="glass panel">
-    <div class="section-header"><span class="section-title">📜 Git Log</span></div>
+    <div class="section-header"><a href="" id="changelogLink" style="text-decoration:none"><span class="section-title">📜 Changelog <span id="clVersion"></span></span></a></div>
     <div id="gitPanel"></div>
+    <div style="margin-top:8px;text-align:right"><a href="" id="changelogLink2" style="color:var(--accent);font-size:12px;font-weight:500;text-decoration:none">View Details →</a></div>
   </div>
 </div>
 
@@ -235,6 +236,8 @@ let D={},prevD=null,prevChartDays=null,prevUTab=null,prevSrTab=null,prevStTab=nu
 const COLORS=['#6366f1','#9333ea','#ec4899','#f59e0b','#10b981','#06b6d4','#f87171','#84cc16'];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const BASE=window.__DASHBOARD_BASE||'';
+{const cl=$('changelogLink');if(cl)cl.href=BASE+'/changelog';const cl2=$('changelogLink2');if(cl2)cl2.href=BASE+'/changelog';}
 
 function sectionChanged(keys){
   if(!prevD)return true;
@@ -291,6 +294,7 @@ function render(){
   $('hGw').innerHTML=on?'<span style="color:var(--green)">●</span> Online':'<span style="color:var(--red)">●</span> Offline';
   $('hGw').style.color='var(--textStrong)';
   $('hVer').textContent=D.version||'—';
+  {const cv=$('clVersion');if(cv)cv.textContent=D.version||'';}
   $('hUp').textContent=gw.uptime||'—';
   $('hMem').textContent=gw.memoryLimit||gw.memory||'—';
   $('hComp').textContent=D.compactionMode||'—';
