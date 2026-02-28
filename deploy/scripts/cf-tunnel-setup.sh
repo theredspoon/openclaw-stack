@@ -3,11 +3,9 @@ set -euo pipefail
 
 # cf-tunnel-setup.sh — Automated Cloudflare Tunnel configuration via API
 #
-# Always-multi-claw: discovers all claws from openclaws/*/ and configures
-# tunnel ingress + DNS for each. No single-instance fallback.
-#
-# Uses CF_API_TOKEN to create/manage tunnels, configure ingress routes,
-# and create DNS CNAME records. Runs locally (not on VPS).
+# Discovers claws from .deploy/stack.json and configures tunnel ingress + DNS
+# for each. Uses CF_API_TOKEN to create/manage tunnels, configure ingress
+# routes, and create DNS CNAME records. Runs locally (not on VPS).
 #
 # Usage: cf-tunnel-setup.sh <command> [args]
 #
@@ -28,11 +26,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/source-config.sh"
 
-# TODO: This script needs a full rewrite to discover claws from stack.json
-# instead of the removed openclaws/ directory. For now, set compatibility vars.
 CF_API_TOKEN="${ENV__CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
 CF_TUNNEL_TOKEN="${ENV__CLOUDFLARE_TUNNEL_TOKEN:-${CF_TUNNEL_TOKEN:-}}"
 INSTALL_DIR="${STACK__STACK__INSTALL_DIR:-}"
+
+# stack.json is the source of truth for claw configs
+if [ "$OPENCLAW_CONTEXT" = "local" ]; then
+  STACK_JSON="${REPO_ROOT}/.deploy/stack.json"
+else
+  STACK_JSON="$(dirname "$SCRIPT_DIR")/stack.json"
+fi
+[ -f "$STACK_JSON" ] || { echo "Error: stack.json not found at $STACK_JSON. Run 'bun run pre-deploy'." >&2; exit 1; }
 
 CF_API_BASE="https://api.cloudflare.com/client/v4"
 
@@ -103,23 +107,15 @@ extract_tunnel_id_from_token() {
   echo "$decoded" | jq -r '.t // empty'
 }
 
-# Discover active claws (same logic as openclaw-multi.sh)
-discover_instances() {
-  [ -d "$INSTANCES_DIR" ] || return
-  for dir in "$INSTANCES_DIR"/*/; do
-    [ -d "$dir" ] || continue
-    local name
-    name=$(basename "$dir")
-    [[ "$name" == _* ]] && continue
-    [ -f "$dir/config.env" ] || continue
-    echo "$name"
-  done | sort
+# Discover claws from stack.json
+discover_claws() {
+  jq -r '.claws | keys[]' "$STACK_JSON" 2>/dev/null | sort
 }
 
-# Get config value from a config file
-get_config_val() {
-  local file="$1" key="$2"
-  grep -E "^${key}=" "$file" 2>/dev/null | cut -d= -f2- | tr -d '"' || true
+# Get claw config value from stack.json
+get_claw_val() {
+  local claw="$1" key="$2"
+  jq -r --arg c "$claw" --arg k "$key" '.claws[$c][$k] // empty' "$STACK_JSON"
 }
 
 # Warn about 3rd-level subdomain SSL issues
@@ -168,11 +164,12 @@ cmd_verify() {
     echo "WARNING: Cannot list tunnels. Token may lack 'Account > Cloudflare Tunnel > Edit' permission." >&2
   fi
 
-  # Test DNS permissions (need a zone to check — use OPENCLAW_DOMAIN if available)
-  local config_env="${CONFIG_ENV_PATH}"
-  if [ -f "$config_env" ]; then
+  # Test DNS permissions — use first claw's domain from stack.json
+  local first_claw
+  first_claw=$(discover_claws | head -1)
+  if [ -n "$first_claw" ]; then
     local domain
-    domain=$(get_config_val "$config_env" "OPENCLAW_DOMAIN")
+    domain=$(get_claw_val "$first_claw" "domain")
     if [ -n "$domain" ] && [[ "$domain" != *"<"* ]]; then
       local root_domain
       root_domain=$(extract_root_domain "$domain")
@@ -286,15 +283,6 @@ cmd_setup_routes() {
     esac
   done
 
-  local config_env="${CONFIG_ENV_PATH}"
-  [ -f "$config_env" ] || die "config env file not found"
-
-  # Load shared config
-  set -a
-  # shellcheck disable=SC1090
-  source "$config_env"
-  set +a
-
   local account_id
   account_id=$(get_account_id)
   [ -n "$account_id" ] || die "No accounts accessible"
@@ -309,54 +297,41 @@ cmd_setup_routes() {
   header "Configuring Tunnel Routes"
   info "Tunnel ID: ${tunnel_id}"
 
-  # Discover claws to configure
+  # Discover claws from stack.json
   local -a claw_names=()
   if [ -n "$target_instance" ]; then
     claw_names+=("$target_instance")
   else
     local discovered
-    discovered=$(discover_instances)
-    [ -n "$discovered" ] || die "No active claws found in ${INSTANCES_DIR}/"
+    discovered=$(discover_claws)
+    [ -n "$discovered" ] || die "No claws found in stack.json"
     while IFS= read -r name; do
       claw_names+=("$name")
     done <<< "$discovered"
   fi
 
-  # Collect configs for all claws using parallel indexed arrays (Bash 3.2 compatible)
+  # Collect configs for all claws from stack.json
   local _domains="" _dash_domains="" _dash_paths="" _gw_ports="" _dash_ports="" _tunnel_ids=""
 
   local idx=0
   for name in "${claw_names[@]}"; do
-    local inst_config="${INSTANCES_DIR}/${name}/config.env"
-    [ -f "$inst_config" ] || die "Claw config not found: ${inst_config}"
+    local domain dash_path gw_port dash_port
+    domain=$(get_claw_val "$name" "domain")
+    dash_path=$(get_claw_val "$name" "dashboard_path")
 
-    # Load layered config (shared + claw-specific)
-    set -a
-    source "$config_env"
-    source "$inst_config"
-    set +a
+    # Dashboard domain is same as gateway domain (path-based routing)
+    _domains="${_domains}${_domains:+$'\n'}${domain}"
+    _dash_domains="${_dash_domains}${_dash_domains:+$'\n'}${domain}"
+    _dash_paths="${_dash_paths}${_dash_paths:+$'\n'}${dash_path:- }"
 
-    _domains="${_domains}${_domains:+$'\n'}${OPENCLAW_DOMAIN:-}"
-    _dash_domains="${_dash_domains}${_dash_domains:+$'\n'}${OPENCLAW_DASHBOARD_DOMAIN:-}"
-    _dash_paths="${_dash_paths}${_dash_paths:+$'\n'}${OPENCLAW_DASHBOARD_DOMAIN_PATH:- }"
-
-    # Check for explicit port assignments
-    local gw_port dash_port
-    gw_port=$(get_config_val "$inst_config" "INSTANCE_GATEWAY_PORT")
-    dash_port=$(get_config_val "$inst_config" "INSTANCE_DASHBOARD_PORT")
+    gw_port=$(get_claw_val "$name" "gateway_port")
+    dash_port=$(get_claw_val "$name" "dashboard_port")
     [ -z "$gw_port" ] && gw_port=$((18789 + idx))
     [ -z "$dash_port" ] && dash_port=$((6090 + idx))
     _gw_ports="${_gw_ports}${_gw_ports:+$'\n'}${gw_port}"
     _dash_ports="${_dash_ports}${_dash_ports:+$'\n'}${dash_port}"
 
-    # Per-claw tunnel override
-    local inst_tunnel_token
-    inst_tunnel_token=$(get_config_val "$inst_config" "CF_TUNNEL_TOKEN")
-    if [ -n "$inst_tunnel_token" ]; then
-      _tunnel_ids="${_tunnel_ids}${_tunnel_ids:+$'\n'}$(extract_tunnel_id_from_token "$inst_tunnel_token")"
-    else
-      _tunnel_ids="${_tunnel_ids}${_tunnel_ids:+$'\n'}${tunnel_id}"
-    fi
+    _tunnel_ids="${_tunnel_ids}${_tunnel_ids:+$'\n'}${tunnel_id}"
 
     idx=$((idx + 1))
   done
