@@ -22,10 +22,10 @@ Collect the following values and present them in a single, neatly formatted repo
 2. **Per-claw gateway tokens** — read from container env var (NOT openclaw.json):
 
    ```bash
-   CLAWS=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+   CLAWS=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
      "sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort")
    for CLAW in $CLAWS; do
-     TOKEN=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+     TOKEN=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
        "sudo docker exec --user node $CLAW printenv OPENCLAW_GATEWAY_TOKEN")
      echo "$CLAW: $TOKEN"
    done
@@ -57,7 +57,7 @@ Output the report using exactly this structure:
 ## OpenClaw Deployment Report
 
 **Date:** <current date>
-**VPS IP:** <VPS1_IP>
+**VPS IP:** <VPS_IP>
 **Domain:** <OPENCLAW_DOMAIN>
 
 ---
@@ -76,7 +76,7 @@ Output the report using exactly this structure:
 ### SSH Access
 
 \`\`\`bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP>
 \`\`\`
 
 ---

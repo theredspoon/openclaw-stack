@@ -4,30 +4,23 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="${SCRIPT_DIR}/../openclaw-config.env"
+source "$SCRIPT_DIR/../.deploy/source-config.sh"
 
-if [[ ! -f "$CONFIG" ]]; then
-  echo "Error: openclaw-config.env not found at $CONFIG" >&2
-  exit 1
-fi
+: "${ENV__VPS_IP:?ENV__VPS_IP not set in stack.env}"
+: "${ENV__SSH_KEY:=~/.ssh/vps1_openclaw_ed25519}"
+: "${ENV__SSH_USER:=ubuntu}"
+: "${ENV__SSH_PORT:=22}"
 
-source "$CONFIG"
+# Expand ~ in SSH key path
+ENV__SSH_KEY="${ENV__SSH_KEY/#\~/$HOME}"
 
-: "${VPS1_IP:?VPS1_IP not set in openclaw-config.env}"
-: "${SSH_KEY_PATH:=~/.ssh/vps1_openclaw_ed25519}"
-: "${SSH_USER:=ubuntu}"
-: "${SSH_PORT:=22}"
-
-# Expand ~ in SSH_KEY_PATH
-SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
-
-echo "Removing $VPS1_IP from known_hosts (all ports)..."
-ssh-keygen -R "$VPS1_IP" 2>/dev/null || true
-ssh-keygen -R "[$VPS1_IP]:$SSH_PORT" 2>/dev/null || true
+echo "Removing $ENV__VPS_IP from known_hosts (all ports)..."
+ssh-keygen -R "$ENV__VPS_IP" 2>/dev/null || true
+ssh-keygen -R "[$ENV__VPS_IP]:$ENV__SSH_PORT" 2>/dev/null || true
 
 echo ""
-echo "Connecting to $SSH_USER@$VPS1_IP:$SSH_PORT"
+echo "Connecting to $ENV__SSH_USER@$ENV__VPS_IP:$ENV__SSH_PORT"
 echo "You will be prompted to confirm the new host key fingerprint."
 echo ""
 
- TERM=xterm-256color exec ssh -t -i "$SSH_KEY_PATH" -p "$SSH_PORT" "$SSH_USER@$VPS1_IP"
+ TERM=xterm-256color exec ssh -t -i "$ENV__SSH_KEY" -p "$ENV__SSH_PORT" "$ENV__SSH_USER@$ENV__VPS_IP"

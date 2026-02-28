@@ -39,7 +39,7 @@ The proxy reads this file on every request (no caching needed — the file is ti
 
 ## URL Configuration
 
-The dashboard URL is configured via two variables in `openclaw-config.env`:
+The dashboard URL is configured per-claw in `stack.yml` under `claws.<name>.domain` and `claws.<name>.dashboard_path`:
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
@@ -188,7 +188,7 @@ This avoids the concurrency problems of a shared browser sidecar approach.
 2. Click your tunnel → **Configure** → **Public Hostname** tab
 3. Add a new public hostname pointing to `http://localhost:6090` (see "Cloudflare Tunnel Route" above for subdomain vs subpath options)
 4. Add a Cloudflare Access policy to restrict who can view browser sessions
-5. Set `OPENCLAW_DASHBOARD_DOMAIN` and `OPENCLAW_DASHBOARD_DOMAIN_PATH` in `openclaw-config.env` to match your chosen URL
+5. Set the domain and dashboard path in `stack.yml` under `claws.<name>` to match your chosen URL
 
 ### Verification
 

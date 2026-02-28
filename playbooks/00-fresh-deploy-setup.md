@@ -131,7 +131,7 @@ If multiple claws are found, inform the user:
 2. Test SSH connectivity using values from `.env` (`SSH_USER`, `SSH_PORT`):
 
 ```bash
-ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_USER>@<VPS1_IP> echo "VPS OK"
+ssh -i <SSH_KEY> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_USER>@<VPS_IP> echo "VPS OK"
 ```
 
 **If SSH fails — diagnose by error type:**
@@ -151,7 +151,7 @@ ssh -i <SSH_KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p <SSH_PORT> <SSH_U
 > stale entry:"
 
 ```bash
-ssh-keygen -R <VPS1_IP>
+ssh-keygen -R <VPS_IP>
 ```
 
 Then retry the SSH test.
@@ -160,9 +160,9 @@ Then retry the SSH test.
 
 > "SSH key authentication failed. Possible causes:
 >
-> - The key at `<SSH_KEY_PATH>` wasn't added to the VPS during provisioning
-> - The key file doesn't exist — check: `ls -la <SSH_KEY_PATH>`
-> - The SSH agent doesn't have the key loaded — try: `ssh-add <SSH_KEY_PATH>`"
+> - The key at `<SSH_KEY>` wasn't added to the VPS during provisioning
+> - The key file doesn't exist — check: `ls -la <SSH_KEY>`
+> - The SSH agent doesn't have the key loaded — try: `ssh-add <SSH_KEY>`"
 
 ---
 
@@ -173,7 +173,7 @@ After SSH is confirmed working, query the VPS hardware to verify gateway contain
 ### Query VPS Resources
 
 ```bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> "nproc && free -b | awk '/^Mem:/{print \$2}'"
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> "nproc && free -b | awk '/^Mem:/{print \$2}'"
 ```
 
 This returns two lines: CPU count (e.g., `6`) and total memory in bytes (e.g., `11811160064`).

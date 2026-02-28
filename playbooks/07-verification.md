@@ -39,7 +39,7 @@ sudo reboot
 Wait 1-2 minutes for VPS-1 to come back online, then verify SSH access:
 
 ```bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> -o ConnectTimeout=10 adminclaw@<VPS1_IP> "echo 'VPS-1 online'"
+ssh -i <SSH_KEY> -p <SSH_PORT> -o ConnectTimeout=10 adminclaw@<VPS_IP> "echo 'VPS-1 online'"
 ```
 
 **If VPS doesn't come back after 3-4 minutes:**
@@ -101,7 +101,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 
 ## 7.2 Verify Vector (Log Shipping)
 
-> **Skip this section** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+> **Skip this section** if `stack.logging.vector` is `false`.
 
 ```bash
 # Check Vector is running (part of main compose project)
@@ -122,7 +122,7 @@ sudo ls -la <INSTALL_DIR>/vector/data/
 
 ### Log Receiver Worker
 
-> **Skip** Log Receiver verification if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+> **Skip** Log Receiver verification if `stack.logging.vector` is `false`.
 
 ```bash
 # Health check (no auth required)
@@ -182,7 +182,7 @@ sudo journalctl -u cloudflared --no-pager | tail -20
 sudo ufw status | grep 443 || echo "Port 443 not in UFW (correct)"
 
 # Verify direct IP access fails
-curl -sk --connect-timeout 5 https://<VPS1_IP>/ || echo "Direct access blocked (expected)"
+curl -sk --connect-timeout 5 https://<VPS_IP>/ || echo "Direct access blocked (expected)"
 ```
 
 **Expected:** cloudflared active, no auth errors in logs, port 443 closed, direct IP blocked.
@@ -248,9 +248,9 @@ done
 ```bash
 # From LOCAL machine: confirm claw ports aren't externally reachable
 for CLAW in $CLAWS; do
-  PORT=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+  PORT=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
     "sudo docker port $CLAW 2>/dev/null | grep -oP '0\.0\.0\.0:\K\d+' | head -1")
-  nc -zv -w 5 <VPS1_IP> $PORT 2>&1 || echo "Port $PORT not reachable (expected)"
+  nc -zv -w 5 <VPS_IP> $PORT 2>&1 || echo "Port $PORT not reachable (expected)"
 done
 ```
 
@@ -280,12 +280,12 @@ openclaw doctor --deep
 - [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
 - [ ] UFW enabled (SSH only), port 443 closed
 - [ ] Fail2ban running, cloudflared active
-- [ ] OpenClaw claws + Sysbox running (+ Vector if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+- [ ] OpenClaw claws + Sysbox running (+ Vector if `stack.logging.vector=true`)
 - [ ] Backup + host alerter + maintenance checker cron jobs configured
 - [ ] Host status JSON files written and readable from agent sandbox
 - [ ] Sandbox toolkit: all binaries from `sandbox-toolkit.yaml` operational in sandbox container
 - [ ] Container ports localhost-only, pids_limit set, resource limits match VPS
-- [ ] AI Gateway Worker responding (+ Log Receiver if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+- [ ] AI Gateway Worker responding (+ Log Receiver if `stack.logging.vector=true`)
 - [ ] Security audit: 0 critical/warnings; Doctor: lan warning only
 
 ---
@@ -514,7 +514,7 @@ bun run pre-deploy
 cd .deploy && git add -A && git commit -m "Update resource limits" && git push
 
 # On VPS: pull and recreate containers with new limits
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && git pull && docker compose up -d'"
 ```
 
@@ -654,9 +654,9 @@ Deployment is complete when:
 
 1. VPS-1 accessible via SSH on port `<SSH_PORT>`
 2. OpenClaw claws responding on localhost (internal health check)
-3. Vector running and shipping logs (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+3. Vector running and shipping logs (if `stack.logging.vector=true`)
 4. Cloudflare Workers responding to health checks
-5. Container logs appearing in Cloudflare Workers dashboard (if `ENABLE_VECTOR_LOG_SHIPPING=true`)
+5. Container logs appearing in Cloudflare Workers dashboard (if `stack.logging.vector=true`)
 6. Cloudflare Tunnel running and domain protected by Cloudflare Access (302/403 on unauthenticated curl)
 7. Backup cron job configured on VPS-1
 8. Host alerter and maintenance checker cron jobs configured on VPS-1

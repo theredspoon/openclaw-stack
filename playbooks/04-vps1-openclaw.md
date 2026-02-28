@@ -178,10 +178,8 @@ To add a new skill to an agent, add it to the agent's `skills` array in `opencla
 Builds the Docker image and starts containers. Multi-claw deployments start only the first claw for sandbox builds; single-claw starts everything.
 
 ```bash
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
-  "env INSTALL_DIR='${INSTALL_DIR}' \
-    ENABLE_VECTOR_LOG_SHIPPING='${ENABLE_VECTOR_LOG_SHIPPING}' \
-  bash ${INSTALL_DIR}/.deploy-staging/scripts/start-claws.sh"
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
+  "bash ${INSTALL_DIR}/.deploy-staging/scripts/start-claws.sh"
 ```
 
 Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from stdout.
@@ -227,7 +225,7 @@ echo "READY"
 2. **Poll for progress every 30 seconds** from the main context. Each poll is a lightweight SSH command:
 
 ```bash
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "sudo docker logs ${FIRST_CLAW} 2>&1 | grep '\[entrypoint\]' | tail -1"
 ```
 
@@ -260,7 +258,7 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
 Runs all verification checks across every running claw: sandbox images, binaries, permissions, health endpoints. Discovers containers and ports dynamically.
 
 ```bash
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "env OPENCLAW_DOMAIN_PATH='${OPENCLAW_DOMAIN_PATH}' \
   bash ${INSTALL_DIR}/.deploy-staging/scripts/verify-deployment.sh"
 ```
@@ -294,7 +292,7 @@ After the gateway is running and healthy, register the cron jobs defined in `dep
 Run the registration script on the VPS (it was copied during the `scp` in section 4.2 Step 1):
 
 ```bash
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "env HOSTALERT_TELEGRAM_CHAT_ID='${HOSTALERT_TELEGRAM_CHAT_ID}' \
   bash ${INSTALL_DIR}/.deploy-staging/scripts/register-cron-jobs.sh"
 ```
@@ -415,7 +413,7 @@ sudo docker logs --tail 10 vector
 Staging contains deploy artifacts and scripts. Remove it now that all steps are complete.
 
 ```bash
-ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT} ${SSH_USER}@${VPS1_IP} \
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "sudo rm -rf ${INSTALL_DIR}/.deploy-staging"
 ```
 
@@ -531,7 +529,7 @@ OPENCLAW_IMAGE=$(grep '^OPENCLAW_IMAGE=' <INSTALL_DIR>/deploy/.env | cut -d= -f2
 
 # 1. Tag current state for rollback
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git tag -f pre-update'
-docker tag "${OPENCLAW_IMAGE}" "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" 2>/dev/null || true
+docker tag "${STACK__STACK__IMAGE}" "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" 2>/dev/null || true
 
 # 2. Review changes before applying
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git fetch origin main && git log --oneline HEAD..origin/main'
@@ -571,7 +569,7 @@ OPENCLAW_IMAGE=$(grep '^OPENCLAW_IMAGE=' <INSTALL_DIR>/deploy/.env | cut -d= -f2
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git checkout pre-update'
 
 # 2. Restore the previous Docker image
-docker tag "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" "${OPENCLAW_IMAGE}"
+docker tag "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" "${STACK__STACK__IMAGE}"
 
 # 3. Recreate containers with the old image
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'

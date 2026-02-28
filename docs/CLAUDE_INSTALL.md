@@ -31,7 +31,7 @@ Ask the user for:
 1. **VPS IP address** — validate it looks like a valid IPv4 address
 2. **Root username** — the initial SSH user from the provider (commonly `root`, `ubuntu`, or `debian`)
 
-Save these as `VPS1_IP` and `SSH_USER`.
+Save these as `VPS_IP` and `SSH_USER`.
 
 ### 1.3 SSH Access Setup
 
@@ -50,7 +50,7 @@ ls -la ~/.ssh/*.pub 2>/dev/null
 1. Try to connect:
 
 ```bash
-ssh -i <KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS1_IP> echo "SSH OK"
+ssh -i <KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS_IP> echo "SSH OK"
 ```
 
 1. **If it works:** Check if the key is already loaded in the SSH agent:
@@ -59,7 +59,7 @@ ssh -i <KEY_PATH> -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS1_I
 ssh-add -l
 ```
 
-If the key's fingerprint or path appears in the output, it's already loaded — save `SSH_KEY_PATH` and move on.
+If the key's fingerprint or path appears in the output, it's already loaded — save `SSH_KEY` and move on.
 
 If the key is **not** listed, ask the user to add it themselves:
 
@@ -72,14 +72,14 @@ If the key is **not** listed, ask the user to add it themselves:
 >
 > Let me know when you've done that.
 
-After they confirm, verify by running `ssh-add -l` again. If the key now appears, save `SSH_KEY_PATH` and move on. If it still doesn't appear, help them troubleshoot (wrong path, agent not running, etc.).
+After they confirm, verify by running `ssh-add -l` again. If the key now appears, save `SSH_KEY` and move on. If it still doesn't appear, help them troubleshoot (wrong path, agent not running, etc.).
 
 1. **If it fails:** Work with the user to debug:
    - **"Connection refused" / "Connection timed out"** — VPS might not be running, IP might be wrong, or provider firewall is blocking. Ask them to check their provider dashboard.
    - **"Host key verification failed"** — They may have reinstalled the VPS or reused an IP. Offer to clear it:
 
      ```bash
-     ssh-keygen -R <VPS1_IP>
+     ssh-keygen -R <VPS_IP>
      ```
 
    - **"Permission denied (publickey)"** — Wrong key, key not added to VPS, or wrong user. Help them troubleshoot:
@@ -99,7 +99,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/vps1_openclaw_ed25519 -C "openclaw-vps" -N ""
 1. Copy the public key to the VPS using password auth:
 
 ```bash
-ssh-copy-id -i ~/.ssh/vps1_openclaw_ed25519.pub -p 22 <SSH_USER>@<VPS1_IP>
+ssh-copy-id -i ~/.ssh/vps1_openclaw_ed25519.pub -p 22 <SSH_USER>@<VPS_IP>
 ```
 
 The user will be prompted for their VPS password. Tell them to enter it when asked.
@@ -107,7 +107,7 @@ The user will be prompted for their VPS password. Tell them to enter it when ask
 1. Verify passwordless access works:
 
 ```bash
-ssh -i ~/.ssh/vps1_openclaw_ed25519 -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS1_IP> echo "SSH OK"
+ssh -i ~/.ssh/vps1_openclaw_ed25519 -o ConnectTimeout=10 -o BatchMode=yes -p 22 <SSH_USER>@<VPS_IP> echo "SSH OK"
 ```
 
 1. Check if the key is already in the SSH agent:
@@ -129,7 +129,7 @@ If the key is **not** listed, ask the user to add it in a **separate terminal wi
 
 After they confirm, verify with `ssh-add -l` again.
 
-1. Save `SSH_KEY_PATH=~/.ssh/vps1_openclaw_ed25519`.
+1. Save `SSH_KEY=~/.ssh/vps1_openclaw_ed25519`.
 
 **If ssh-copy-id fails** (some providers disable password auth by default), tell the user:
 
@@ -430,9 +430,9 @@ Save as `HOSTALERT_DAILY_REPORT_TIME` (keep the user's original phrasing, e.g., 
 
 At this point you should have collected all required values:
 
-- `VPS1_IP`
+- `VPS_IP`
 - `SSH_USER`
-- `SSH_KEY_PATH`
+- `SSH_KEY`
 - `CF_TUNNEL_TOKEN`
 - `OPENCLAW_DOMAIN`
 - `OPENCLAW_DASHBOARD_DOMAIN`
@@ -465,39 +465,34 @@ git clone https://github.com/simple10/openclaude.git openclaw-vps && cd openclaw
 
 If the clone fails (private repo), ask the user if they have access and help them authenticate with GitHub.
 
-### 5.3 Create Config File
+### 5.3 Create Config Files
 
 ```bash
-cp openclaw-config.env.example openclaw-config.env
+cp .env.example .env && cp stack.yml.example stack.yml
 ```
 
 ### 5.4 Populate Config
 
-Write the collected values into `openclaw-config.env`. Use the Edit tool to set each value:
+Write the collected values into `.env`. Use the Edit tool to set each value:
 
 ```
-VPS1_IP=<collected value>
-SSH_KEY_PATH=<collected value>
+VPS_IP=<collected value>
+SSH_KEY=<collected value>
 SSH_USER=<collected value>
 SSH_PORT=22
-CF_TUNNEL_TOKEN=<collected value>
-YOUR_TELEGRAM_ID=<collected value>
-OPENCLAW_TELEGRAM_BOT_TOKEN=<collected value>
+CLOUDFLARE_TUNNEL_TOKEN=<collected value>
+ADMIN_TELEGRAM_ID=<collected value>
 HOSTALERT_TELEGRAM_BOT_TOKEN=<collected value>
 HOSTALERT_TELEGRAM_CHAT_ID=<collected value>
-HOSTALERT_DAILY_REPORT_TIME=<collected value>
-OPENCLAW_DOMAIN=<collected value>
-OPENCLAW_DASHBOARD_DOMAIN=<collected value>
-OPENCLAW_DASHBOARD_DOMAIN_PATH=<collected value>
 ```
 
-Leave `OPENCLAW_DOMAIN_PATH` empty (default) and leave the Cloudflare Workers and optional sections as-is (they'll be handled during deployment).
+Then update `stack.yml` with per-claw settings (domain, dashboard path, Telegram bot token). Leave Cloudflare Workers and optional sections as-is (they'll be handled during deployment).
 
 After writing, show the user a summary:
 
 > **Configuration complete!** Here's what we've set up:
 >
-> - VPS: `<SSH_USER>@<VPS1_IP>` (SSH key: `<SSH_KEY_PATH>`)
+> - VPS: `<SSH_USER>@<VPS_IP>` (SSH key: `<SSH_KEY>`)
 > - Domain: `<OPENCLAW_DOMAIN>` (protected by Cloudflare Access)
 > - Browser: `<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>`
 > - Tunnel: Configured (token saved)

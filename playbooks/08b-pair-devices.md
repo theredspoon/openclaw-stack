@@ -65,7 +65,7 @@ The `openclaw` host wrapper runs via `docker exec` inside the container, where t
 
 ```bash
 # List pending device requests for a specific claw
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "openclaw --instance <CLAW_NAME> devices list"
 ```
 
@@ -73,7 +73,7 @@ Find the `requestId` for the `openclaw-control-ui` client, then approve:
 
 ```bash
 # Approve the webchat device
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "openclaw --instance <CLAW_NAME> devices approve <requestId>"
 ```
 
@@ -87,16 +87,16 @@ If `openclaw --instance <CLAW_NAME> devices list` fails with "pairing required",
 
 ```bash
 # Discover the claw's gateway port (each claw gets a unique port: 18789, 18790, ...)
-PORT=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+PORT=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo docker port openclaw-<CLAW_NAME> | grep -oP '0\.0\.0\.0:\K\d+' | head -1")
 echo "Claw port: $PORT"
 
 # Read token from the claw's env var
-TOKEN=$(ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+TOKEN=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN")
 
 # Re-pair CLI with explicit token and port (loopback triggers auto-approval)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> \
     openclaw devices list --url ws://localhost:${PORT} --token $TOKEN"
 ```
@@ -133,11 +133,11 @@ After pairing all claws, ask the user to confirm for each:
 
 ```bash
 # Check claw logs for auth/pairing errors
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo docker logs --tail 30 openclaw-<CLAW_NAME>"
 
 # Re-list devices to confirm approval went through
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "openclaw --instance <CLAW_NAME> devices list"
 ```
 
@@ -195,7 +195,7 @@ https://<CLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/?token=<CLAW_TOKEN>
 Read the token from VPS if needed:
 
 ```bash
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
   "sudo docker exec --user node openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN"
 ```
 
@@ -206,7 +206,7 @@ After the user clicks the URL:
 2. Approve the pending request:
 
    ```bash
-   ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
+   ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
      "openclaw --instance <CLAW_NAME> devices approve <requestId>"
    ```
 

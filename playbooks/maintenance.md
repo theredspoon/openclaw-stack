@@ -64,7 +64,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
 
 #### Log Worker Token
 
-> **Skip** if `ENABLE_VECTOR_LOG_SHIPPING` is `false`.
+> **Skip** if `stack.logging.vector` is `false`.
 
 ```bash
 # 1. Generate new token
@@ -112,11 +112,11 @@ See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for details on b
 ssh-keygen -t ed25519 -f ~/.ssh/vps1_openclaw_ed25519_new
 
 # 2. Add new public key to VPS (while old key still works)
-ssh -i ~/.ssh/vps1_openclaw_ed25519 -p <SSH_PORT> adminclaw@<VPS1_IP> \
+ssh -i ~/.ssh/vps1_openclaw_ed25519 -p <SSH_PORT> adminclaw@<VPS_IP> \
   "echo 'NEW_PUBLIC_KEY' >> ~/.ssh/authorized_keys"
 
 # 3. Test new key
-ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS1_IP> echo "OK"
+ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS_IP> echo "OK"
 
 # 4. Remove old key from VPS authorized_keys
 # 5. Update .env with new SSH_KEY path
@@ -171,10 +171,10 @@ Several deploy files are bind-mounted read-only into claw containers. These can 
 
 ```bash
 # From local machine — copy to VPS (use -r for directories like dashboard/ or plugins/)
-scp -i <SSH_KEY_PATH> -P <SSH_PORT> [-r] deploy/<path> adminclaw@<VPS1_IP>:/tmp/deploy-update
+scp -i <SSH_KEY> -P <SSH_PORT> [-r] deploy/<path> adminclaw@<VPS_IP>:/tmp/deploy-update
 
 # Move into place, fix ownership, and restart all claws (single SSH session)
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP> "
+ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> "
   sudo rm -rf <INSTALL_DIR>/openclaw/deploy/<path>
   sudo cp -r /tmp/deploy-update <INSTALL_DIR>/openclaw/deploy/<path>
   sudo chown -R 1000:1000 <INSTALL_DIR>/openclaw/deploy/<path>

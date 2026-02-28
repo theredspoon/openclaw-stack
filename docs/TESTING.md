@@ -11,17 +11,14 @@ When asked to test the OpenClaw deployment, follow both phases below. Source the
 source deploy/scripts/source-config.sh
 ```
 
-This exports all values from `openclaw-config.env` plus derived paths (`INSTALL_DIR`, `VPS_INSTANCES_DIR`, etc.). Key variables used in tests below:
+This exports `ENV__*` vars (from `.env`) and `STACK__*` vars (from `stack.yml`). Key variables used in tests below:
 
-- `VPS1_IP` - OpenClaw VPS
-- `SSH_KEY_PATH` - SSH key location
-- `SSH_USER` - SSH username (should be `adminclaw`)
-- `SSH_PORT` - SSH port (should be `222`)
-- `INSTALL_DIR` - VPS install base (default: `/home/openclaw`)
-- `OPENCLAW_DOMAIN` - Domain for browser tests
-- `OPENCLAW_DOMAIN_PATH` - URL subpath (may be empty)
-- `AI_GATEWAY_WORKER_URL` - AI Gateway Worker URL
-- `LOG_WORKER_URL` - Log Receiver Worker URL (base URL, no path suffix)
+- `ENV__VPS_IP` - OpenClaw VPS
+- `ENV__SSH_KEY` - SSH key location
+- `ENV__SSH_USER` - SSH username (should be `adminclaw`)
+- `ENV__SSH_PORT` - SSH port (should be `222`)
+- `STACK__STACK__INSTALL_DIR` - VPS install base (default: `/home/muxxibot/openclaw`)
+- Per-claw domain/path: `STACK__CLAWS__<NAME>__DOMAIN`, `STACK__CLAWS__<NAME>__DASHBOARD_PATH`
 
 ---
 
@@ -46,9 +43,9 @@ Execute **all** verification steps from [`playbooks/07-verification.md`](../play
 
 ```bash
 # Run from LOCAL machine — confirm gateway ports aren't externally reachable
-# Check each claw's gateway port (discover ports from docker compose config or openclaw-multi.sh)
-nc -zv -w 5 <VPS1_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
-nc -zv -w 5 <VPS1_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
+# Check each claw's gateway port (discover ports from docker compose config)
+nc -zv -w 5 <VPS_IP> 18789 2>&1 || echo "Port 18789 not reachable (expected)"
+nc -zv -w 5 <VPS_IP> 18790 2>&1 || echo "Port 18790 not reachable (expected)"
 ```
 
 All connections should fail. If any succeed, Docker daemon.json localhost binding is misconfigured — see `playbooks/03-docker.md`.
@@ -177,7 +174,7 @@ For a rapid health check, run this single command. Source config first for varia
 ```bash
 source deploy/scripts/source-config.sh
 echo "=== VPS-1 Health ===" && \
-ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/openclaw && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && \
    echo && \
    echo '=== Claw Instances ===' && \

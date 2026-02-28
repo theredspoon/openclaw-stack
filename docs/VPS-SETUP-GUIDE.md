@@ -92,17 +92,17 @@ OVHCloud typically provisions VPSs within 5-15 minutes. You'll receive:
 2. Go to **Bare Metal Cloud → VPS**
 3. Note the **IPv4 address** for your VPS
 
-Record it in openclaw-config.env:
+Record it in `.env`:
 
 ```bash
-# openclaw-config.env
+# .env
 
-VPS1_IP=x.x.x.x
+VPS_IP=x.x.x.x
 
 # SSH Configuration (required)
-SSH_KEY_PATH=~/.ssh/vps1_openclaw_ed25519 # Path to your ssh key generated in Step 2
-SSH_USER=ubuntu # This is the initial user created by OVH, it will get changed to admin claw during hardening
-SSH_PORT=22 # Initial SSH port, will get changed to 222 during hardening
+SSH_KEY=~/.ssh/vps1_openclaw_ed25519 # Path to your ssh key generated in Step 2
+SSH_USER=ubuntu # Initial user created by OVH, changed to adminclaw during hardening
+SSH_PORT=22 # Initial SSH port, changed to 222 during hardening
 ```
 
 ---
@@ -205,7 +205,7 @@ ssh -i ~/.ssh/vps1_openclaw_ed25519 -p 222 adminclaw@<VPS-1-IP>
 - [ ] SSH access verified to VPS
 - [ ] Ubuntu 24.04 LTS installed
 - [ ] Kernel version is 6.x
-- [ ] Configuration file created (`~/openclaw-config.env`)
+- [ ] Configuration files created (`.env` + `stack.yml`)
 - [ ] (Optional) Domain DNS records created
 - [ ] (Optional) Messaging bot tokens ready
 

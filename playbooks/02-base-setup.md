@@ -22,7 +22,7 @@ This playbook configures:
 > **Note (VPS re-installs):** If reusing an IP from a previous deployment, clear the stale SSH host key first:
 >
 > ```bash
-> ssh-keygen -R <VPS1_IP>
+> ssh-keygen -R <VPS_IP>
 > ```
 >
 > Then connect and accept the new host key when prompted.
@@ -163,7 +163,7 @@ echo "========================================="
 
 ```bash
 # SSH as admin user
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP>
 
 # Run commands as openclaw (no direct SSH — adminclaw can't cd into openclaw's home)
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
@@ -307,7 +307,7 @@ echo "Test port <SSH_HARDENED_PORT> from your LOCAL machine before proceeding."
 
 ```bash
 # From LOCAL machine — test port <SSH_HARDENED_PORT>
-ssh -i <SSH_KEY_PATH> -p <SSH_HARDENED_PORT> adminclaw@<VPS1_IP> "echo 'Port <SSH_HARDENED_PORT> works!'"
+ssh -i <SSH_KEY> -p <SSH_HARDENED_PORT> adminclaw@<VPS_IP> "echo 'Port <SSH_HARDENED_PORT> works!'"
 ```
 
 **If port `<SSH_HARDENED_PORT>` test succeeds:** Update `.env` on the LOCAL machine using the `Edit` tool (do NOT use `sed` — it creates backup files on macOS):
@@ -320,7 +320,7 @@ Then lock down SSH:
 
 ```bash
 # On VPS — lock down: remove port 22 from socket, remove <SSH_USER> from AllowUsers
-ssh -i <SSH_KEY_PATH> -p <SSH_HARDENED_PORT> adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY> -p <SSH_HARDENED_PORT> adminclaw@<VPS_IP>
 
 # Update socket to port <SSH_HARDENED_PORT> only
 sudo tee /etc/systemd/system/ssh.socket.d/override.conf << 'EOF'
@@ -351,7 +351,7 @@ ss -tlnp | grep -E ':(22|<SSH_HARDENED_PORT>)\s'
 
 ```bash
 # SSH in on port 22 (still listening during transition) and debug
-ssh -i <SSH_KEY_PATH> -p 22 adminclaw@<VPS1_IP>
+ssh -i <SSH_KEY> -p 22 adminclaw@<VPS_IP>
 sudo systemctl status ssh.socket
 cat /etc/systemd/system/ssh.socket.d/override.conf
 # Retry socket restart (NOT ssh.service)
@@ -367,7 +367,7 @@ ss -tlnp | grep -E ':(22|<SSH_HARDENED_PORT>)\s'
 
 ```bash
 # SSH in as <SSH_USER> (still allowed during transition) and check adminclaw's keys
-ssh -i <SSH_KEY_PATH> -p 22 <SSH_USER>@<VPS1_IP>
+ssh -i <SSH_KEY> -p 22 <SSH_USER>@<VPS_IP>
 sudo cat /home/adminclaw/.ssh/authorized_keys
 sudo ls -la /home/adminclaw/.ssh/
 ```
@@ -456,7 +456,7 @@ After completing all steps on VPS-1:
 
 ```bash
 # Test SSH on hardened port
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> adminclaw@<VPS1_IP> "echo 'VPS-1 OK'"
+ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> "echo 'VPS-1 OK'"
 
 # Verify UFW is active
 sudo ufw status

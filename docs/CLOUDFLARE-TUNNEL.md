@@ -32,7 +32,7 @@ Create an API token at [dash.cloudflare.com/profile/api-tokens](https://dash.clo
 
 ![Cloudflare API token setup](assets/cloudflare-api-key-setup.png)
 
-Set it in `openclaw-config.env`:
+Set it in `.env`:
 
 ```bash
 CF_API_TOKEN=<your-api-token>
@@ -117,7 +117,7 @@ Copy just the **token** part — the long base64 string starting with `ey...`.
 
 ### Step 4: Add the Token to Config
 
-Paste the token into `openclaw-config.env`:
+Paste the token into `.env`:
 
 ```bash
 CF_TUNNEL_TOKEN=eyJhIjoiYWJj...  # Paste the full token here
@@ -250,7 +250,7 @@ Both the gateway and dashboard share a single subdomain. The tunnel uses path-ba
 
 4. Save
 
-Then set in `openclaw-config.env`:
+Then set in `stack.yml` under your claw config:
 
 ```
 OPENCLAW_DOMAIN=openclaw.yourdomain.com
@@ -300,7 +300,7 @@ Gateway and dashboard each get their own subdomain. No rule ordering concerns si
 
 4. Save
 
-Then set in `openclaw-config.env`:
+Then set in `stack.yml` under your claw config:
 
 ```
 OPENCLAW_DOMAIN=openclaw.yourdomain.com
@@ -340,11 +340,11 @@ The domain is now routable — and protected by Cloudflare Access from the first
 
 ## Multi-Instance Tunnel Configuration
 
-When running multiple OpenClaw instances on the same VPS (via `openclaw-multi.sh`), each instance needs its own subdomain routed through the same Cloudflare tunnel. The OpenClaw frontend hardcodes WebSocket connections to `wss://<host>/` (root path), so subpath routing on a single subdomain is not possible — each instance must have a separate subdomain.
+When running multiple OpenClaw claws on the same VPS, each claw needs its own subdomain routed through the same Cloudflare tunnel. The OpenClaw frontend hardcodes WebSocket connections to `wss://<host>/` (root path), so subpath routing on a single subdomain is not possible — each instance must have a separate subdomain.
 
 ### Setup
 
-Run `openclaw-multi.sh tunnel-config` to get the exact rules for your instances. The general pattern:
+The general pattern for multi-claw routing:
 
 | Subdomain | Path | Service | URL |
 |-----------|------|---------|-----|
@@ -353,21 +353,19 @@ Run `openclaw-multi.sh tunnel-config` to get the exact rules for your instances.
 | `work.openclaw` | `/dashboard/*` | HTTP | `localhost:6091` |
 | `work.openclaw` | *(catch-all)* | HTTP | `localhost:18790` |
 
-Each instance gets unique gateway and dashboard ports (auto-assigned by `openclaw-multi.sh` or set explicitly in the instance's `config.env`).
+Each claw gets unique gateway and dashboard ports (configured in `stack.yml` under `claws.<name>`).
 
 ### Cloudflare Access
 
 Each subdomain needs its own Cloudflare Access application (or extend a single application with wildcard subdomain matching like `*.openclaw.yourdomain.com`). Consider setting `CF_ACCESS_AUD` per dashboard instance to prevent cross-instance session access — see [DASHBOARD.md § Security](DASHBOARD.md#security).
 
-### Adding a New Instance
+### Adding a New Claw
 
-1. Create `openclaws/<name>/config.env` with at least `OPENCLAW_DOMAIN` set
-2. Run `openclaw-multi.sh generate` to update compose and `.env` files
-3. Configure tunnel routes:
-   - **With `CF_API_TOKEN`:** Run `openclaw-multi.sh tunnel-config --apply` to auto-configure routes + DNS
-   - **Without:** Run `openclaw-multi.sh tunnel-config` to see the rules, then add them manually in CF Dashboard
+1. Add a new claw definition under `claws` in `stack.yml` with `domain` set
+2. Run `bun run pre-deploy` to regenerate deployment artifacts
+3. Configure tunnel routes in the Cloudflare Dashboard (or use `CF_API_TOKEN` for automation)
 4. Create a Cloudflare Access application for the new subdomain (or use a wildcard policy)
-5. Start the instance: `openclaw-multi.sh start`
+5. Deploy: `bun run deploy`
 
 ---
 
@@ -411,4 +409,4 @@ If the token is compromised:
    sudo systemctl start cloudflared
    ```
 
-4. Update `CF_TUNNEL_TOKEN` in `openclaw-config.env`
+4. Update `CF_TUNNEL_TOKEN` in `.env`

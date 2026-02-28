@@ -65,8 +65,8 @@ npx wrangler secret put CLAUDE_CODE_OAUTH_TOKEN --cwd ./workers/ai-gateway
 # Since you saved your real claude API key to the worker,
 # you will need the AI worker auth token for this step.
 
-# Copy AI_GATEWAY_AUTH_TOKEN from openclaw-config.env with sk-ant-oat- prefixed
-(source openclaw-config.env && printf "\nsk-ant-oat-$AI_GATEWAY_AUTH_TOKEN\n\n")
+# Copy AI_GATEWAY_AUTH_TOKEN from .env with sk-ant-oat- prefixed
+(source .env && printf "\nsk-ant-oat-$AI_GATEWAY_AUTH_TOKEN\n\n")
 
 # SSH into the VPS
 ./scripts/ssh-vps.sh

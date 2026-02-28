@@ -106,8 +106,8 @@ required config setup, git clone this repo, and automate the deploy.
    git clone git@github.com:simple10/openclaude.git openclaw-vps
    cd openclaw-vps
 
-   # Copy the config template
-   cp openclaw-config.env.example openclaw-config.env
+   # Copy the config templates
+   cp .env.example .env && cp stack.yml.example stack.yml
    # Edit required config vars or just start claude, it will help you gather requirements
 
    # Run claude with skip permissions if you want a more automated deploy
@@ -246,15 +246,17 @@ Each agent runs tools inside an isolated Docker container (via Sysbox for secure
 
 ## Configuration
 
-### The config file
+### Config files
 
-All deployment settings live in `openclaw-config.env`. The example file documents every field:
+Configuration uses two files — `.env` for secrets/VPS access and `stack.yml` for stack structure:
 
 ```bash
-cp openclaw-config.env.example openclaw-config.env
+cp .env.example .env && cp stack.yml.example stack.yml
 ```
 
-You can prepopulate the config file or claude will ask for any missing required settings.
+Run `bun run pre-deploy` to build deployment artifacts from these files.
+
+You can prepopulate the config files or claude will ask for any missing required settings.
 
 ### Configuring LLM API keys
 
@@ -498,21 +500,26 @@ Then tell claude to scan through the local openclaw code to help you debug.
 openclaw-vps/
 ├── README.md                         # This file
 ├── CLAUDE.md                         # Deployment orchestration instructions (for Claude)
-├── openclaw-config.env               # Your deployment config (secrets, gitignored)
-├── openclaw-config.env.example       # Template with all fields documented
+├── .env                              # Secrets & VPS access (gitignored)
+├── .env.example                      # Template for .env
+├── stack.yml                         # Stack structure & claw definitions (gitignored)
+├── stack.yml.example                 # Template for stack.yml
+├── docker-compose.yml.hbs            # Compose template (Handlebars)
+│
+├── build/                            # Build tooling
+│   └── pre-deploy.ts                 # Generates .deploy/ from .env + stack.yml + templates
+│
+├── openclaw/                         # Per-claw configuration
+│   ├── default/                      # Default config templates (openclaw.jsonc)
+│   └── example/                      # Template for creating new claws
 │
 ├── deploy/                           # Files deployed to the VPS
-│   ├── openclaws/                    # Per-claw configuration
-│   │   ├── _defaults/                # Shared templates (openclaw.json, models.json)
-│   │   ├── main-claw/               # Default claw (inherits from openclaw-config.env)
-│   │   └── _example/                # Template for creating new claws
+│   ├── scripts/                      # Deploy-time scripts (source-config.sh, setup-infra.sh, etc.)
 │   ├── sandbox-toolkit.yaml          # Sandbox tool definitions
-│   ├── vector/                        # Vector log shipper (standalone compose project)
-│   │   ├── docker-compose.yml        # Independent of gateway — start/stop separately
-│   │   └── vector.yaml               # Log shipper config
+│   ├── vector/                       # Vector log shipper config
 │   ├── build-openclaw.sh             # Docker image builder with auto-patching
 │   ├── entrypoint-gateway.sh         # Container init (dockerd, sandboxes, privilege drop)
-│   ├── rebuild-sandboxes.sh          # Layered sandbox image builder with split config detection
+│   ├── rebuild-sandboxes.sh          # Layered sandbox image builder
 │   ├── host-alert.sh                 # Host monitoring + Telegram alerts
 │   ├── dashboard.mjs                 # Dashboard server — browser sessions, media, logs
 │   └── logrotate-openclaw            # Log rotation config
@@ -543,9 +550,9 @@ openclaw-vps/
     ├── 04-vps1-openclaw.md           # Gateway deployment and configuration
     ├── 06-backup.md                  # Automated backup setup
     ├── 07-verification.md            # Security audit and service verification
-    ├── 08a-configure-llm-proxy.md     # AI proxy provider key setup
-    ├── 08b-pair-devices.md            # Browser & Telegram device pairing
-    ├── 08c-deploy-report.md           # Deployment report generation
+    ├── 08a-configure-llm-proxy.md    # AI proxy provider key setup
+    ├── 08b-pair-devices.md           # Browser & Telegram device pairing
+    ├── 08c-deploy-report.md          # Deployment report generation
     └── maintenance.md                # Token rotation and maintenance procedures
 
 ```

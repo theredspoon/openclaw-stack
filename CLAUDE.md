@@ -62,7 +62,7 @@ Create from examples: `cp .env.example .env && cp stack.yml.example stack.yml`
 
 See `.env.example` for secrets/VPS fields. See `stack.yml.example` for stack structure. Per-claw config lives in `stack.yml` under `claws.<name>` — deep-merged with `defaults`.
 
-SSH_USER and SSH_PORT start as provider defaults (e.g., `ubuntu`/`22`) and are changed to `adminclaw`/`SSH_HARDENED_PORT` during hardening.
+SSH_USER and SSH_PORT in `.env` start as provider defaults (e.g., `ubuntu`/`22`) and are changed to `adminclaw`/`SSH_HARDENED_PORT` during hardening.
 
 ---
 
@@ -89,7 +89,7 @@ See [00-fresh-deploy-setup.md](playbooks/00-fresh-deploy-setup.md) § 0.7 for ex
 
 ```bash
 # After base setup, SSH as adminclaw (not ubuntu)
-ssh -i <SSH_KEY_PATH:~/.ssh/vps1_openclaw_ed25519> -p <SSH_PORT:222> <SSH_USER:adminclaw>@<VPS1_IP>
+ssh -i <SSH_KEY:~/.ssh/vps1_openclaw_ed25519> -p <SSH_PORT:222> <SSH_USER:adminclaw>@<VPS_IP>
 
 # Run commands as openclaw
 sudo -u openclaw <command>
