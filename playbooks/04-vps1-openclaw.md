@@ -583,15 +583,19 @@ docker network create --driver bridge --subnet 172.30.0.0/24 openclaw-gateway-ne
 
 ## Updating OpenClaw
 
-The `openclaw update` CLI command does **not** work inside Docker — the `.git` directory is excluded by `.dockerignore`, so the update tool reports `not-git-install`. Instead, update by rebuilding from the host git repo using the build script.
+The `openclaw update` CLI command works inside Docker when `ALLOW_OPENCLAW_UPDATES=true` is set for the claw (updates persist across restart but not compose recreate). For permanent host-level updates, rebuild from the host git repo using the build script.
 
-The build script auto-patches the Dockerfile and restores the git working tree after building, so `git pull` always works cleanly.
+The build script auto-patches the Dockerfile and restores the git working tree after building, so `git pull` always works cleanly. The image is tagged with the stack's project name (e.g., `openclaw-openclaw:local`) to avoid conflicts when multiple stacks share a VPS.
 
 ```bash
 #!/bin/bash
+# Image name is stack-scoped: openclaw-<project>:local
+# Source config to get OPENCLAW_IMAGE
+source <INSTALL_DIR>/scripts/source-config.sh
+
 # 1. Tag current state for rollback
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git tag -f pre-update'
-docker tag openclaw:local "openclaw:rollback-$(date +%Y%m%d)" 2>/dev/null || true
+docker tag "${OPENCLAW_IMAGE}" "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" 2>/dev/null || true
 
 # 2. Review changes before applying
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git fetch origin main && git log --oneline HEAD..origin/main'
@@ -614,7 +618,7 @@ for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | 
 done
 
 # 6. Cleanup old rollback images (keep last 3)
-docker images --format '{{.Repository}}:{{.Tag}}' | grep 'openclaw:rollback-' | sort -r | tail -n +4 | xargs -r docker rmi
+docker images --format '{{.Repository}}:{{.Tag}}' | grep "${OPENCLAW_IMAGE%:*}:rollback-" | sort -r | tail -n +4 | xargs -r docker rmi
 ```
 
 > **Note:** Step 4 automatically stops the old container and starts a new one from the rebuilt image. Expect a brief gateway downtime during the restart.
@@ -625,11 +629,13 @@ If an update causes issues, roll back to the previous known-good state:
 
 ```bash
 #!/bin/bash
+source <INSTALL_DIR>/scripts/source-config.sh
+
 # 1. Revert source to pre-update tag
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git checkout pre-update'
 
 # 2. Restore the previous Docker image
-docker tag "openclaw:rollback-$(date +%Y%m%d)" openclaw:local
+docker tag "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" "${OPENCLAW_IMAGE}"
 
 # 3. Recreate containers with the old image
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
@@ -645,7 +651,7 @@ done
 ```
 
 > If the rollback date tag doesn't match today, list available rollback images with:
-> `docker images --format '{{.Repository}}:{{.Tag}}' | grep 'openclaw:rollback-'`
+> `docker images --format '{{.Repository}}:{{.Tag}}' | grep "${OPENCLAW_IMAGE%:*}:rollback-"`
 
 ---
 

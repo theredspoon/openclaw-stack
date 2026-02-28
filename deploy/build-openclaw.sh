@@ -5,7 +5,7 @@
 #   1. Resolve OPENCLAW_VERSION → checkout target ref
 #   2. Create vps-patch/<version> branch, apply patches, commit
 #   3. Include .git in Docker image (comment out .dockerignore exclusion)
-#   4. docker build -t openclaw:local
+#   4. docker build -t $OPENCLAW_IMAGE (stack-scoped tag)
 #   5. Restore host to main branch + clean .dockerignore
 #
 # Patches applied (each auto-skips when upstream fixes the issue):
@@ -16,9 +16,13 @@
 # Usage: sudo -u openclaw ${INSTALL_DIR}/scripts/build-openclaw.sh
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/source-config.sh"
+
 OPENCLAW_DIR="${INSTALL_DIR}/openclaw"
 cd "$OPENCLAW_DIR"
+
+echo "[build] Image tag: ${OPENCLAW_IMAGE}"
 
 # ── Trap: restore host state on failure ──────────────────────────────
 # Ensures the host repo is never left on a patch branch or with a
@@ -135,8 +139,8 @@ else
 fi
 
 # ── 7. Build image ──────────────────────────────────────────────────
-echo "[build] Building openclaw:local (version ${RESOLVED_VERSION})..."
-docker build -t openclaw:local .
+echo "[build] Building ${OPENCLAW_IMAGE} (version ${RESOLVED_VERSION})..."
+docker build -t "${OPENCLAW_IMAGE}" .
 
 # ── 8. Restore host state ───────────────────────────────────────────
 # The image is built and immutable. Restore host to main with clean .dockerignore.
@@ -145,5 +149,5 @@ git checkout main -- .dockerignore 2>/dev/null || true
 git checkout main 2>/dev/null || true
 HOST_NEEDS_RESTORE=false
 
-echo "[build] Done. Built version ${RESOLVED_VERSION} from branch ${PATCH_BRANCH}"
+echo "[build] Done. Built ${OPENCLAW_IMAGE} (version ${RESOLVED_VERSION}) from branch ${PATCH_BRANCH}"
 echo "[build] Run: docker compose up -d"

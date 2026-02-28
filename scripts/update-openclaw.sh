@@ -41,7 +41,7 @@ printf '\033[33m[1/4] Pulling upstream changes...\033[0m\n'
 TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
   "sudo -u openclaw bash -c 'cd $OPENCLAW_DIR && git pull'"
 
-# Step 2: Rebuild gateway image
+# Step 2: Rebuild gateway image (stack-scoped: OPENCLAW_IMAGE from source-config.sh)
 printf '\033[33m[2/4] Building gateway image...\033[0m\n'
 TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
   "sudo -u openclaw $OPENCLAW_DIR/scripts/build-openclaw.sh"

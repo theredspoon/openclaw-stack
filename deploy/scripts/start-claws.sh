@@ -29,7 +29,7 @@ FIRST_CLAW=$(echo "$INSTANCE_NAMES" | awk '{print $1}')
 echo "Instances: ${INSTANCE_NAMES}(${CLAW_COUNT} claw(s))" >&2
 
 # Build image
-echo "Building openclaw:local image..." >&2
+echo "Building ${OPENCLAW_IMAGE} image..." >&2
 sudo -u openclaw INSTALL_DIR="${INSTALL_DIR}" "${OPENCLAW_HOME}/scripts/build-openclaw.sh" >&2
 
 # Start containers

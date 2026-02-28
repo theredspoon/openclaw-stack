@@ -57,7 +57,15 @@ ALLOW_OPENCLAW_UPDATES="${ALLOW_OPENCLAW_UPDATES:-false}"
 VPS_INSTANCES_DIR="${INSTALL_DIR}/instances"
 STAGING_DIR="${INSTALL_DIR}/.deploy-staging"
 
-export OPENCLAW_CONTEXT REPO_ROOT DEPLOY_DIR OPENCLAWS_DIR INSTALL_DIR VPS_INSTANCES_DIR STAGING_DIR CONFIG_ENV_PATH
+# ── Project name → stack-scoped Docker image tag ──
+# Derive from INSTALL_DIR if not explicitly set: /home/mybot/openclaw → "mybot-openclaw"
+# Strip /home/ prefix, replace path separators with hyphens, lowercase
+if [ -z "${OPENCLAW_PROJECT_NAME:-}" ]; then
+  OPENCLAW_PROJECT_NAME=$(echo "$INSTALL_DIR" | sed 's|^/home/||; s|^/||; s|/$||; s|/|-|g' | tr '[:upper:]' '[:lower:]')
+fi
+OPENCLAW_IMAGE="openclaw-${OPENCLAW_PROJECT_NAME}:local"
+
+export OPENCLAW_CONTEXT REPO_ROOT DEPLOY_DIR OPENCLAWS_DIR INSTALL_DIR VPS_INSTANCES_DIR STAGING_DIR CONFIG_ENV_PATH OPENCLAW_PROJECT_NAME OPENCLAW_IMAGE
 
 # ── Standalone query mode ──
 if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
