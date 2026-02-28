@@ -26,7 +26,7 @@ stack:
 
   openclaw:
     version: stable                    # stable | latest | v2026.2.26
-    source: https://github.com/nicepkg/openclaw.git
+    source: https://github.com/openclaw/openclaw.git
 
   cloudflare:
     tunnel_token: ${CLOUDFLARE_TUNNEL_TOKEN}
