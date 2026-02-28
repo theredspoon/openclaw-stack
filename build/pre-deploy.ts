@@ -380,6 +380,9 @@ function generateStackEnv(
   if (stack.openclaw?.version) {
     lines.push(`STACK__STACK__OPENCLAW__VERSION=${formatEnvValue(stack.openclaw.version)}`);
   }
+  if (stack.openclaw?.source) {
+    lines.push(`STACK__STACK__OPENCLAW__SOURCE=${formatEnvValue(stack.openclaw.source)}`);
+  }
   if (stack.sandbox_toolkit) {
     lines.push(`STACK__STACK__SANDBOX_TOOLKIT=${formatEnvValue(stack.sandbox_toolkit)}`);
   }

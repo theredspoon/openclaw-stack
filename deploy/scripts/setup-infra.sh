@@ -77,10 +77,11 @@ done
 echo "Directory structure created." >&2
 
 # Part 2: Clone OpenClaw Repository
-sudo -u openclaw bash -s "$INSTALL_DIR" << 'CLONEEOF'
+OPENCLAW_SOURCE="${STACK__STACK__OPENCLAW__SOURCE:-https://github.com/openclaw/openclaw.git}"
+sudo -u openclaw bash -s "$INSTALL_DIR" "$OPENCLAW_SOURCE" << 'CLONEEOF'
 set -euo pipefail
 cd "$1"
-git clone https://github.com/openclaw/openclaw.git openclaw
+git clone "$2" openclaw
 CLONEEOF
 
 echo "Repository cloned." >&2
