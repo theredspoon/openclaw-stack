@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Parses deploy/sandbox-toolkit.yaml and outputs JSON for the entrypoint.
+// Parses sandbox-toolkit.yaml and outputs JSON for the entrypoint.
 // No external dependencies — uses a minimal inline parser for our simple YAML subset.
 //
 // Usage:

@@ -1,6 +1,6 @@
 # Sandbox Toolkit
 
-The sandbox toolkit defines what tools are available inside agent sandbox containers. All configuration lives in `deploy/sandbox-toolkit.yaml` — adding, updating, or removing a tool is a config edit + rebuild.
+The sandbox toolkit defines what tools are available inside agent sandbox containers. All configuration lives in `openclaw/default/sandbox-toolkit.yaml` — adding, updating, or removing a tool is a config edit + rebuild.
 
 See also [SKILL-ROUTING.md](SKILL-ROUTING.md)
 
@@ -27,7 +27,7 @@ sandbox-toolkit.yaml  (config: packages, tools, binaries)
 
 ## Adding a Tool
 
-1. Edit `deploy/sandbox-toolkit.yaml`
+1. Edit `openclaw/default/sandbox-toolkit.yaml`
 2. Run `scripts/update-sandbox-toolkit.sh`
 3. New sandboxes automatically use the updated image
 
@@ -160,7 +160,7 @@ scripts/update-sandboxes.sh --dry-run     # preview
 
 ```bash
 # 1. Edit the config
-vim deploy/sandbox-toolkit.yaml
+vim openclaw/default/sandbox-toolkit.yaml
 
 # 2. Sync and quick-layer the new tool (default — completes in seconds)
 scripts/update-sandbox-toolkit.sh
@@ -231,7 +231,7 @@ Sandbox containers are **persistent per-agent** (`scope: "agent"` in `openclaw.j
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `deploy/sandbox-toolkit.yaml` | Config | Tool definitions, packages, binaries |
+| `openclaw/default/sandbox-toolkit.yaml` | Config | Tool definitions, packages, binaries |
 | `deploy/parse-toolkit.mjs` | Parser | YAML → JSON for entrypoint/builder |
 | `deploy/rebuild-sandboxes.sh` | Builder | Layered image build with split config detection |
 | `deploy/entrypoint-gateway.sh` | Entrypoint | Shim generation (section 1g) |

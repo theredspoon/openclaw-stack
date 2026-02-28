@@ -13,7 +13,7 @@ Layer 1: Host -> Gateway Container (docker-compose.override.yml)
   ├─────────────────────────────────┼────────────────────────────────────┼──────┼─────────────────────────────────┤
   │ ./deploy/hooks                  │ /app/deploy/hooks                  │ ro   │ Hook handlers                   │
   ├─────────────────────────────────┼────────────────────────────────────┼──────┼─────────────────────────────────┤
-  │ ./deploy/sandbox-toolkit.yaml   │ /app/deploy/sandbox-toolkit.yaml   │ ro   │ Toolkit config                  │
+  │ ./deploy/sandbox-toolkit.yaml   │ /app/deploy/sandbox-toolkit.yaml   │ ro   │ Toolkit config (src: openclaw/default/) │
   ├─────────────────────────────────┼────────────────────────────────────┼──────┼─────────────────────────────────┤
   │ ./deploy/parse-toolkit.mjs      │ /app/deploy/parse-toolkit.mjs      │ ro   │ Toolkit parser                  │
   ├─────────────────────────────────┼────────────────────────────────────┼──────┼─────────────────────────────────┤

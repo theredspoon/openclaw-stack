@@ -397,7 +397,7 @@ openclaw doctor --deep
 # Update sandbox toolkit — sync config, rebuild images
 # Default: detects new/changed tools and quick-layers them (seconds)
 # Use --full for a complete rebuild with proper layer ordering
-# See deploy/sandbox-toolkit.yaml for tool config
+# See openclaw/default/sandbox-toolkit.yaml for tool config
 ./scripts/update-sandbox-toolkit.sh          # quick (default)
 ./scripts/update-sandbox-toolkit.sh --full   # full rebuild
 
@@ -426,7 +426,7 @@ Claude will pull the latest code, rebuild the Docker image with auto-patching, a
 
 ### Managing sandbox tools
 
-The tools available inside agent sandboxes are defined in `deploy/sandbox-toolkit.yaml`.
+The tools available inside agent sandboxes are defined in `openclaw/default/sandbox-toolkit.yaml`.
 Adding a tool is a one-line YAML edit + `scripts/update-sandbox-toolkit.sh` — the default quick mode layers the new tool in seconds. See [docs/SANDBOX-TOOLKIT.md](docs/SANDBOX-TOOLKIT.md) for details.
 
 ---

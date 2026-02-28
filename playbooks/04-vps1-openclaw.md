@@ -115,7 +115,7 @@ Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
 | `deploy/host-maintenance-check.sh` | `<INSTALL_DIR>/deploy/deploy/host-maintenance-check.sh` | |
 | `deploy/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | |
 | `deploy/plugins/*` | `<INSTALL_DIR>/deploy/plugins/` | Owned by uid 1000 |
-| `deploy/sandbox-toolkit.yaml` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
+| `.deploy/deploy/sandbox-toolkit.yaml` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
 | `deploy/parse-toolkit.mjs` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
 | `deploy/rebuild-sandboxes.sh` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
 | `deploy/dashboard/*` | `<INSTALL_DIR>/deploy/dashboard/` | Bind-mounted into container |
@@ -494,7 +494,7 @@ The OpenClaw gateway rewrites `openclaw.json` on startup. It strips JSONC commen
 - **File size changes are expected** — the rewritten file is typically smaller (comments removed) or larger (meta fields added) than the deployed version.
 - **The gateway creates a `.bak` backup** before rewriting, so the previous version is recoverable.
 
-To make persistent config changes, update `openclaw/default/openclaw.jsonc` (or per-claw overrides in `stack.yml`), re-run `bun run pre-deploy`, push the updated artifacts, then restart the container.
+To make persistent config changes, update the openclaw config template (see `defaults.openclaw_json` in `stack.yml` for its path), re-run `bun run pre-deploy`, push the updated artifacts, then restart the container.
 
 ### CLI Commands Failing
 

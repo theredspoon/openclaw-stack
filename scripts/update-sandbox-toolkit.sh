@@ -64,7 +64,7 @@ DEPLOY_DIR="${STACK__STACK__INSTALL_DIR}/deploy"
 # Files to sync: local path -> VPS host path
 # These are bind-mounted into the container via docker-compose.yml volumes
 SYNC_LOCAL=(
-  "deploy/sandbox-toolkit.yaml"
+  "${STACK__STACK__SANDBOX_TOOLKIT:-openclaw/default/sandbox-toolkit.yaml}"
   "deploy/parse-toolkit.mjs"
   "deploy/rebuild-sandboxes.sh"
 )

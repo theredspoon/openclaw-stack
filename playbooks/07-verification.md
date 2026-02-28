@@ -294,7 +294,7 @@ openclaw doctor --deep
 
 ## 7.1a Verify Sandbox Toolkit
 
-Verify all tool binaries from `deploy/sandbox-toolkit.yaml` are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
+Verify all tool binaries from the sandbox toolkit config are installed and operational in the sandbox image. The bin list is read dynamically from the toolkit config via `parse-toolkit.mjs`, so this test stays in sync as tools are added or removed.
 
 > **Why docker exec into the claw container first?** Sandbox containers run as nested Docker inside the claw container (Sysbox). To inspect them, you must first enter the claw container, then exec into the sandbox.
 
@@ -484,7 +484,7 @@ sudo docker exec --user node "$FIRST_CLAW" \
 
 ## 7.5c Verify Resource Limits
 
-Verify deployed claw resource limits match VPS hardware. Read `defaults.resources.cpus` and `defaults.resources.memory` from `stack.yml`, and check for per-claw overrides under `claws.<name>.resources` (see § 0.4).
+Verify deployed claw resource limits match VPS hardware. Read resource limits from `.deploy/stack.json` (the resolved config as actually deployed) — check `defaults.resources` and per-claw overrides under `claws.<name>.resources`.
 
 ```bash
 # On VPS: query hardware and deployed limits

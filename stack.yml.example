@@ -22,6 +22,7 @@ stack:
 
   # Docker compose template to use for building this stack
   compose_template: docker-compose.yml.hbs
+  sandbox_toolkit: openclaw/default/sandbox-toolkit.yaml
 
   openclaw:
     version: stable                    # stable | latest | v2026.2.26

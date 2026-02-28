@@ -337,6 +337,9 @@ function generateStackEnv(
   if (stack.openclaw?.version) {
     lines.push(`STACK__STACK__OPENCLAW__VERSION=${formatEnvValue(stack.openclaw.version)}`);
   }
+  if (stack.sandbox_toolkit) {
+    lines.push(`STACK__STACK__SANDBOX_TOOLKIT=${formatEnvValue(stack.sandbox_toolkit)}`);
+  }
   lines.push("");
 
   // Derived
@@ -480,7 +483,6 @@ async function main() {
   const deployArtifacts = [
     "plugins",
     "dashboard",
-    "sandbox-toolkit.yaml",
     "parse-toolkit.mjs",
     "rebuild-sandboxes.sh",
     "build-openclaw.sh",
@@ -503,7 +505,14 @@ async function main() {
   }
   success("Copied deploy artifacts");
 
-  // 7h. Copy vector config if logging enabled
+  // 7h. Copy sandbox toolkit (config-driven path with fallback)
+  const toolkitPath = String(stack.sandbox_toolkit || "openclaw/default/sandbox-toolkit.yaml");
+  const toolkitSrc = join(ROOT, toolkitPath);
+  if (!existsSync(toolkitSrc)) fatal(`Sandbox toolkit not found: ${toolkitPath}`);
+  cpSync(toolkitSrc, join(DEPLOY_DIR, "deploy", "sandbox-toolkit.yaml"));
+  success(`Copied sandbox toolkit (from ${toolkitPath})`);
+
+  // 7i. Copy vector config if logging enabled
   if (stack.vector) {
     const vectorSrc = join(ROOT, "deploy", "vector");
     if (existsSync(vectorSrc)) {

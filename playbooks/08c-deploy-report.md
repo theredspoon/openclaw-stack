@@ -31,7 +31,7 @@ Collect the following values and present them in a single, neatly formatted repo
    done
    ```
 
-3. **Domain and URLs** — read from `stack.yml` (`defaults.domain`, `defaults.domain_path`) and per-claw overrides under `claws.<name>`.
+3. **Domain and URLs** — read from `.deploy/stack.json` (`claws.<name>.domain`, `claws.<name>.domain_path`) for the resolved values as actually deployed.
 
 ## AI proxy status
 

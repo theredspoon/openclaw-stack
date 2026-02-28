@@ -23,9 +23,9 @@ for CLAW in $CLAWS; do
 done
 ```
 
-> **Note:** If the claw's `domain_path` is empty (in `stack.yml`), the URL is simply `https://<CLAW_DOMAIN>/chat?token=<TOKEN>`.
+> **Note:** If the claw's `domain_path` is empty (in `.deploy/stack.json`), the URL is simply `https://<CLAW_DOMAIN>/chat?token=<TOKEN>`.
 
-Construct the URL for each claw using its domain (from `stack.yml` per-claw config or defaults) and token:
+Construct the URL for each claw using its domain (from `.deploy/stack.json` per-claw config) and token:
 
 ```
 https://<CLAW_DOMAIN><OPENCLAW_DOMAIN_PATH>/chat?token=<TOKEN>
