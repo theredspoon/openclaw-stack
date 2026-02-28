@@ -59,7 +59,7 @@ sudo apt update && sudo apt upgrade -y
 
 # Install essential packages
 sudo apt install -y \
-    curl wget git vim htop tmux unzip \
+    curl wget git vim htop tmux unzip jq \
     ca-certificates gnupg lsb-release \
     apt-transport-https software-properties-common \
     ufw fail2ban auditd
@@ -204,6 +204,7 @@ Run on: **VPS-1**
 **IMPORTANT**: Ubuntu uses systemd socket activation for SSH. The socket controls which port SSH listens on. You must update BOTH the socket AND the sshd config.
 
 > **WARNING — Lockout prevention:**
+>
 > - The socket override below listens on BOTH ports 22 and `<SSH_HARDENED_PORT>` during transition. Port 22 is only removed after verifying `<SSH_HARDENED_PORT>` works from your local machine.
 > - `AllowUsers` includes both `adminclaw` and `<SSH_USER>` during transition, so you can fall back to the original user if adminclaw auth fails.
 > - Do NOT `systemctl restart ssh` after restarting `ssh.socket`. The socket already binds the ports — restarting the service causes "Address already in use" failures. Only restart `ssh.socket`; socket activation handles the service automatically.
@@ -381,6 +382,7 @@ sudo ls -la /home/adminclaw/.ssh/
 Run on: **VPS-1**
 
 Configures in one pass:
+
 - **Swap** — 8G swap file for Docker `memorySwap` limits (idempotent, skips if already active)
 - **Fail2ban** — SSH jail on port `<SSH_PORT>`, 3 retries, 24h ban
 - **Unattended-upgrades** — automatic security patches (no auto-reboot)
