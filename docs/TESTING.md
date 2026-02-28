@@ -175,7 +175,7 @@ For a rapid health check, run this single command. Source config first for varia
 source deploy/scripts/source-config.sh
 echo "=== VPS-1 Health ===" && \
 ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/openclaw && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && \
+  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && \
    echo && \
    echo '=== Claw Instances ===' && \
    ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null && \
@@ -195,13 +195,13 @@ ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}"
 
 ### Gateway Not Healthy
 
-1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/openclaw && docker compose logs --tail 50 openclaw-<name>'`
-2. Check all containers running: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/openclaw && docker compose ps'`
+1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose logs --tail 50 openclaw-<name>'`
+2. Check all containers running: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose ps'`
 3. Verify localhost access per claw (ports start at 18789, increment per claw): `curl -s http://localhost:<port>/ | head -5`
 
 ### No Logs in Cloudflare
 
-1. Check Vector logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/vector && docker compose logs'`
+1. Check Vector logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose logs vector'`
 2. Verify LOG_WORKER_URL is set (base URL, no path suffix)
 3. Check Log Receiver Worker health: `curl -s https://<LOG_WORKER_URL>/health`
 

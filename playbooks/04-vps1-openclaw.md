@@ -75,12 +75,11 @@ echo "Instances: $INSTANCE_NAMES"
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "env \
-    INSTALL_DIR='${INSTALL_DIR}' \
     INSTANCE_NAMES='${INSTANCE_NAMES}' \
   bash ${INSTALL_DIR}/.deploy-staging/scripts/setup-infra.sh"
 ```
 
-Capture the `OPENCLAW_GENERATED_TOKEN=<hex>` line from stdout (all other output goes to stderr).
+Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
 
 **If git clone fails with "fatal: unable to access":**
 
@@ -97,7 +96,7 @@ Capture the `OPENCLAW_GENERATED_TOKEN=<hex>` line from stdout (all other output 
 >
 > `sudo rm -rf <INSTALL_DIR>/openclaw`
 
-**Record gateway token locally:** Note the generated `OPENCLAW_GENERATED_TOKEN` from stdout. This will be needed for the deployment report (`08c-deploy-report.md`). The token is also written to `.deploy/` artifacts during pre-deploy.
+**Note:** Gateway tokens are configured in `stack.yml` and resolved by `bun run pre-deploy`. No token capture is needed from this step.
 
 ---
 
@@ -111,10 +110,10 @@ Capture the `OPENCLAW_GENERATED_TOKEN=<hex>` line from stdout (all other output 
 |--------|------------|-------|
 | `.deploy/docker-compose.yml` | `<INSTALL_DIR>/deploy/docker-compose.yml` | Pre-generated from `.hbs` template |
 | `.deploy/claws/<name>/openclaw.json` | `<INSTALL_DIR>/instances/<name>/.openclaw/openclaw.json` | Per-claw config (runtime `$VAR` resolved by entrypoint) |
-| `deploy/build-openclaw.sh` | `<INSTALL_DIR>/scripts/build-openclaw.sh` | |
-| `deploy/entrypoint-gateway.sh` | `<INSTALL_DIR>/deploy/scripts/entrypoint-gateway.sh` | |
-| `deploy/host-alert.sh` | `<INSTALL_DIR>/scripts/host-alert.sh` | |
-| `deploy/host-maintenance-check.sh` | `<INSTALL_DIR>/scripts/host-maintenance-check.sh` | |
+| `deploy/build-openclaw.sh` | `<INSTALL_DIR>/deploy/deploy/build-openclaw.sh` | |
+| `deploy/entrypoint-gateway.sh` | `<INSTALL_DIR>/deploy/entrypoint-gateway.sh` | |
+| `deploy/host-alert.sh` | `<INSTALL_DIR>/deploy/deploy/host-alert.sh` | |
+| `deploy/host-maintenance-check.sh` | `<INSTALL_DIR>/deploy/deploy/host-maintenance-check.sh` | |
 | `deploy/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | |
 | `deploy/plugins/*` | `<INSTALL_DIR>/deploy/plugins/` | Owned by uid 1000 |
 | `deploy/sandbox-toolkit.yaml` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
@@ -173,6 +172,16 @@ To add a new skill to an agent, add it to the agent's `skills` array in `opencla
 
 ## 4.4 Build, Start, and Verify
 
+### Step 0: Configure git identity for openclaw user
+
+The build script creates patch branches and commits — git requires a user identity:
+
+```bash
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
+  "sudo -u openclaw git config --global user.email 'openclaw@localhost' && \
+   sudo -u openclaw git config --global user.name 'openclaw'"
+```
+
 ### Step 1: Start claws
 
 Builds the Docker image and starts containers. Multi-claw deployments start only the first claw for sandbox builds; single-claw starts everything.
@@ -203,7 +212,7 @@ Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from
 >
 > - **Port already in use:** `sudo ss -tlnp | grep 18789` (first claw defaults to 18789; others get 18790+)
 > - **Sysbox not available:** `sudo systemctl status sysbox` — must be active
-> - **Invalid .env:** missing required variables — `cat <INSTALL_DIR>/openclaw/.env`
+> - **Invalid config:** check docker-compose.yml and openclaw.json — `cat <INSTALL_DIR>/deploy/docker-compose.yml`
 
 ### Step 2: Wait for sandbox builds (~15-25 min first boot)
 
@@ -237,21 +246,14 @@ Print the result as a status update to the user (e.g., `[entrypoint] Building to
 
 ### Step 3: Sync images + start remaining claws (multi-claw only)
 
-If `CLAW_COUNT > 1`, sync sandbox images from the first claw to the others before starting them. This avoids redundant ~15-25 min builds in each additional claw.
-
-```bash
-ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/.deploy-staging/scripts/sync-sandbox-images.sh --source <first-claw-name>"
-```
-
-Then start all remaining claws (entrypoints detect the pre-placed tar and load in ~30 seconds instead of building):
+If `CLAW_COUNT > 1`, start all remaining claws after the first claw finishes sandbox builds. Each additional claw builds its own sandbox images (~15-25 min each) since sandbox images live inside each claw's nested Docker (Sysbox isolation).
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'"
 ```
 
-> **Single-claw:** Skip this step — there are no other claws to sync to.
+> **Single-claw:** Skip this step — all services were already started in Step 1.
 
 ### Step 4: Verify deployment
 
@@ -403,7 +405,8 @@ for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | 
 done
 
 # Check Vector is running (part of main compose when stack.logging.vector: true)
-sudo docker logs --tail 10 vector
+# Container name is <project>-vector (e.g., muxxibot-vector)
+sudo docker ps --format '{{.Names}}' | grep vector
 ```
 
 ---
@@ -524,12 +527,12 @@ The build script auto-patches the Dockerfile and restores the git working tree a
 ```bash
 #!/bin/bash
 # Image name is stack-scoped: openclaw-<project>:local
-# Read OPENCLAW_IMAGE from the deploy .env
-OPENCLAW_IMAGE=$(grep '^OPENCLAW_IMAGE=' <INSTALL_DIR>/deploy/.env | cut -d= -f2)
+# Source stack config for STACK__STACK__IMAGE
+source <INSTALL_DIR>/deploy/stack.env
 
 # 1. Tag current state for rollback
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git tag -f pre-update'
-docker tag "${STACK__STACK__IMAGE}" "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" 2>/dev/null || true
+docker tag "${STACK__STACK__IMAGE}" "${STACK__STACK__IMAGE%:*}:rollback-$(date +%Y%m%d)" 2>/dev/null || true
 
 # 2. Review changes before applying
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git fetch origin main && git log --oneline HEAD..origin/main'
@@ -537,7 +540,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git fetch origin main && 
 
 # 3. Pull and rebuild
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git pull origin main'
-sudo -u openclaw <INSTALL_DIR>/scripts/build-openclaw.sh
+sudo -u openclaw <INSTALL_DIR>/deploy/deploy/build-openclaw.sh
 
 # 4. Recreate containers with the new image
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
@@ -552,7 +555,7 @@ for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | 
 done
 
 # 6. Cleanup old rollback images (keep last 3)
-docker images --format '{{.Repository}}:{{.Tag}}' | grep "${OPENCLAW_IMAGE%:*}:rollback-" | sort -r | tail -n +4 | xargs -r docker rmi
+docker images --format '{{.Repository}}:{{.Tag}}' | grep "${STACK__STACK__IMAGE%:*}:rollback-" | sort -r | tail -n +4 | xargs -r docker rmi
 ```
 
 > **Note:** Step 4 automatically stops the old container and starts a new one from the rebuilt image. Expect a brief gateway downtime during the restart.
@@ -563,13 +566,13 @@ If an update causes issues, roll back to the previous known-good state:
 
 ```bash
 #!/bin/bash
-OPENCLAW_IMAGE=$(grep '^OPENCLAW_IMAGE=' <INSTALL_DIR>/deploy/.env | cut -d= -f2)
+source <INSTALL_DIR>/deploy/stack.env
 
 # 1. Revert source to pre-update tag
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git checkout pre-update'
 
 # 2. Restore the previous Docker image
-docker tag "${OPENCLAW_IMAGE%:*}:rollback-$(date +%Y%m%d)" "${STACK__STACK__IMAGE}"
+docker tag "${STACK__STACK__IMAGE%:*}:rollback-$(date +%Y%m%d)" "${STACK__STACK__IMAGE}"
 
 # 3. Recreate containers with the old image
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
@@ -585,7 +588,7 @@ done
 ```
 
 > If the rollback date tag doesn't match today, list available rollback images with:
-> `docker images --format '{{.Repository}}:{{.Tag}}' | grep "${OPENCLAW_IMAGE%:*}:rollback-"`
+> `docker images --format '{{.Repository}}:{{.Tag}}' | grep "${STACK__STACK__IMAGE%:*}:rollback-"`
 
 ---
 

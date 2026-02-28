@@ -2,7 +2,7 @@
 # Host resource monitoring — sends Telegram alerts on threshold breaches.
 # Runs via cron every 15 minutes: /etc/cron.d/openclaw-alerts
 #
-# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in ${INSTALL_DIR}/openclaw/.env
+# Requires: HOSTALERT_TELEGRAM_BOT_TOKEN and HOSTALERT_TELEGRAM_CHAT_ID in stack.env (via source-config.sh)
 # Only alerts on state *change* to avoid spam (tracks state in $INSTALL_DIR/.host-alert-state).
 #
 # Writes health.json to the agent workspace directory, readable by both
@@ -18,19 +18,12 @@ if [[ "${1:-}" == "--report" ]]; then
   REPORT_MODE=true
 fi
 
-INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+# Resolve paths via canonical config helper
+source "$(cd "$(dirname "$0")" && pwd)/scripts/source-config.sh"
+INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 
 STATE_FILE="${INSTALL_DIR}/.host-alert-state"
-CONFIG_FILE="${INSTALL_DIR}/openclaw/.env"
 INSTANCES_DIR="${INSTALL_DIR}/instances"
-
-# Load config
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  echo "Config file not found: $CONFIG_FILE" >&2
-  exit 1
-fi
-# shellcheck source=/dev/null
-source "$CONFIG_FILE"
 
 # Thresholds
 DISK_THRESHOLD=85
@@ -148,7 +141,9 @@ done
 
 # --- Check Telegram config (gates all Telegram-sending logic below) ---
 TELEGRAM_CONFIGURED=false
-if [[ -n "${HOSTALERT_TELEGRAM_BOT_TOKEN:-}" && -n "${HOSTALERT_TELEGRAM_CHAT_ID:-}" ]]; then
+if [[ -n "${ENV__HOSTALERT_TELEGRAM_BOT_TOKEN:-}" && -n "${ENV__HOSTALERT_TELEGRAM_CHAT_ID:-}" ]]; then
+  HOSTALERT_TELEGRAM_BOT_TOKEN="${ENV__HOSTALERT_TELEGRAM_BOT_TOKEN}"
+  HOSTALERT_TELEGRAM_CHAT_ID="${ENV__HOSTALERT_TELEGRAM_CHAT_ID}"
   TELEGRAM_CONFIGURED=true
 fi
 

@@ -8,7 +8,7 @@ set -euo pipefail
 # Does NOT wait for sandbox builds — caller handles the wait.
 #
 # Interface:
-#   Env vars in: ENABLE_VECTOR_LOG_SHIPPING (optional)
+#   Env vars in: STACK__STACK__LOGGING__VECTOR (optional, from source-config.sh)
 #   Stdout: FIRST_CLAW=<container-name>, CLAW_COUNT=N, then START_CLAWS_OK
 #   Stderr: progress
 #   Exit: 0 success, 1 failure
@@ -17,10 +17,10 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
 OPENCLAW_HOME="$STACK__STACK__INSTALL_DIR"
 
-# Discover configured instances from deploy output (openclaw/<name>/ dirs)
-DEPLOY_ROOT="${STACK__STACK__INSTALL_DIR}/deploy"
-if [ -d "${DEPLOY_ROOT}/openclaw" ]; then
-  INSTANCE_NAMES=$(ls -d "${DEPLOY_ROOT}"/openclaw/*/ 2>/dev/null \
+# Discover configured instances from instances directory
+INSTANCES_DIR="${STACK__STACK__INSTANCES_DIR:-${OPENCLAW_HOME}/instances}"
+if [ -d "${INSTANCES_DIR}" ]; then
+  INSTANCE_NAMES=$(ls -d "${INSTANCES_DIR}"/*/ 2>/dev/null \
     | xargs -I{} basename {} | grep -v '^_' | tr '\n' ' ')
 fi
 INSTANCE_NAMES="${INSTANCE_NAMES:-personal-claw}"
@@ -31,23 +31,18 @@ echo "Instances: ${INSTANCE_NAMES}(${CLAW_COUNT} claw(s))" >&2
 
 # Build image
 echo "Building ${STACK__STACK__IMAGE} image..." >&2
-sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/scripts/build-openclaw.sh" >&2
+sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/deploy/deploy/build-openclaw.sh" >&2
 
-# Start containers
+# Start containers (Vector is included in the main compose when enabled)
+COMPOSE_DIR="${OPENCLAW_HOME}/deploy"
 if [ "$CLAW_COUNT" -gt 1 ]; then
   echo "Multi-claw: starting openclaw-${FIRST_CLAW} first for sandbox builds..." >&2
   sudo -u openclaw bash -c \
-    "cd ${OPENCLAW_HOME}/openclaw && docker compose up -d openclaw-${FIRST_CLAW}"
+    "cd ${COMPOSE_DIR} && docker compose up -d openclaw-${FIRST_CLAW}"
 else
   echo "Single-claw: starting all services..." >&2
   sudo -u openclaw bash -c \
-    "cd ${OPENCLAW_HOME}/openclaw && docker compose up -d"
-fi
-
-# Start Vector if enabled
-if [ "${STACK__STACK__LOGGING__VECTOR:-false}" = "true" ]; then
-  echo "Starting Vector..." >&2
-  sudo -u openclaw bash -c "cd ${OPENCLAW_HOME}/vector && docker compose up -d" >&2
+    "cd ${COMPOSE_DIR} && docker compose up -d"
 fi
 
 # Output for caller

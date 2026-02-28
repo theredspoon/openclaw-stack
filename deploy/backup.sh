@@ -4,7 +4,9 @@ set -euo pipefail
 # backup.sh — OpenClaw backup (always-multi-claw layout)
 # Backs up all claw instances under ${INSTALL_DIR}/instances/
 
-INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+# Resolve paths via canonical config helper
+source "$(cd "$(dirname "$0")" && pwd)/scripts/source-config.sh"
+INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 INSTANCES_DIR="${INSTALL_DIR}/instances"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=30
@@ -52,12 +54,12 @@ for inst_dir in "${INSTANCES_DIR}"/*/; do
   find "${BACKUP_DIR}" -name "openclaw_backup_*.tar.gz" -mtime +${RETENTION_DAYS} -delete
 done
 
-# Back up shared .env file
+# Back up shared deployment config (docker-compose.yml)
 SHARED_BACKUP_DIR="${INSTALL_DIR}/instances/.shared-backups"
 mkdir -p "${SHARED_BACKUP_DIR}"
-if [ -f ${INSTALL_DIR}/openclaw/.env ]; then
-  cp ${INSTALL_DIR}/openclaw/.env "${SHARED_BACKUP_DIR}/.env.${TIMESTAMP}"
-  # Keep only last 10 .env backups
-  find "${SHARED_BACKUP_DIR}" -name ".env.*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm
-  echo "$(date): Shared .env backed up"
+if [ -f "${INSTALL_DIR}/deploy/docker-compose.yml" ]; then
+  cp "${INSTALL_DIR}/deploy/docker-compose.yml" "${SHARED_BACKUP_DIR}/docker-compose.yml.${TIMESTAMP}"
+  # Keep only last 10 backups
+  find "${SHARED_BACKUP_DIR}" -name "docker-compose.yml.*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm
+  echo "$(date): docker-compose.yml backed up"
 fi

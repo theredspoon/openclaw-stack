@@ -13,7 +13,7 @@
 #   2. Dockerfile: clear build-time jiti cache (belt-and-suspenders with entrypoint §2c)
 #   3. .dockerignore: exclude local runtime dirs (data/, deploy/) from build context
 #
-# Usage: sudo -u openclaw ${INSTALL_DIR}/scripts/build-openclaw.sh
+# Usage: sudo -u openclaw ${INSTALL_DIR}/deploy/deploy/build-openclaw.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -73,7 +73,7 @@ case "$OPENCLAW_VERSION" in
 esac
 
 # ── 2. Record resolved version ──────────────────────────────────────
-RESOLVED_VERSION=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || echo "unknown")
+RESOLVED_VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])" 2>/dev/null || echo "unknown")
 echo "[build] Resolved version: ${RESOLVED_VERSION}"
 
 # ── 3. Create vps-patch branch ──────────────────────────────────────

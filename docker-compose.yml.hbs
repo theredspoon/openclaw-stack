@@ -85,7 +85,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 300s
+      start_period: 1800s
 
 {{/each}}
   # ── Cloudflare Tunnel (per-stack sidecar) ─────────────────────
@@ -111,7 +111,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - {{stack.install_dir}}/deploy/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - {{stack.install_dir}}/vector/data:/var/lib/vector
     environment:
       - LOG_WORKER_URL={{stack.logging.worker_url}}

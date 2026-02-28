@@ -59,19 +59,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-OPENCLAW_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
+DEPLOY_DIR="${STACK__STACK__INSTALL_DIR}/deploy"
 
 # Files to sync: local path -> VPS host path
-# These are bind-mounted into the container (docker-compose.override.yml lines 48-52)
+# These are bind-mounted into the container via docker-compose.yml volumes
 SYNC_LOCAL=(
   "deploy/sandbox-toolkit.yaml"
   "deploy/parse-toolkit.mjs"
   "deploy/rebuild-sandboxes.sh"
 )
 SYNC_REMOTE=(
-  "$OPENCLAW_DIR/deploy/sandbox-toolkit.yaml"
-  "$OPENCLAW_DIR/deploy/parse-toolkit.mjs"
-  "$OPENCLAW_DIR/deploy/rebuild-sandboxes.sh"
+  "$DEPLOY_DIR/sandbox-toolkit.yaml"
+  "$DEPLOY_DIR/parse-toolkit.mjs"
+  "$DEPLOY_DIR/rebuild-sandboxes.sh"
 )
 
 printf '\033[32mUpdating sandbox toolkit on %s...\033[0m\n' "$ENV__VPS_IP"

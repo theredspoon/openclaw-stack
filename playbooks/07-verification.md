@@ -90,7 +90,7 @@ This is expected on the first reboot after deployment. Docker Compose services u
 > "Containers didn't auto-start after reboot. This is a known first-reboot issue — Sysbox wasn't ready when Docker tried to restart the containers. Start them manually:"
 
 ```bash
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
 ```
 
 > Subsequent reboots typically work because Sysbox starts faster on warm boots. If containers consistently fail to start after reboot, check that Sysbox is enabled: `sudo systemctl is-enabled sysbox`.
@@ -107,8 +107,8 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'
 # Check Vector is running (part of main compose project)
 sudo docker ps --filter 'name=vector'
 
-# Check Vector logs for errors
-sudo docker logs --tail 20 vector
+# Check Vector logs for errors (container name is <project>-vector)
+sudo docker logs --tail 20 $(sudo docker ps --format '{{.Names}}' | grep 'vector$')
 
 # Check checkpoint data exists
 sudo ls -la <INSTALL_DIR>/vector/data/
@@ -398,8 +398,8 @@ openclaw cron list
 
 ```bash
 # Test Telegram delivery (if configured)
-TELEGRAM_TOKEN=$(sudo grep -oP 'HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/openclaw/.env)
-TELEGRAM_CHAT=$(sudo grep -oP 'HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/openclaw/.env)
+TELEGRAM_TOKEN=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/deploy/stack.env)
+TELEGRAM_CHAT=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/deploy/stack.env)
 
 if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT" ]]; then
   RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \

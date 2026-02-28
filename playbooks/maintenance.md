@@ -175,11 +175,11 @@ scp -i <SSH_KEY> -P <SSH_PORT> [-r] deploy/<path> adminclaw@<VPS_IP>:/tmp/deploy
 
 # Move into place, fix ownership, and restart all claws (single SSH session)
 ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> "
-  sudo rm -rf <INSTALL_DIR>/openclaw/deploy/<path>
-  sudo cp -r /tmp/deploy-update <INSTALL_DIR>/openclaw/deploy/<path>
-  sudo chown -R 1000:1000 <INSTALL_DIR>/openclaw/deploy/<path>
+  sudo rm -rf <INSTALL_DIR>/deploy/<path>
+  sudo cp -r /tmp/deploy-update <INSTALL_DIR>/deploy/<path>
+  sudo chown -R 1000:1000 <INSTALL_DIR>/deploy/<path>
   rm -rf /tmp/deploy-update
-  sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose restart'
+  sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose restart'
 "
 ```
 

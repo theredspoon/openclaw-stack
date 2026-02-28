@@ -54,7 +54,7 @@ fi
 if [ -d /app/.git ]; then
   VERSION=$(node -e "console.log(require('/app/package.json').version)" 2>/dev/null || echo "unknown")
 
-  if [ "${ALLOW_OPENCLAW_UPDATES}" = "true" ]; then
+  if [ "${ALLOW_OPENCLAW_UPDATES:-}" = "true" ]; then
     # ── Switch to detached tag for stable channel auto-detection ──
     # The image was built on vps-patch/<version> branch (for clean patched build).
     # The update engine's channel resolver detects:
@@ -110,7 +110,7 @@ fi
 npm_global="/home/node/.npm-global"
 mkdir -p "$npm_global"
 chown 1000:1000 "$npm_global"
-echo "prefix=$npm_global" >> /home/node/.npmrc
+echo "prefix=$npm_global" > /home/node/.npmrc
 # Add to PATH so globally installed binaries are found
 export PATH="$npm_global/bin:$PATH"
 echo "[entrypoint] npm global prefix set to $npm_global"

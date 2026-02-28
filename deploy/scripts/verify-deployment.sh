@@ -7,12 +7,15 @@ set -euo pipefail
 # Discovers containers and ports dynamically — no hardcoded names or ports.
 #
 # Interface:
-#   Env vars in: OPENCLAW_DOMAIN_PATH (optional)
+#   Config: sourced from source-config.sh (STACK__STACK__DEFAULTS__DOMAIN_PATH, etc.)
 #   Stdout: VERIFY_DEPLOYMENT_OK or VERIFY_DEPLOYMENT_FAILED
 #   Stderr: detailed results
 #   Exit: 0 all pass, 1 any failure
 
-DOMAIN_PATH="${OPENCLAW_DOMAIN_PATH:-}"
+# Resolve paths via canonical config helper
+source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+
+DOMAIN_PATH="${STACK__STACK__DEFAULTS__DOMAIN_PATH:-}"
 FAILED=0
 
 # Discover running claws
@@ -94,7 +97,7 @@ for CLAW in $CLAWS; do
 done
 
 # 7. Check Vector
-if sudo docker ps --format '{{.Names}}' | grep -q '^vector$'; then
+if sudo docker ps --format '{{.Names}}' | grep -q 'vector$'; then
   echo "" >&2
   echo "=== Vector ===" >&2
   echo "  status: running" >&2
