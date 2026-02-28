@@ -285,91 +285,23 @@ connections yet, the output will show an empty device list — that's normal.
 
 ## 4.5 Deploy OpenClaw Cron Jobs
 
-After the gateway is running and healthy, register the cron jobs defined in `deploy/openclaw-crons.jsonc`.
-
-### Automated Registration
-
-Run the registration script on the VPS (it was copied during the `scp` in section 4.2 Step 1):
+Register the Daily VPS Health Check cron job on all claws. The script is self-contained — it sources `stack.env` for claw IDs, schedule, timezone, and Telegram delivery config. Schedule and timezone are pre-resolved from `host.host_alerter.daily_report` in `stack.yml` by `bun run pre-deploy`.
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "env HOSTALERT_TELEGRAM_CHAT_ID='${HOSTALERT_TELEGRAM_CHAT_ID}' \
-  bash ${INSTALL_DIR}/.deploy-staging/scripts/register-cron-jobs.sh"
+  "bash ${INSTALL_DIR}/.deploy-staging/scripts/register-cron-jobs.sh"
 ```
 
-The script is idempotent — it skips registration if the job already exists.
-
-### Manual Registration (alternative)
-
-### Daily VPS Health Check
-
-This job runs the main agent daily to read the health and maintenance JSON files written by the host cron scripts (§4.3). If everything is healthy, the agent responds with `HEARTBEAT_OK` and no notification is sent. If issues are found, the agent sends a concise alert.
-
-```bash
-#!/bin/bash
-# SOURCE: deploy/openclaw-crons.jsonc — "Daily VPS Health Check"
-# Schedule uses HOSTALERT_DAILY_REPORT_TIME converted to cron format in the configured timezone.
-# Default: 30 9 * * * America/Los_Angeles (9:30 AM PST)
-
-# Read the message from the reference file
-# The message is a multi-line string — pass it via --message flag
-openclaw cron add \
-  --name "Daily VPS Health Check" \
-  --cron "<CRON_EXPR>" \
-  --tz "<CRON_TZ>" \
-  --session isolated \
-  --wake next-heartbeat \
-  --agent main \
-  --announce \
-  --best-effort-deliver \
-  <DELIVERY_FLAGS> \
-  --message "Read the VPS health report files and analyze them:
-
-1. Read host-status/health.json (resource metrics)
-2. Read host-status/maintenance.json (OS maintenance)
-
-Analyze for issues that need human attention:
-
-Health (health.json):
-- disk_pct approaching or exceeding disk_threshold
-- memory_pct approaching or exceeding memory_threshold
-- load_avg significantly above cpu_count
-- docker_ok or gateway_ok is false
-- crashed is non-empty (containers restarting)
-- backup_ok is false or backup_age_hours > 36
-- timestamp older than 30 minutes (monitoring may be broken)
-
-Maintenance (maintenance.json):
-- security_updates > 0 (pending security patches)
-- reboot_required is true
-- failed_services is not \"none\"
-- uptime_days > 90 (consider scheduled reboot)
-- timestamp older than 26 hours (checker may not be running)
-
-If everything looks healthy, respond with exactly: HEARTBEAT_OK
-
-If any issues are found, send a concise alert with:
-- What's wrong (use emoji indicators: 🔴 critical, ⚠️ warning)
-- Why it matters (one line per issue)
-- Recommended action
-Keep it brief — this goes to Telegram."
-```
-
-**Placeholder rules:**
-
-- `<CRON_EXPR>` — cron expression derived from `HOSTALERT_DAILY_REPORT_TIME`. Same conversion rules as §4.3. Default: `30 9 * * *`.
-- `<CRON_TZ>` — IANA timezone for the cron expression. Derive from the timezone specified in `HOSTALERT_DAILY_REPORT_TIME` (e.g., "PST" → `America/Los_Angeles`). Default: `America/Los_Angeles`.
-- `<DELIVERY_FLAGS>` — conditional based on Telegram configuration:
-  - **If `HOSTALERT_TELEGRAM_CHAT_ID` is set:** `--channel telegram --to <HOSTALERT_TELEGRAM_CHAT_ID>`
-  - **If not set:** omit both `--channel` and `--to`. The CLI defaults to `channel: "last"` (delivers to wherever the user last interacted).
+The script is idempotent — it skips registration on any claw where the job already exists.
 
 **Verify:**
 
 ```bash
-openclaw cron list
+ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
+  "openclaw cron list"
 ```
 
-**Expected:** Shows "Daily VPS Health Check" with status `ok` and the correct schedule.
+**Expected:** Shows "Daily VPS Health Check" with status `ok` and the correct schedule on each claw.
 
 ---
 

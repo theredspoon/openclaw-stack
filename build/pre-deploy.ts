@@ -281,6 +281,49 @@ const ENVSUBST_VARS = [
   "ADMIN_TELEGRAM_ID",
 ];
 
+// ── Step 8b: Parse human-readable time → cron expression + IANA timezone ─────
+
+const TZ_ABBREVIATIONS: Record<string, string> = {
+  PST: "America/Los_Angeles", PDT: "America/Los_Angeles",
+  EST: "America/New_York", EDT: "America/New_York",
+  CST: "America/Chicago", CDT: "America/Chicago",
+  MST: "America/Denver", MDT: "America/Denver",
+  UTC: "UTC", GMT: "Europe/London",
+  CET: "Europe/Berlin", CEST: "Europe/Berlin",
+};
+
+interface ParsedSchedule {
+  cronExpr: string;
+  ianaTz: string;
+}
+
+function parseDailyReportTime(timeStr: string | undefined): ParsedSchedule {
+  const fallback: ParsedSchedule = { cronExpr: "30 9 * * *", ianaTz: "America/Los_Angeles" };
+  if (!timeStr) return fallback;
+
+  const match = String(timeStr).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)\s*(\w+)$/i);
+  if (!match) {
+    warn(`Could not parse daily_report time "${timeStr}" — using default 9:30 AM PST`);
+    return fallback;
+  }
+
+  let hour = parseInt(match[1]!, 10);
+  const minute = parseInt(match[2]!, 10);
+  const ampm = match[3]!.toUpperCase();
+  const tzAbbr = match[4]!.toUpperCase();
+
+  if (ampm === "PM" && hour !== 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+
+  const ianaTz = TZ_ABBREVIATIONS[tzAbbr];
+  if (!ianaTz) {
+    warn(`Unknown timezone abbreviation "${match[4]}" — using America/Los_Angeles`);
+    return { cronExpr: `${minute} ${hour} * * *`, ianaTz: "America/Los_Angeles" };
+  }
+
+  return { cronExpr: `${minute} ${hour} * * *`, ianaTz };
+}
+
 // ── Step 9: Generate stack.env ───────────────────────────────────────────────
 // Bash-sourceable key=value file for shell scripts.
 // Convention: ENV__<key> for .env vars, STACK__<path> for stack.yml vars.
@@ -346,6 +389,15 @@ function generateStackEnv(
   lines.push("# Derived");
   lines.push(`STACK__STACK__INSTANCES_DIR=${formatEnvValue(installDir + "/instances")}`);
   lines.push(`STACK__STACK__IMAGE=${formatEnvValue("openclaw-" + projectName + ":local")}`);
+  lines.push(`STACK__CLAWS__IDS=${formatEnvValue(Object.keys(claws).join(","))}`);
+  lines.push("");
+
+  // Derived: host alerter schedule
+  const hostAlerter = (config.host || {}).host_alerter || {};
+  const schedule = parseDailyReportTime(hostAlerter.daily_report);
+  lines.push("# Derived: host alerter schedule");
+  lines.push(`STACK__HOST__HOSTALERT__CRON_EXPR=${formatEnvValue(schedule.cronExpr)}`);
+  lines.push(`STACK__HOST__HOSTALERT__CRON_TZ=${formatEnvValue(schedule.ianaTz)}`);
   lines.push("");
 
   // Per-claw (merged with defaults)
@@ -486,7 +538,6 @@ async function main() {
     "parse-toolkit.mjs",
     "rebuild-sandboxes.sh",
     "build-openclaw.sh",
-    "openclaw-crons.jsonc",
     "session-prune.sh",
     "backup.sh",
     "host-alert.sh",

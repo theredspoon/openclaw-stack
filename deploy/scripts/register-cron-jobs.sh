@@ -1,55 +1,55 @@
 #!/bin/bash
 set -euo pipefail
 
-# register-cron-jobs.sh — Register OpenClaw internal cron jobs after gateway startup
+# register-cron-jobs.sh — Register OpenClaw cron jobs on all claws
 #
-# Runs on the VPS host via the openclaw CLI wrapper (which uses docker exec).
-# Registers the "Daily VPS Health Check" cron job defined in deploy/openclaw-crons.jsonc.
+# Self-contained: sources config from source-config.sh (stack.env).
+# Iterates over all claws in the stack and registers the Daily VPS Health Check.
 #
-# Interface:
-#   Env vars in: HOSTALERT_TELEGRAM_CHAT_ID (optional), HOSTALERT_DAILY_REPORT_TIME (optional)
-#   Exit: 0 success, 1 failure
-#
-# Prerequisites: Gateway container must be running and healthy.
+# Prerequisites: Gateway container(s) must be running and healthy.
 
-# Multi-claw: pass --instance <name> to target a specific claw
-INSTANCE_FLAG=""
-if [ "${1:-}" = "--instance" ] && [ -n "${2:-}" ]; then
-  INSTANCE_FLAG="--instance $2"
-  shift 2
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Parse schedule from HOSTALERT_DAILY_REPORT_TIME
-# Default: "9:30 AM PST" → cron "30 9 * * *" in America/Los_Angeles
-CRON_EXPR="${CRON_EXPR:-30 9 * * *}"
-CRON_TZ="${CRON_TZ:-America/Los_Angeles}"
+# shellcheck source=source-config.sh
+source "$SCRIPT_DIR/../source-config.sh"
 
-# Check if already registered (idempotent)
-# shellcheck disable=SC2086
-if openclaw ${INSTANCE_FLAG} cron list 2>/dev/null | grep -q "Daily VPS Health Check"; then
-  echo "Cron job 'Daily VPS Health Check' already registered, skipping."
-  exit 0
-fi
+# Read pre-resolved config
+CLAW_IDS="${STACK__CLAWS__IDS:?STACK__CLAWS__IDS not set in stack.env}"
+CRON_EXPR="${STACK__HOST__HOSTALERT__CRON_EXPR:-30 9 * * *}"
+CRON_TZ="${STACK__HOST__HOSTALERT__CRON_TZ:-America/Los_Angeles}"
+CHAT_ID="${ENV__HOSTALERT_TELEGRAM_CHAT_ID:-}"
 
-# Build delivery flags
+# Build delivery flags (conditional on Telegram config)
 DELIVERY_FLAGS=""
-if [ -n "${HOSTALERT_TELEGRAM_CHAT_ID:-}" ]; then
-  DELIVERY_FLAGS="--channel telegram --to ${HOSTALERT_TELEGRAM_CHAT_ID}"
+if [ -n "$CHAT_ID" ]; then
+  DELIVERY_FLAGS="--channel telegram --to ${CHAT_ID}"
 fi
 
-# Register the cron job
-# shellcheck disable=SC2086
-openclaw ${INSTANCE_FLAG} cron add \
-  --name "Daily VPS Health Check" \
-  --cron "${CRON_EXPR}" \
-  --tz "${CRON_TZ}" \
-  --session isolated \
-  --wake next-heartbeat \
-  --agent main \
-  --announce \
-  --best-effort-deliver \
-  ${DELIVERY_FLAGS} \
-  --message "Read the VPS health report files and analyze them:
+# Register on each claw
+IFS=',' read -ra CLAWS <<< "$CLAW_IDS"
+for CLAW in "${CLAWS[@]}"; do
+  echo "Checking claw: $CLAW"
+
+  # Idempotent: skip if already registered
+  # shellcheck disable=SC2086
+  if openclaw --instance "$CLAW" cron list 2>/dev/null | grep -q "Daily VPS Health Check"; then
+    echo "  Cron job 'Daily VPS Health Check' already registered on $CLAW, skipping."
+    continue
+  fi
+
+  echo "  Registering 'Daily VPS Health Check' on $CLAW..."
+  # shellcheck disable=SC2086
+  openclaw --instance "$CLAW" cron add \
+    --name "Daily VPS Health Check" \
+    --cron "${CRON_EXPR}" \
+    --tz "${CRON_TZ}" \
+    --session isolated \
+    --wake next-heartbeat \
+    --agent main \
+    --announce \
+    --best-effort-deliver \
+    ${DELIVERY_FLAGS} \
+    --message "Read the VPS health report files and analyze them:
 
 1. Read host-status/health.json (resource metrics)
 2. Read host-status/maintenance.json (OS maintenance)
@@ -80,4 +80,7 @@ If any issues are found, send a concise alert with:
 - Recommended action
 Keep it brief - this goes to Telegram."
 
-echo "Registered 'Daily VPS Health Check' cron job."
+  echo "  Registered on $CLAW."
+done
+
+echo "Done. Cron registration complete for ${#CLAWS[@]} claw(s)."
