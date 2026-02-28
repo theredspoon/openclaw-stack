@@ -42,7 +42,7 @@ fi
 # of legitimate $ characters in JSON values (e.g. sandbox $HOME references).
 config_file="/home/node/.openclaw/openclaw.json"
 if [ -f "$config_file" ] && grep -q '\$[A-Z_]' "$config_file"; then
-  ENVSUBST_VARS='$OPENCLAW_DOMAIN_PATH $OPENCLAW_ALLOWED_ORIGIN $OPENCLAW_INSTANCE_ID $VPS_HOSTNAME $LOG_WORKER_TOKEN $EVENTS_URL $LLEMTRY_URL $ENABLE_EVENTS_LOGGING $ENABLE_LLEMTRY_LOGGING $ADMIN_TELEGRAM_ID'
+  ENVSUBST_VARS='$OPENCLAW_DOMAIN_PATH $OPENCLAW_ALLOWED_ORIGIN $OPENCLAW_INSTANCE_ID $VPS_HOSTNAME $LOG_WORKER_TOKEN $EVENTS_URL $LLEMTRY_URL $ENABLE_EVENTS_LOGGING $ENABLE_LLEMTRY_LOGGING $ADMIN_TELEGRAM_ID $ANTHROPIC_BASE_URL $OPENAI_BASE_URL'
   envsubst "$ENVSUBST_VARS" < "$config_file" > "${config_file}.tmp"
   mv "${config_file}.tmp" "$config_file"
   chmod 600 "$config_file"

@@ -333,6 +333,21 @@
       }
     }
   },
+  // Model provider configuration
+  // baseUrl routes requests through the AI gateway proxy (set in docker-compose.yml).
+  // models: [] preserves the full built-in model catalog — no need to enumerate models.
+  "models": {
+    "providers": {
+      "anthropic": {
+        "baseUrl": "$ANTHROPIC_BASE_URL",
+        "models": []
+      },
+      "openai": {
+        "baseUrl": "$OPENAI_BASE_URL",
+        "models": []
+      }
+    }
+  },
   // Default tool settings — override per-agent in agents.list
   "tools": {
     // Elevated mode — escape hatch for running exec on host from a sandboxed session

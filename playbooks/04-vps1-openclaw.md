@@ -125,7 +125,6 @@ Capture the `OPENCLAW_GENERATED_TOKEN=<hex>` line from stdout (all other output 
 | `deploy/vector/docker-compose.yml` | `<INSTALL_DIR>/vector/docker-compose.yml` | static | Skip if `ENABLE_VECTOR_LOG_SHIPPING=false` |
 | `deploy/vector/vector.yaml` | `<INSTALL_DIR>/vector/vector.yaml` | static | Skip if `ENABLE_VECTOR_LOG_SHIPPING=false` |
 | `openclaws/_defaults/openclaw.json` | `<INSTALL_DIR>/instances/<name>/.openclaw/openclaw.json` | template | Per-claw (overlaid with claw-specific overrides if present) |
-| `openclaws/_defaults/models.json` | `<INSTALL_DIR>/instances/<name>/.openclaw/agents/*/agent/models.json` | template | Per-claw, per-agent (main, code, skills) |
 | `deploy/build-openclaw.sh` | `<INSTALL_DIR>/scripts/build-openclaw.sh` | static | |
 | `deploy/entrypoint-gateway.sh` | `<INSTALL_DIR>/openclaw/scripts/entrypoint-gateway.sh` | static | |
 | `deploy/host-alert.sh` | `<INSTALL_DIR>/scripts/host-alert.sh` | static | |
@@ -155,7 +154,6 @@ These are substituted server-side via `sed` after copying from staging. All conf
 | `LOG_WORKER_TOKEN` | Config | `openclaw.json` |
 | `OPENCLAW_DOMAIN` | Config (or per-claw `config.env`) | Used to derive `ALLOWED_ORIGIN` |
 | `ALLOWED_ORIGIN` | Derived: `https://${OPENCLAW_DOMAIN}` | `openclaw.json` |
-| `AI_GATEWAY_WORKER_URL` | Config | `models.json` |
 
 > **`controlUi.allowedOrigins` is required.** When the gateway binds to `lan` (non-loopback), which is always the case for Docker/Tunnel deployments, `controlUi.allowedOrigins` must be set in `openclaw.json`. Without it, the gateway crashes on startup with a security check error. The `deploy-config.sh` script handles this automatically by deriving `ALLOWED_ORIGIN` from `OPENCLAW_DOMAIN` (or from the per-claw `config.env` override). If a claw's `OPENCLAW_DOMAIN` is empty, the origin will be `https://` which will fail — every claw must have a domain configured.
 

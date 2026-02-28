@@ -2,7 +2,6 @@
 
 AGENTS: IGNORE THIS TODO LIST - for development only
 
-- [ ] Move models.json into openclaw.json templates per claude findings
 - [ ] Move plugins from deploy/ to openclaw/plugins?
 
 - [ ] Replace most of scripts/* with a single CLI - with multi claw support, the individual scripts no longer make much sense

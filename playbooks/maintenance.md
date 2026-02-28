@@ -206,7 +206,7 @@ Brief downtime (~5-10s) per claw during container swap. The script waits for hea
 
 ## Updating a Single Claw's Configuration
 
-To update just one claw's `openclaw.json` or `models.json` without affecting other claws:
+To update just one claw's `openclaw.json` without affecting other claws:
 
 ```bash
 # From local machine
