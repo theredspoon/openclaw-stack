@@ -7,6 +7,7 @@
     "pre-deploy:dry": "bun run build/pre-deploy.ts --dry-run"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.0",
     "jsonc-parser": "^3.3.1"

@@ -485,7 +485,7 @@ sudo docker exec --user node "$FIRST_CLAW" \
 
 ## 7.5c Verify Resource Limits
 
-Verify deployed claw resource limits match VPS hardware. Read `OPENCLAW_CONTAINER_CPU` and `OPENCLAW_CONTAINER_MEM` from `.env` (see § 0.4).
+Verify deployed claw resource limits match VPS hardware. Read `defaults.resources.cpus` and `defaults.resources.memory` from `stack.yml`, and check for per-claw overrides under `claws.<name>.resources` (see § 0.4).
 
 ```bash
 # On VPS: query hardware and deployed limits
@@ -504,21 +504,18 @@ Compare per-claw limits against VPS hardware divided by claw count (see `00-fres
 
 **If mismatch during fresh deploy:** Resource limits were already reviewed in `00-fresh-deploy-setup.md` § 0.4. Auto-apply only if the gap is significant (CPUs differ or memory off by >2GB); otherwise report and continue.
 
-**If mismatch outside fresh deploy:** Show comparison and ask user. If confirmed, update `OPENCLAW_CONTAINER_CPU` and `OPENCLAW_CONTAINER_MEM` in `.env`, run `bun run pre-deploy`, then push the updated artifacts to the VPS and recreate the container:
+**If mismatch outside fresh deploy:** Show comparison and ask user. If confirmed, update `defaults.resources.cpus` and `defaults.resources.memory` in `stack.yml` (or per-claw overrides under `claws.<name>.resources`), then rebuild and redeploy:
 
 ```bash
-# Update the .env on VPS with new resource limits
-ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c \"grep -q '^GATEWAY_CPUS=' <INSTALL_DIR>/openclaw/.env && \
-    sed -i 's/^GATEWAY_CPUS=.*/GATEWAY_CPUS=<NEW_CPUS>/' <INSTALL_DIR>/openclaw/.env || \
-    echo 'GATEWAY_CPUS=<NEW_CPUS>' >> <INSTALL_DIR>/openclaw/.env; \
-    grep -q '^GATEWAY_MEMORY=' <INSTALL_DIR>/openclaw/.env && \
-    sed -i 's/^GATEWAY_MEMORY=.*/GATEWAY_MEMORY=<NEW_MEMORY>/' <INSTALL_DIR>/openclaw/.env || \
-    echo 'GATEWAY_MEMORY=<NEW_MEMORY>' >> <INSTALL_DIR>/openclaw/.env\""
+# Locally: update stack.yml resource values, then rebuild artifacts
+bun run pre-deploy
 
-# Recreate container to pick up new limits (up -d re-reads .env)
+# Push updated artifacts to VPS (via .deploy/ git repo)
+cd .deploy && git add -A && git commit -m "Update resource limits" && git push
+
+# On VPS: pull and recreate containers with new limits
 ssh -i <SSH_KEY_PATH> -p <SSH_PORT> <SSH_USER>@<VPS1_IP> \
-  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && docker compose up -d'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && git pull && docker compose up -d'"
 ```
 
 ---

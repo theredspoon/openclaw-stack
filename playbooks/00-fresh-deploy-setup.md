@@ -180,11 +180,11 @@ This returns two lines: CPU count (e.g., `6`) and total memory in bytes (e.g., `
 
 ### Compare Against Config
 
-Read current gateway resource limits from `.env`: `OPENCLAW_CONTAINER_CPU` and `OPENCLAW_CONTAINER_MEM`. If not set, the compose file defaults apply (6 CPUs, 12G).
+Read current per-claw resource limits from `stack.yml`: `defaults.resources.cpus` and `defaults.resources.memory`. Check for per-claw overrides under `claws.<name>.resources`.
 
 ### Expected Values
 
-`GATEWAY_CPUS` and `GATEWAY_MEMORY` are **per-container** limits — each claw gets these resources. With multiple claws, divide the available VPS resources by the number of active claws.
+`defaults.resources.cpus` and `defaults.resources.memory` are **per-container** limits — each claw gets these resources. With multiple claws, divide the available VPS resources by the number of active claws.
 
 1. Count active claws from § 0.2c (entries under `claws` in `stack.yml`).
 2. Calculate system overhead: Vector (~128M) + system/kernel (~500M) = ~750M total.
@@ -204,13 +204,13 @@ VPS Resources:
   Memory: <total from free, human-readable>
   Active claws: <count> (<names>)
 
-Current per-claw limits (from .env):
-  OPENCLAW_CONTAINER_CPU:   <current value or "(default: 6)">
-  OPENCLAW_CONTAINER_MEM:   <current value or "(default: 12G)">
+Current per-claw limits (from stack.yml defaults.resources):
+  cpus:   <current value>
+  memory: <current value>
 
 Recommended per-claw limits (<count> claws):
-  GATEWAY_CPUS:   <floor(nproc / claw_count)>
-  GATEWAY_MEMORY: <floor((total - 750M) / claw_count), rounded to 0.5G>
+  cpus:   <floor(nproc / claw_count)>
+  memory: <floor((total - 750M) / claw_count), rounded to 0.5G>
   Total allocated: <cpus * count> CPUs, <memory * count> memory
 ```
 
@@ -220,7 +220,7 @@ Ask the user if they want to adjust the limits. They may choose:
 - Enter custom values
 - Keep the current values (skip)
 
-If the user confirms changes, update `OPENCLAW_CONTAINER_CPU` and `OPENCLAW_CONTAINER_MEM` in `.env`. Per-claw overrides can be set in `stack.yml` under `claws.<name>.cpu` and `claws.<name>.mem`.
+If the user confirms changes, update `defaults.resources.cpus` and `defaults.resources.memory` in `stack.yml`. Per-claw overrides can be set under `claws.<name>.resources.cpus` and `claws.<name>.resources.memory`.
 
 ---
 

@@ -13,6 +13,7 @@
 import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync } from "fs";
 import { join, resolve } from "path";
 import * as yaml from "js-yaml";
+import * as dotenv from "dotenv";
 import Handlebars from "handlebars";
 import { parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 
@@ -54,24 +55,8 @@ function readDotEnv(): Record<string, string> {
   const envPath = join(ROOT, ".env");
   if (!existsSync(envPath)) fatal(".env not found. Run: cp .env.example .env");
 
-  const env: Record<string, string> = {};
-  const lines = readFileSync(envPath, "utf-8").split("\n");
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let value = trimmed.slice(eqIdx + 1).trim();
-    // Strip surrounding quotes
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    env[key] = value;
-  }
-
-  return env;
+  const parsed = dotenv.parse(readFileSync(envPath));
+  return parsed as Record<string, string>;
 }
 
 // ── Step 2: Resolve ${VAR} in stack.yml ──────────────────────────────────────
