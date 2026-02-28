@@ -31,7 +31,8 @@ source/
 # Use wrangler.jsonc.example as template — see playbooks/01-workers.md.
 workers/*/wrangler.jsonc
 
-# Local sync of /home/node/.openclaw/media/ via the scripts/sync-media.sh script
+# Local syncs from VPS (via scripts/sync-configs.sh and scripts/sync-media.sh)
+synced/
 media/
 
 agents/

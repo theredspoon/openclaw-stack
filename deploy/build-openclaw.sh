@@ -17,12 +17,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/source-config.sh"
+source "${SCRIPT_DIR}/../source-config.sh"
 
-OPENCLAW_DIR="${INSTALL_DIR}/openclaw"
+OPENCLAW_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
 cd "$OPENCLAW_DIR"
 
-echo "[build] Image tag: ${OPENCLAW_IMAGE}"
+echo "[build] Image tag: ${STACK__STACK__IMAGE}"
 
 # ── Trap: restore host state on failure ──────────────────────────────
 # Ensures the host repo is never left on a patch branch or with a
@@ -40,8 +40,8 @@ trap cleanup EXIT
 
 # ── 1. Resolve version ───────────────────────────────────────────────
 # TODO: switch fallback to "stable" not "latest"
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-latest}"
-echo "[build] OPENCLAW_VERSION=${OPENCLAW_VERSION}"
+OPENCLAW_VERSION="${STACK__STACK__OPENCLAW__VERSION:-latest}"
+echo "[build] OPENCLAW_VERSION=${STACK__STACK__OPENCLAW__VERSION}"
 
 case "$OPENCLAW_VERSION" in
   ""|"latest")
@@ -60,14 +60,14 @@ case "$OPENCLAW_VERSION" in
     HOST_NEEDS_RESTORE=true
     ;;
   v*)
-    echo "[build] Fetching tags for specific version ${OPENCLAW_VERSION}..."
+    echo "[build] Fetching tags for specific version ${STACK__STACK__OPENCLAW__VERSION}..."
     git fetch --tags --force
     TARGET_REF="$OPENCLAW_VERSION"
     git checkout "$TARGET_REF" 2>/dev/null || { echo "[build] ERROR: Tag ${TARGET_REF} not found"; exit 1; }
     HOST_NEEDS_RESTORE=true
     ;;
   *)
-    echo "[build] ERROR: Invalid OPENCLAW_VERSION='${OPENCLAW_VERSION}'. Use 'stable', 'latest', '', or a tag (e.g., v2026.2.26)"
+    echo "[build] ERROR: Invalid OPENCLAW_VERSION='${STACK__STACK__OPENCLAW__VERSION}'. Use 'stable', 'latest', '', or a tag (e.g., v2026.2.26)"
     exit 1
     ;;
 esac
@@ -139,8 +139,8 @@ else
 fi
 
 # ── 7. Build image ──────────────────────────────────────────────────
-echo "[build] Building ${OPENCLAW_IMAGE} (version ${RESOLVED_VERSION})..."
-docker build -t "${OPENCLAW_IMAGE}" .
+echo "[build] Building ${STACK__STACK__IMAGE} (version ${RESOLVED_VERSION})..."
+docker build -t "${STACK__STACK__IMAGE}" .
 
 # ── 8. Restore host state ───────────────────────────────────────────
 # The image is built and immutable. Restore host to main with clean .dockerignore.
@@ -149,5 +149,5 @@ git checkout main -- .dockerignore 2>/dev/null || true
 git checkout main 2>/dev/null || true
 HOST_NEEDS_RESTORE=false
 
-echo "[build] Done. Built ${OPENCLAW_IMAGE} (version ${RESOLVED_VERSION}) from branch ${PATCH_BRANCH}"
+echo "[build] Done. Built ${STACK__STACK__IMAGE} (version ${RESOLVED_VERSION}) from branch ${PATCH_BRANCH}"
 echo "[build] Run: docker compose up -d"

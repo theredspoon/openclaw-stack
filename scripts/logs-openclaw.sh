@@ -39,7 +39,7 @@ fi
 
 DOCKER_ARGS+=("$CONTAINER")
 
-printf "\033[32mStreaming logs from %s on VPS-1 (%s)\033[0m\n" "$CONTAINER" "$VPS1_IP"
+printf "\033[32mStreaming logs from %s on VPS-1 (%s)\033[0m\n" "$CONTAINER" "$ENV__VPS_IP"
 
-TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo docker ${DOCKER_ARGS[*]}"

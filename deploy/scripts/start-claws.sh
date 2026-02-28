@@ -15,22 +15,23 @@ set -euo pipefail
 
 # Resolve paths via canonical config helper
 source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
-OPENCLAW_HOME="$INSTALL_DIR"
+OPENCLAW_HOME="$STACK__STACK__INSTALL_DIR"
 
-# Discover configured instances from staging dir
-if [ -d "${STAGING_DIR}/openclaws" ]; then
-  INSTANCE_NAMES=$(ls -d "${STAGING_DIR}"/openclaws/*/ 2>/dev/null \
+# Discover configured instances from deploy output (openclaw/<name>/ dirs)
+DEPLOY_ROOT="${STACK__STACK__INSTALL_DIR}/deploy"
+if [ -d "${DEPLOY_ROOT}/openclaw" ]; then
+  INSTANCE_NAMES=$(ls -d "${DEPLOY_ROOT}"/openclaw/*/ 2>/dev/null \
     | xargs -I{} basename {} | grep -v '^_' | tr '\n' ' ')
 fi
-INSTANCE_NAMES="${INSTANCE_NAMES:-main-claw}"
+INSTANCE_NAMES="${INSTANCE_NAMES:-personal-claw}"
 CLAW_COUNT=$(echo "$INSTANCE_NAMES" | wc -w | tr -d ' ')
 FIRST_CLAW=$(echo "$INSTANCE_NAMES" | awk '{print $1}')
 
 echo "Instances: ${INSTANCE_NAMES}(${CLAW_COUNT} claw(s))" >&2
 
 # Build image
-echo "Building ${OPENCLAW_IMAGE} image..." >&2
-sudo -u openclaw INSTALL_DIR="${INSTALL_DIR}" "${OPENCLAW_HOME}/scripts/build-openclaw.sh" >&2
+echo "Building ${STACK__STACK__IMAGE} image..." >&2
+sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/scripts/build-openclaw.sh" >&2
 
 # Start containers
 if [ "$CLAW_COUNT" -gt 1 ]; then
@@ -44,7 +45,7 @@ else
 fi
 
 # Start Vector if enabled
-if [ "${ENABLE_VECTOR_LOG_SHIPPING:-false}" = "true" ]; then
+if [ "${STACK__STACK__LOGGING__VECTOR:-false}" = "true" ]; then
   echo "Starting Vector..." >&2
   sudo -u openclaw bash -c "cd ${OPENCLAW_HOME}/vector && docker compose up -d" >&2
 fi

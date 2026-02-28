@@ -18,7 +18,7 @@ services:
     environment:
       - LOG_WORKER_URL=${LOG_WORKER_URL}
       - LOG_WORKER_TOKEN=${LOG_WORKER_TOKEN}
-      - VPS1_IP=${VPS1_IP}
+      - ENV__VPS_IP=${ENV__VPS_IP}
     deploy:
       resources:
         limits:

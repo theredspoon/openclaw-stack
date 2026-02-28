@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-OPENCLAW_DIR="${INSTALL_DIR:-/home/openclaw}/openclaw"
+OPENCLAW_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
 
 # Files to sync: local path -> VPS host path
 # These are bind-mounted into the container (docker-compose.override.yml lines 48-52)
@@ -74,10 +74,10 @@ SYNC_REMOTE=(
   "$OPENCLAW_DIR/deploy/rebuild-sandboxes.sh"
 )
 
-printf '\033[32mUpdating sandbox toolkit on %s...\033[0m\n' "$VPS1_IP"
+printf '\033[32mUpdating sandbox toolkit on %s...\033[0m\n' "$ENV__VPS_IP"
 
 # Check gateway container is running
-if ! ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+if ! ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo docker inspect -f '{{.State.Running}}' $GATEWAY 2>/dev/null" | grep -q true; then
   echo "Error: $GATEWAY container is not running on VPS" >&2
   exit 1
@@ -94,7 +94,7 @@ fi
 printf '\033[33m[%d/%d] Syncing toolkit files...\033[0m\n' "$STEP" "$TOTAL_STEPS"
 for i in "${!SYNC_LOCAL[@]}"; do
   local_file="${SYNC_LOCAL[$i]}"
-  local_path="$REPO_DIR/$local_file"
+  local_path="$REPO_ROOT/$local_file"
   remote_path="${SYNC_REMOTE[$i]}"
 
   if [[ ! -f "$local_path" ]]; then
@@ -106,7 +106,7 @@ for i in "${!SYNC_LOCAL[@]}"; do
     echo "  [dry-run] Would sync $local_file -> $remote_path"
   else
     # Write as openclaw user directly — avoids temp files and permission issues
-    cat "$local_path" | ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+    cat "$local_path" | ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
       "sudo -u openclaw tee $remote_path > /dev/null"
     echo "  Synced $local_file"
   fi
@@ -125,7 +125,7 @@ printf '\033[33m[%d/%d] Regenerating gateway shims...\033[0m\n' "$STEP" "$TOTAL_
 if [ "$DRY_RUN" = true ]; then
   echo "  [dry-run] Would regenerate shims via docker exec --user root"
 else
-  TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+  TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
     "sudo docker exec -i --user root $GATEWAY sh" << 'SHIM_SCRIPT'
 TOOLKIT_CONFIG="/app/deploy/sandbox-toolkit.yaml"
 TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
@@ -183,10 +183,10 @@ if [ "$DRY_RUN" = true ]; then
 fi
 
 if [ "$DRY_RUN" = true ]; then
-  TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+  TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
     "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $REBUILD_FLAGS"
 else
-  TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -t "${SSH_USER}@${VPS1_IP}" \
+  TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -t "${ENV__SSH_USER}@${ENV__VPS_IP}" \
     "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $REBUILD_FLAGS"
 fi
 

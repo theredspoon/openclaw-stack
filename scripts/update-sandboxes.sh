@@ -43,17 +43,17 @@ done
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
 
-printf '\033[32mRebuilding sandbox images on %s...\033[0m\n' "$VPS1_IP"
+printf '\033[32mRebuilding sandbox images on %s...\033[0m\n' "$ENV__VPS_IP"
 
 # Check gateway container is running
-if ! ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+if ! ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo docker inspect -f '{{.State.Running}}' $GATEWAY 2>/dev/null" | grep -q true; then
   echo "Error: $GATEWAY container is not running on VPS" >&2
   exit 1
 fi
 
 # Run rebuild-sandboxes.sh inside the running gateway container
-TERM=xterm-256color ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -t "${SSH_USER}@${VPS1_IP}" \
+TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -t "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $FLAGS"
 
 echo ""

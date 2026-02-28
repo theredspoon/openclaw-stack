@@ -11,7 +11,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
 
-COMPOSE_DIR="${INSTALL_DIR}/openclaw"
+COMPOSE_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
 COMPOSE_ARGS=("logs")
 
 if [[ "${1:-}" == "--no-follow" ]]; then
@@ -23,9 +23,9 @@ else
   COMPOSE_ARGS+=("--tail" "100" "-f")
 fi
 
-printf "\033[32mStreaming logs from all containers on VPS-1 (%s)\033[0m\n" "$VPS1_IP"
+printf "\033[32mStreaming logs from all containers on VPS-1 (%s)\033[0m\n" "$ENV__VPS_IP"
 
-TERM=xterm-256color ssh -t -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" "${SSH_USER}@${VPS1_IP}" \
+TERM=xterm-256color ssh -t -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "sudo -u openclaw bash -c 'cd $COMPOSE_DIR && docker compose ${COMPOSE_ARGS[*]}'"
 
 # Alternate if multiple compose files:

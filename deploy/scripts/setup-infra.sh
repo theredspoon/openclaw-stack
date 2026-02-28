@@ -34,6 +34,7 @@ done
 
 # Resolve paths via canonical config helper
 source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+INSTALL_DIR="$STACK__STACK__INSTALL_DIR"
 
 # INSTANCE_NAMES is required — always-multi-claw means at least "main-claw"
 INSTANCE_NAMES="${INSTANCE_NAMES:-main-claw}"
@@ -145,7 +146,7 @@ DASHBOARD_BASE_PATH=${DASHBOARD_BASE_PATH}
 # Empty = Control UI served at root (no subpath).
 OPENCLAW_DOMAIN_PATH=${OPENCLAW_DOMAIN_PATH:-}
 
-# Gateway resource limits (from openclaw-config.env, defaults in docker-compose.override.yml)
+# Gateway resource limits (from stack.env, defaults in docker-compose template)
 GATEWAY_CPUS=${GATEWAY_CPUS:-}
 GATEWAY_MEMORY=${GATEWAY_MEMORY:-}
 

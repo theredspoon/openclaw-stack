@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Syncs OpenClaw configs and workspace from VPS to local openclaws/
+# Syncs OpenClaw configs and workspace from VPS to local synced/<name>/
 #
 # Usage:
 #   ./scripts/sync-configs.sh                          # sync everything for all claws
 #   ./scripts/sync-configs.sh --instance main-claw     # sync one claw
-#   ./scripts/sync-configs.sh --configs-only            # openclaw.json + models.json only
+#   ./scripts/sync-configs.sh --configs-only            # openclaw.json only
 
 set -euo pipefail
 
@@ -22,13 +22,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SSH_CMD="ssh -i ${SSH_KEY_PATH} -p ${SSH_PORT}"
-LOCAL_BASE="${OPENCLAWS_DIR}"
+SSH_CMD="ssh -i ${ENV__SSH_KEY} -p ${ENV__SSH_PORT}"
+LOCAL_BASE="${REPO_ROOT}/synced"
 
 sync_instance() {
   local name="$1"
   local dest="${LOCAL_BASE}/${name}"
-  local remote_base="${INSTALL_DIR}/instances/${name}"
+  local remote_base="${STACK__STACK__INSTANCES_DIR}/${name}"
 
   mkdir -p "$dest"
 
@@ -37,16 +37,8 @@ sync_instance() {
   rsync -avz \
     -e "$SSH_CMD" \
     --rsync-path="sudo rsync" \
-    "${SSH_USER}@${VPS1_IP}:${remote_base}/.openclaw/openclaw.json" \
+    "${ENV__SSH_USER}@${ENV__VPS_IP}:${remote_base}/.openclaw/openclaw.json" \
     "$dest/openclaw.json"
-
-  # models.json (same file deployed to all agents — pull from main)
-  echo "[$name] Syncing models.json ..."
-  rsync -avz \
-    -e "$SSH_CMD" \
-    --rsync-path="sudo rsync" \
-    "${SSH_USER}@${VPS1_IP}:${remote_base}/.openclaw/agents/main/agent/models.json" \
-    "$dest/models.json"
 
   if [[ "$CONFIGS_ONLY" == "true" ]]; then
     return
@@ -58,7 +50,7 @@ sync_instance() {
   rsync -avz --progress \
     -e "$SSH_CMD" \
     --rsync-path="sudo rsync" \
-    "${SSH_USER}@${VPS1_IP}:${remote_base}/.openclaw/workspace/" \
+    "${ENV__SSH_USER}@${ENV__VPS_IP}:${remote_base}/.openclaw/workspace/" \
     "$dest/workspace/"
 
 }
@@ -67,15 +59,15 @@ sync_instance() {
 if [[ -n "$INSTANCE" ]]; then
   sync_instance "$INSTANCE"
 else
-  INSTANCES=$(ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
-    "${SSH_USER}@${VPS1_IP}" \
-    "sudo ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null | grep -v '^\\.'" 2>&1) || {
+  INSTANCES=$(ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
+    "${ENV__SSH_USER}@${ENV__VPS_IP}" \
+    "sudo ls -1 ${STACK__STACK__INSTANCES_DIR}/ 2>/dev/null | grep -v '^\\.'" 2>&1) || {
     echo "Error: Could not list instances on VPS" >&2
     exit 1
   }
 
   if [[ -z "$INSTANCES" ]]; then
-    echo "Error: No claw instances found in ${INSTALL_DIR}/instances/" >&2
+    echo "Error: No claw instances found in ${STACK__STACK__INSTANCES_DIR}/" >&2
     exit 1
   fi
 

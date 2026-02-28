@@ -9,7 +9,7 @@
 #      if exactly one, use it; if multiple, show interactive picker;
 #      if zero, error with guidance.
 #
-# Requires SSH_KEY_PATH, SSH_PORT, SSH_USER, VPS1_IP to be set (from openclaw-config.env).
+# Requires ENV__SSH_KEY, ENV__SSH_PORT, ENV__SSH_USER, ENV__VPS_IP to be set (from stack.env).
 
 # shellcheck source=select-claw.sh
 source "$(dirname "${BASH_SOURCE[0]}")/select-claw.sh"
@@ -42,8 +42,8 @@ resolve_gateway() {
 
   # Auto-detect: find running openclaw-* gateway containers (exclude utility containers)
   local containers
-  containers=$(ssh -i "${SSH_KEY_PATH}" -p "${SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
-    "${SSH_USER}@${VPS1_IP}" \
+  containers=$(ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
+    "${ENV__SSH_USER}@${ENV__VPS_IP}" \
     "sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-'" 2>/dev/null \
     | grep -v '^openclaw-cli$' \
     | grep -v '^openclaw-sbx-' \

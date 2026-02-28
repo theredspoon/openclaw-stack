@@ -27,7 +27,12 @@ set -euo pipefail
 # Resolve paths via canonical config helper
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/source-config.sh"
-INSTANCES_DIR="$OPENCLAWS_DIR"
+
+# TODO: This script needs a full rewrite to discover claws from stack.json
+# instead of the removed openclaws/ directory. For now, set compatibility vars.
+CF_API_TOKEN="${ENV__CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
+CF_TUNNEL_TOKEN="${ENV__CLOUDFLARE_TUNNEL_TOKEN:-${CF_TUNNEL_TOKEN:-}}"
+INSTALL_DIR="${STACK__STACK__INSTALL_DIR:-}"
 
 CF_API_BASE="https://api.cloudflare.com/client/v4"
 
@@ -282,7 +287,7 @@ cmd_setup_routes() {
   done
 
   local config_env="${CONFIG_ENV_PATH}"
-  [ -f "$config_env" ] || die "openclaw-config.env not found"
+  [ -f "$config_env" ] || die "config env file not found"
 
   # Load shared config
   set -a
