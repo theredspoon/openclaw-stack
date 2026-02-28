@@ -1,0 +1,84 @@
+# stack.yml — OpenClaw stack configuration
+# Gitignored. Created from: cp stack.yml.example stack.yml
+#
+# ${VAR} references are resolved from .env during pre-deploy.
+# ${VAR:-default} syntax supported for defaults.
+# You can hardcode values directly — .env references are a convenience.
+
+# ── VPS Host ──────────────────────────────────────────────────
+# Set to false to skip host-level config (secondary stacks on shared VPS)
+host:
+  hostname: ${HOSTNAME}
+
+  host_alerter:
+    telegram_bot_token: ${HOSTALERT_TELEGRAM_BOT_TOKEN}
+    telegram_chat_id: ${HOSTALERT_TELEGRAM_CHAT_ID}
+    daily_report: "9:30 AM PST"
+
+# ── Stack ─────────────────────────────────────────────────────
+stack:
+  install_dir: /home/openclaw
+  project_name: ${PROJECT_NAME:-openclaw-stack}
+
+  # Docker compose template to use for building this stack
+  compose_template: docker-compose.yml.hbs
+
+  openclaw:
+    version: stable                    # stable | latest | v2026.2.26
+    source: https://github.com/nicepkg/openclaw.git
+
+  cloudflare:
+    tunnel_token: ${CLOUDFLARE_TUNNEL_TOKEN}
+
+  ai_gateway:
+    url: ${AI_GATEWAY_URL}
+    token: ${AI_GATEWAY_TOKEN}
+
+  logging:
+    worker_url: ${LOG_WORKER_URL}
+    worker_token: ${LOG_WORKER_TOKEN}
+    vector: true
+    events: true
+    llemtry: true
+
+  # Total VPS resource budget for this stack
+  # Percentages are resolved against actual VPS capacity via SSH during pre-deploy.
+  # Integers are used as-is (absolute values).
+  resources:
+    max_cpu: 90%
+    max_mem: 90%
+
+# ── Claw Defaults ─────────────────────────────────────────────
+# All claws inherit these. Per-claw settings override via deep merge.
+defaults:
+  allow_updates: false
+  domain_path: ""
+  dashboard_path: /dashboard
+  telegram:
+    allow_from: ${ADMIN_TELEGRAM_ID}
+  resources:
+    cpus: ${OPENCLAW_CONTAINER_CPU:-6}
+    memory: ${OPENCLAW_CONTAINER_MEM:-12G}
+  openclaw_json: openclaw/default/openclaw.jsonc
+
+# ── Claws ─────────────────────────────────────────────────────
+# Each key → container: openclaw-<key>
+# Deep-merged with defaults (claw values win at any depth).
+claws:
+  personal-claw:
+    domain: openclaw.${ROOT_DOMAIN}
+    gateway_port: 18789
+    dashboard_port: 6090
+    telegram:
+      bot_token: ${PERSONAL_CLAW_TELEGRAM_BOT_TOKEN}
+    allow_updates: true
+
+  # work-claw:
+  #   domain: openclaw-work.${ROOT_DOMAIN}
+  #   gateway_port: 18790
+  #   dashboard_port: 6091
+  #   telegram:
+  #     bot_token: ${WORK_CLAW_TELEGRAM_BOT_TOKEN}
+  #   resources:
+  #     cpus: 20
+  #     memory: 64G

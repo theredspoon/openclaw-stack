@@ -1,9 +1,16 @@
 .DS_Store
 certs/
+*.key
+
+# ── Secrets & user config (never commit) ───────────────────────
+.env
+stack.yml
+openclaw-config.env
+
+# ── Legacy per-claw env files ──────────────────────────────────
 *.env
 !openclaws/main-claw/config.env
 !openclaws/_example/config.env
-*.key
 
 # Multi-claw configs: track _defaults/, _example/, and main-claw/; ignore user-created claws
 # Copy _example/ to create your own (e.g., openclaws/my-claw/)
@@ -12,17 +19,25 @@ openclaws/*
 !openclaws/_example/
 !openclaws/main-claw/
 
+# New config structure: track default/ and example/; ignore user-created claw configs
+openclaw/*
+!openclaw/default/
+!openclaw/example/
+!openclaw/README.md
+
 # Synced from VPS via scripts/sync-configs.sh (large data, not for version control)
 openclaws/*/workspace/
+
+# ── Build output ───────────────────────────────────────────────
+.deploy/
+node_modules/
+bun.lock
 
 tmp/
 _bak/
 source/
 
 .wrangler/
-
-openclaw-config.env
-node_modules/
 
 # Worker configs contain environment-specific values (D1 database IDs, worker names).
 # Use wrangler.jsonc.example as template — see playbooks/01-workers.md.
