@@ -24,7 +24,7 @@ set -euo pipefail
 
 # Resolve paths via canonical config helper
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/../deploy/host/source-config.sh"
+source "$SCRIPT_DIR/lib/source-config.sh"
 
 CF_API_TOKEN="${ENV__CLOUDFLARE_API_TOKEN:-${CF_API_TOKEN:-}}"
 CF_TUNNEL_TOKEN="${ENV__CLOUDFLARE_TUNNEL_TOKEN:-${CF_TUNNEL_TOKEN:-}}"

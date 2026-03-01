@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/host/source-config.sh"
+source "$SCRIPT_DIR/lib/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 GATEWAY=$(resolve_gateway "$@") || exit 1
