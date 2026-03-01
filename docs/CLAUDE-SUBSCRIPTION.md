@@ -25,7 +25,7 @@ Anthropic accepts the setup token because the headers match what it's expecting 
 >
 > Refer to OpenClaw's official documentation for additional details.
 >
-> Also see this [Hacker News threa](https://news.ycombinator.com/item?id=47069299) discussing recent
+> Also see this [Hacker News thread](https://news.ycombinator.com/item?id=47069299) discussing recent
 > changes in Anthropic's terms of service. Most likely Anthropic will start blocking this workaround
 > in the near future as it's a clear violation. In the meantime, everyone on the Internet is
 > recommending people use their Claude subscription with OpenClaw.
