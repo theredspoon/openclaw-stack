@@ -50,8 +50,7 @@ resolve_gateway() {
     || true)
 
   if [[ -z "$containers" ]]; then
-    echo "Error: No OpenClaw gateway containers running." >&2
-    echo "  Deploy with: npm run deploy" >&2
+    echo "Error: No OpenClaw gateway containers running on the VPS." >&2
     return 1
   fi
 
