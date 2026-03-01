@@ -39,6 +39,7 @@ CF_API_TOKEN=<your-api-token>
 ```
 
 During deployment (§ 0.2b), Claude will:
+
 1. Verify the token has the right permissions
 2. Show existing tunnels or create a new one
 3. Configure ingress rules for all OpenClaw instances
@@ -64,7 +65,7 @@ Follow the steps below to create a tunnel manually and paste the token.
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                         Internet                             │
 │                                                              │
@@ -82,9 +83,9 @@ Follow the steps below to create a tunnel manually and paste the token.
 │                                              ▼               │
 │    cloudflared (container) ◄──────────────────┘               │
 │        │                                                     │
-│        ├── /dashboard/* ──► localhost:6090 (dashboard)        │
+│        ├── /dashboard/* ──► openclaw-<name>:6090 (dashboard)  │
 │        │                                                     │
-│        └── * (catch-all) ──► localhost:18789 (Gateway)        │
+│        └── * (catch-all) ──► openclaw-<name>:18789 (Gateway)  │
 │                                                              │
 │    Port 443: CLOSED                                          │
 │    Port 80:  CLOSED                                          │
@@ -236,7 +237,7 @@ Both the gateway and dashboard share a single subdomain. The tunnel uses path-ba
 | **Domain** | Select your domain (e.g., `example.com`) |
 | **Path** | `dashboard` |
 | **Service Type** | `HTTP` |
-| **URL** | `localhost:6090` |
+| **URL** | `openclaw-<name>:6090` |
 
 **Rule 2 — Gateway** (catch-all, must be after dashboard rule):
 
@@ -246,9 +247,9 @@ Both the gateway and dashboard share a single subdomain. The tunnel uses path-ba
 | **Domain** | Select your domain |
 | **Path** | *(leave empty)* |
 | **Service Type** | `HTTP` |
-| **URL** | `localhost:18789` |
+| **URL** | `openclaw-<name>:18789` |
 
-4. Save
+1. Save
 
 Then set in `stack.yml` under your claw config:
 
@@ -287,7 +288,7 @@ Gateway and dashboard each get their own subdomain. No rule ordering concerns si
 | **Subdomain** | `openclaw` (or your choice) |
 | **Domain** | Select your domain |
 | **Service Type** | `HTTP` |
-| **URL** | `localhost:18789` |
+| **URL** | `openclaw-<name>:18789` |
 
 **Dashboard:**
 
@@ -296,9 +297,9 @@ Gateway and dashboard each get their own subdomain. No rule ordering concerns si
 | **Subdomain** | `dashboard-openclaw` (or your choice) |
 | **Domain** | Select your domain |
 | **Service Type** | `HTTP` |
-| **URL** | `localhost:6090` |
+| **URL** | `openclaw-<name>:6090` |
 
-4. Save
+1. Save
 
 Then set in `stack.yml` under your claw config:
 
@@ -348,10 +349,10 @@ The general pattern for multi-claw routing:
 
 | Subdomain | Path | Service | URL |
 |-----------|------|---------|-----|
-| `personal.openclaw` | `/dashboard/*` | HTTP | `localhost:6090` |
-| `personal.openclaw` | *(catch-all)* | HTTP | `localhost:18789` |
-| `work.openclaw` | `/dashboard/*` | HTTP | `localhost:6091` |
-| `work.openclaw` | *(catch-all)* | HTTP | `localhost:18790` |
+| `personal.openclaw` | `/dashboard/*` | HTTP | `openclaw-personal:6090` |
+| `personal.openclaw` | *(catch-all)* | HTTP | `openclaw-personal:18789` |
+| `work.openclaw` | `/dashboard/*` | HTTP | `openclaw-work:6091` |
+| `work.openclaw` | *(catch-all)* | HTTP | `openclaw-work:18790` |
 
 Each claw gets unique gateway and dashboard ports (configured in `stack.yml` under `claws.<name>`).
 
