@@ -150,7 +150,9 @@ if [ -n "$SYNC_INSTANCES" ]; then
       "$local_file" \
       "${VPS}:${INSTALL_DIR}/instances/${name}/.openclaw/openclaw.json"
     # Instance .openclaw is owned by uid 1000 (container's node user)
-    ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${INSTALL_DIR}/instances/${name}/.openclaw/openclaw.json"
+    # Chown both the directory and the json file so setup-infra.sh can create
+    # subdirectories as the openclaw user (which runs as uid 1000 in container)
+    ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${INSTALL_DIR}/instances/${name}/.openclaw ${INSTALL_DIR}/instances/${name}/.openclaw/openclaw.json"
     success "instances/${name}/.openclaw/openclaw.json (owner: 1000:1000)"
   done
 fi

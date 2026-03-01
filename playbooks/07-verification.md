@@ -75,9 +75,9 @@ done
 
 # Test each claw's health endpoint
 for CLAW in $CLAWS; do
-  PORT=$(sudo docker inspect "$CLAW" --format '{{range .NetworkSettings.Ports}}{{range .}}{{.HostPort}}{{end}}{{end}}' | head -1)
-  echo "$CLAW (port $PORT):"
-  curl -s "http://localhost:${PORT}<OPENCLAW_DOMAIN_PATH>/" | head -5
+  GW_PORT=$(sudo docker port "$CLAW" 18789/tcp 2>/dev/null | grep -oP ':\K\d+')
+  echo "$CLAW (port $GW_PORT):"
+  curl -s "http://localhost:${GW_PORT}<OPENCLAW_DOMAIN_PATH>/" | head -5
 done
 ```
 
