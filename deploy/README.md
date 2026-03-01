@@ -19,13 +19,13 @@ deploy/
     host-maintenance-check.sh  OS update/reboot checker
     session-prune.sh    Session transcript cleanup
     build-openclaw.sh   Build gateway image with auto-patching
+    start-claws.sh      Build image and start containers
+    register-cron-jobs.sh Register cron jobs via openclaw CLI
     logrotate-openclaw  Logrotate config
   setup/              ← Deploy-time scripts (tier 3) — run once during setup
     system-hardening.sh SSH/UFW/fail2ban hardening
     setup-infra.sh      Create directories, clone repo
-    start-claws.sh      Build image and start containers
     verify-deployment.sh Verify sandbox images, binaries, health
-    register-cron-jobs.sh Register cron jobs via openclaw CLI
   vector/             ← Vector log shipper config
     vector.yaml
 ```
@@ -49,5 +49,5 @@ Scripts source config based on their tier location:
 | Script location | Source line | Resolves to |
 |---|---|---|
 | `deploy/host/*.sh` | `source "$(dirname $0)/source-config.sh"` | Sibling in same dir |
-| `deploy/setup/*.sh` | `source "$(dirname $0)/../host/source-config.sh"` | Parent's sibling |
+| `deploy/setup/*.sh` | `source "$(dirname $0)/../host/source-config.sh"` | Up one, into host/ |
 | `scripts/*.sh` | `source "$SCRIPT_DIR/../deploy/host/source-config.sh"` | Fixed relative path |

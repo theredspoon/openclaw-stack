@@ -163,7 +163,7 @@ Builds the Docker image and starts containers. Multi-claw deployments start only
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/setup/start-claws.sh"
+  "bash ${INSTALL_DIR}/host/start-claws.sh"
 ```
 
 Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from stdout.
@@ -265,7 +265,7 @@ Register the Daily VPS Health Check cron job on all claws. The script is self-co
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/setup/register-cron-jobs.sh"
+  "bash ${INSTALL_DIR}/host/register-cron-jobs.sh"
 ```
 
 The script is idempotent — it skips registration on any claw where the job already exists.

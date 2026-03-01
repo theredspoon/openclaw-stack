@@ -14,7 +14,7 @@ set -euo pipefail
 #   Exit: 0 success, 1 failure
 
 # Resolve paths via canonical config helper
-source "$(cd "$(dirname "$0")" && pwd)/../host/source-config.sh"
+source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
 OPENCLAW_HOME="$STACK__STACK__INSTALL_DIR"
 
 # Discover configured instances from instances directory

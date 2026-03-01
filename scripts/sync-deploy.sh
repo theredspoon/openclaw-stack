@@ -169,6 +169,6 @@ else
     echo "  1. Run setup-infra.sh to create directories and clone the repo:"
     echo "     ssh ... \"env INSTANCE_NAMES='...' bash ${INSTALL_DIR}/setup/setup-infra.sh\""
     echo "  2. Start claws:"
-    echo "     ssh ... \"bash ${INSTALL_DIR}/setup/start-claws.sh\""
+    echo "     ssh ... \"bash ${INSTALL_DIR}/host/start-claws.sh\""
   fi
 fi
