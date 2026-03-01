@@ -6,7 +6,8 @@ import { isLlemtryEnabled, isLlmRoute, reportGeneration } from './llemtry'
 import { createLog, logInboundRequest } from './log'
 import { matchProviderRoute } from './routing'
 import { getProviderApiKey } from './keys'
-import { handleAdminRequest, handleTokenRotation } from './admin'
+import { handleAdminRequest, handleTokenRotation, handleGetUserCreds, handleUpdateUserCreds } from './admin'
+import { serveConfigPage } from './config-ui'
 import { proxyOpenAI } from './providers/openai'
 import { proxyAnthropic } from './providers/anthropic'
 
@@ -26,6 +27,11 @@ export default {
           headers: { 'Content-Type': 'application/json' },
         })
       )
+    }
+
+    // Config UI — no auth required (the page handles auth via JS)
+    if (request.method === 'GET' && pathname === '/config') {
+      return serveConfigPage()
     }
 
     const log = createLog(env)
@@ -48,14 +54,27 @@ export default {
       return addCorsHeaders(response)
     }
 
-    // Self-service token rotation — protected by user's own token
-    if (request.method === 'POST' && pathname === '/auth/rotate') {
+    // Self-service endpoints — protected by user's own token
+    if (pathname.startsWith('/auth/')) {
       const userId = await authenticateRequest(request, env.AUTH_KV)
       if (!userId) {
         return addCorsHeaders(jsonError('Invalid or missing auth credentials', 401))
       }
-      const response = await handleTokenRotation(userId, env.AUTH_KV, log)
-      return addCorsHeaders(response)
+
+      if (request.method === 'POST' && pathname === '/auth/rotate') {
+        const response = await handleTokenRotation(userId, env.AUTH_KV, log)
+        return addCorsHeaders(response)
+      }
+      if (request.method === 'GET' && pathname === '/auth/creds') {
+        const response = await handleGetUserCreds(userId, env.AUTH_KV)
+        return addCorsHeaders(response)
+      }
+      if (request.method === 'PUT' && pathname === '/auth/creds') {
+        const response = await handleUpdateUserCreds(request, userId, env.AUTH_KV, log)
+        return addCorsHeaders(response)
+      }
+
+      return addCorsHeaders(jsonError('Not found', 404))
     }
 
     // Proxy routes — authenticate user via KV token

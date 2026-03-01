@@ -205,6 +205,133 @@ async function deleteUser(
   return jsonResponse({ ok: true })
 }
 
+// --- Self-service credential endpoints ---
+
+/** GET /auth/creds — return masked credentials for the authenticated user. */
+export async function handleGetUserCreds(
+  userId: string,
+  kv: KVNamespace
+): Promise<Response> {
+  const raw = await kv.get(`creds:${userId}`)
+  const creds: UserCredentials = raw ? JSON.parse(raw) : {}
+  return jsonResponse(maskCredentials(creds))
+}
+
+/** PUT /auth/creds — merge-update credentials for the authenticated user. */
+export async function handleUpdateUserCreds(
+  request: Request,
+  userId: string,
+  kv: KVNamespace,
+  log: Log
+): Promise<Response> {
+  let update: Record<string, unknown>
+  try {
+    update = await request.json()
+  } catch {
+    return jsonError('Invalid JSON body', 400)
+  }
+
+  const raw = await kv.get(`creds:${userId}`)
+  const existing: UserCredentials = raw ? JSON.parse(raw) : {}
+  const merged = mergeCredentials(existing, update)
+
+  await kv.put(`creds:${userId}`, JSON.stringify(merged))
+  log.info(`[admin] user ${userId} updated their credentials`)
+
+  return jsonResponse(maskCredentials(merged))
+}
+
+// --- Mask / Merge helpers ---
+
+/** Mask a string to show first 8 + last 4 chars: "sk-ant-api...4f2a" */
+function maskString(s: string): string {
+  if (s.length <= 16) return '***'
+  return s.slice(0, 8) + '...' + s.slice(-4)
+}
+
+/** Return a masked copy of credentials (safe for client display). */
+function maskCredentials(creds: UserCredentials): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+
+  if (creds.anthropic) {
+    const a: Record<string, unknown> = {}
+    if (creds.anthropic.apiKey) a.apiKey = maskString(creds.anthropic.apiKey)
+    if (creds.anthropic.oauthToken) a.oauthToken = maskString(creds.anthropic.oauthToken)
+    if (Object.keys(a).length > 0) result.anthropic = a
+  }
+
+  if (creds.openai) {
+    const o: Record<string, unknown> = {}
+    if (creds.openai.apiKey) o.apiKey = maskString(creds.openai.apiKey)
+    if (creds.openai.oauth) {
+      o.oauth = {
+        status: 'configured',
+        expiresAt: creds.openai.oauth.expiresAt,
+      }
+    }
+    if (Object.keys(o).length > 0) result.openai = o
+  }
+
+  return result
+}
+
+/**
+ * Deep-merge credential update into existing credentials.
+ * - Field present with value → update
+ * - Field present with null → delete
+ * - Field absent → keep existing
+ */
+function mergeCredentials(
+  existing: UserCredentials,
+  update: Record<string, unknown>
+): UserCredentials {
+  const result: UserCredentials = structuredClone(existing)
+
+  if ('anthropic' in update) {
+    if (update.anthropic === null) {
+      delete result.anthropic
+    } else {
+      const u = update.anthropic as Record<string, unknown>
+      if (!result.anthropic) result.anthropic = {}
+      if ('apiKey' in u) {
+        if (u.apiKey === null) delete result.anthropic.apiKey
+        else result.anthropic.apiKey = u.apiKey as string
+      }
+      if ('oauthToken' in u) {
+        if (u.oauthToken === null) delete result.anthropic.oauthToken
+        else result.anthropic.oauthToken = u.oauthToken as string
+      }
+      // Clean up empty provider section
+      if (!result.anthropic.apiKey && !result.anthropic.oauthToken) {
+        delete result.anthropic
+      }
+    }
+  }
+
+  if ('openai' in update) {
+    if (update.openai === null) {
+      delete result.openai
+    } else {
+      const u = update.openai as Record<string, unknown>
+      if (!result.openai) result.openai = {}
+      if ('apiKey' in u) {
+        if (u.apiKey === null) delete result.openai.apiKey
+        else result.openai.apiKey = u.apiKey as string
+      }
+      if ('oauth' in u) {
+        if (u.oauth === null) delete result.openai.oauth
+        else result.openai.oauth = u.oauth as NonNullable<NonNullable<UserCredentials['openai']>['oauth']>
+      }
+      // Clean up empty provider section
+      if (!result.openai.apiKey && !result.openai.oauth) {
+        delete result.openai
+      }
+    }
+  }
+
+  return result
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
