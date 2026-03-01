@@ -11,7 +11,6 @@ This playbook configures:
 - UFW firewall
 - SSH hardening (custom port, key-only)
 - System hardening (swap, fail2ban, unattended-upgrades, kernel sysctl)
-- Cloudflare Tunnel (cloudflared)
 
 ## Prerequisites
 
@@ -400,58 +399,6 @@ rm -f /tmp/system-hardening.sh
 
 ---
 
-## 2.6 Cloudflare Tunnel Setup
-
-Run on: **VPS-1**
-
-Install cloudflared and register the tunnel as a systemd service. Read `CLOUDFLARE_TUNNEL_TOKEN` from `.env`.
-
-```bash
-# Download and install cloudflared
-curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared.deb
-rm cloudflared.deb
-
-# Verify installation
-cloudflared --version
-
-# Install as systemd service using the tunnel token
-sudo cloudflared service install ${CF_TUNNEL_TOKEN}
-
-# Enable and start
-sudo systemctl enable cloudflared
-sudo systemctl start cloudflared
-
-# Check status
-sudo systemctl status cloudflared
-
-# Port 443 should already be closed (never opened in section 2.3)
-# Verify it's not in UFW just in case
-sudo ufw delete allow 443/tcp 2>/dev/null || true
-```
-
-**If `cloudflared service install` fails:**
-
-> "The tunnel token may be invalid or expired. Verify `CLOUDFLARE_TUNNEL_TOKEN` in
-> `.env` matches the one in Cloudflare Dashboard
-> (Zero Trust -> Networks -> Tunnels -> your tunnel -> Configure)."
-
-**If cloudflared starts but immediately exits (check with `systemctl status`):**
-
-> "The tunnel service started but crashed. Check the logs:"
->
-> `sudo journalctl -u cloudflared --no-pager | tail -20`
->
-> Common issues:
->
-> - **"failed to sufficiently increase receive buffer size"** — harmless warning, not a crash cause
-> - **"Tunnel credentials not found"** — token is malformed. Re-copy from Cloudflare Dashboard
-> - **"connection refused"** — outbound connectivity issue. Check `curl -sI https://cloudflare.com`
-
-> **Note:** The tunnel connects and begins routing traffic to the configured public hostname routes. Domain and Cloudflare Access were verified during fresh deploy setup (`00-fresh-deploy-setup.md`).
-
----
-
 ## Verification
 
 After completing all steps on VPS-1:
@@ -468,9 +415,6 @@ sudo systemctl status fail2ban
 
 # Verify kernel parameters
 sudo sysctl net.ipv4.tcp_syncookies
-
-# Verify cloudflared is running
-sudo systemctl status cloudflared
 ```
 
 ---

@@ -172,11 +172,11 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 ## 7.4 Verify Cloudflare Tunnel
 
 ```bash
-# Check tunnel service is running
-sudo systemctl status cloudflared
+# Check cloudflared container is running
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'
 
 # Check tunnel logs for errors
-sudo journalctl -u cloudflared --no-pager | tail -20
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs --tail 20 cloudflared'
 
 # Verify port 443 is closed
 sudo ufw status | grep 443 || echo "Port 443 not in UFW (correct)"
@@ -185,7 +185,7 @@ sudo ufw status | grep 443 || echo "Port 443 not in UFW (correct)"
 curl -sk --connect-timeout 5 https://<VPS_IP>/ || echo "Direct access blocked (expected)"
 ```
 
-**Expected:** cloudflared active, no auth errors in logs, port 443 closed, direct IP blocked.
+**Expected:** cloudflared container running, no auth errors in logs, port 443 closed, direct IP blocked.
 
 ### Verify domain routing (run from LOCAL machine)
 
@@ -208,10 +208,9 @@ Comprehensive security check: system hardening, port exposure, and built-in audi
 ### System Hardening (on VPS)
 
 ```bash
-# SSH, firewall, intrusion prevention, tunnel
+# SSH, firewall, intrusion prevention
 sudo ufw status
 sudo systemctl status fail2ban
-sudo systemctl status cloudflared
 ss -tlnp | grep <SSH_PORT>
 
 # Services and cron jobs
@@ -222,7 +221,7 @@ cat /etc/cron.d/openclaw-backup
 cat /etc/cron.d/openclaw-alerts
 ```
 
-**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, cloudflared active, all containers running, cron jobs present.
+**Expected:** SSH on port `<SSH_PORT>` only (22 removed), fail2ban active, all containers running (including cloudflared), cron jobs present.
 
 ### Port Binding & External Reachability
 
@@ -279,7 +278,7 @@ openclaw doctor --deep
 
 - [ ] SSH port `<SSH_PORT>` only, key-only auth, AllowUsers adminclaw
 - [ ] UFW enabled (SSH only), port 443 closed
-- [ ] Fail2ban running, cloudflared active
+- [ ] Fail2ban running, cloudflared container running
 - [ ] OpenClaw claws + Sysbox running (+ Vector if `stack.logging.vector=true`)
 - [ ] Backup + host alerter + maintenance checker cron jobs configured
 - [ ] Host status JSON files written and readable from agent sandbox
@@ -623,18 +622,16 @@ sudo ufw status                   # Check firewall rules
 ### Tunnel Issues
 
 ```bash
-# Check tunnel service and logs
-sudo systemctl status cloudflared
-sudo journalctl -u cloudflared --no-pager | tail -30
+# Check cloudflared container status and logs
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs --tail 30 cloudflared'
 
 # Check if DNS resolves to tunnel
 dig <OPENCLAW_DOMAIN>
 # Should show CNAME to <tunnel-id>.cfargotunnel.com
 
-# Token issues — reinstall service
-sudo cloudflared service uninstall
-sudo cloudflared service install ${CF_TUNNEL_TOKEN}
-sudo systemctl start cloudflared
+# Token issues — recreate the container (picks up new token from stack.env)
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d cloudflared'
 ```
 
 ### Service Not Starting After Reboot

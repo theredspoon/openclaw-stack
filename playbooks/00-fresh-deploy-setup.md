@@ -330,7 +330,7 @@ A full deployment consumes significant context. To avoid mid-deploy compaction, 
 |------|---------------|---------------|----------|-------|
 | 01: Workers deployment | npm install + wrangler deploy output | Worker URLs, auth tokens, D1 database ID | `01-workers.md` | Full file |
 | 02: System update + package install | apt output (hundreds of lines) | pass/fail | `02-base-setup.md` | Full file |
-| 02: System hardening (2.5–2.6) | swap, fail2ban, kernel config output | pass/fail, cloudflared version | `02-base-setup.md` | Full file |
+| 02: System hardening (2.5) | swap, fail2ban, kernel config output | pass/fail | `02-base-setup.md` | Full file |
 | 03b: Sysbox runtime | dpkg install + AppArmor check | pass/fail | `03b-sysbox.md` | Full file |
 | 04: Infrastructure setup (4.2) | directory creation + SCP | pass/fail | `04-infra-config.md` | §4.2 |
 | 04: Deploy configuration (4.3) | pre-deploy artifacts pushed to VPS | pass/fail | `04-deploy-config.md` | §4.3 |

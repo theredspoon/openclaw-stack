@@ -190,7 +190,7 @@ ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}"
 ### SSL Certificate Errors in Browser
 
 1. Check Cloudflare SSL mode is "Full (strict)"
-2. Verify tunnel is running: `sudo systemctl status cloudflared`
+2. Verify tunnel is running: `sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'`
 3. Check DNS routes through tunnel: `dig <OPENCLAW_DOMAIN>`
 
 ### Gateway Not Healthy

@@ -133,7 +133,7 @@ ssh -i ~/.ssh/vps1_openclaw_ed25519_new -p <SSH_PORT> adminclaw@<VPS_IP> echo "O
 
 See [docs/CLOUDFLARE-TUNNEL.md](../docs/CLOUDFLARE-TUNNEL.md#rotating-tunnel-token) for rotation procedure.
 
-> **Verify:** Run § 7.4 — cloudflared active, domain routing returns 302/403.
+> **Verify:** Run § 7.4 — cloudflared container running, domain routing returns 302/403.
 
 ## Image Updates
 

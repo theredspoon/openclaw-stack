@@ -40,7 +40,7 @@ Ask the user to open each claw's URL in their browser, one at a time. Each claw 
 **If the page doesn't load at all (connection error or timeout):**
 
 1. Check the tunnel is running:
-   - `ssh ... "sudo systemctl status cloudflared"`
+   - `ssh ... "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'"`
 2. Check the claw is running: `ssh ... "sudo docker ps --filter 'name=^openclaw-'"`
 3. Check claw logs: `ssh ... "sudo docker logs --tail 20 openclaw-<name>"`
 4. Verify DNS is resolving to the correct destination

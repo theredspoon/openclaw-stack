@@ -17,8 +17,8 @@ There are two ways to configure the Cloudflare Tunnel:
 
 | Option | Config Variable | What You Do | What Claude Does |
 |--------|----------------|-------------|-----------------|
-| **A: Manual** | `CF_TUNNEL_TOKEN` | Create tunnel in CF Dashboard, copy token, configure routes + DNS | Installs cloudflared on VPS |
-| **B: Automated** | `CF_API_TOKEN` | Create an API token with the right permissions | Creates tunnel, configures routes, creates DNS records, installs cloudflared |
+| **A: Manual** | `CF_TUNNEL_TOKEN` | Create tunnel in CF Dashboard, copy token, configure routes + DNS | Runs cloudflared as a Docker container |
+| **B: Automated** | `CF_API_TOKEN` | Create an API token with the right permissions | Creates tunnel, configures routes, creates DNS records, runs cloudflared as a Docker container |
 
 ### Option B: Automated Setup (CF_API_TOKEN)
 
@@ -80,7 +80,7 @@ Follow the steps below to create a tunnel manually and paste the token.
 ┌──────────────────────────────────────────────┼───────────────┐
 │  VPS-1 (Origin - No inbound ports needed)    │               │
 │                                              ▼               │
-│    cloudflared ◄─────────────────────────────┘               │
+│    cloudflared (container) ◄──────────────────┘               │
 │        │                                                     │
 │        ├── /dashboard/* ──► localhost:6090 (dashboard)        │
 │        │                                                     │
@@ -130,7 +130,7 @@ CF_TUNNEL_TOKEN=eyJhIjoiYWJj...  # Paste the full token here
 
 ### What Happens During Deployment
 
-Claude installs `cloudflared` on the VPS and registers it as a systemd service using your token. The tunnel connects but has no public hostname yet — the domain won't be accessible until you configure Cloudflare Access and add the hostname route (see below).
+The `cloudflared` container is included in the Docker Compose stack and starts automatically with `docker compose up -d`. The tunnel token is read from `stack.yml` via the generated compose file. The tunnel connects but has no public hostname yet — the domain won't be accessible until you configure Cloudflare Access and add the hostname route (see below).
 
 ---
 
@@ -373,13 +373,10 @@ Each subdomain needs its own Cloudflare Access application (or extend a single a
 
 ### Updating cloudflared
 
-The playbook does not set up auto-update for cloudflared. This is by design to avoid breaking changes.
+The compose file uses `cloudflare/cloudflared:latest`. To update:
 
 ```bash
-curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared.deb
-rm cloudflared.deb
-sudo systemctl restart cloudflared
+sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose pull cloudflared && docker compose up -d cloudflared'
 ```
 
 ### Viewing Tunnel Metrics
@@ -401,12 +398,11 @@ If the token is compromised:
 
 1. Go to the tunnel in Cloudflare Dashboard
 2. Regenerate the token
-3. On VPS:
+3. Update `CF_TUNNEL_TOKEN` in `.env` and `stack.yml`
+4. Rebuild deployment artifacts and recreate the container:
 
    ```bash
-   sudo cloudflared service uninstall
-   sudo cloudflared service install <NEW_TOKEN>
-   sudo systemctl start cloudflared
+   bun run pre-deploy
+   # Push updated stack.env to VPS, then:
+   sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d cloudflared'
    ```
-
-4. Update `CF_TUNNEL_TOKEN` in `.env`
