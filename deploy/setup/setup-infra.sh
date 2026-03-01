@@ -85,4 +85,14 @@ git clone "$2" openclaw
 CLONEEOF
 
 echo "Repository cloned." >&2
+
+# Part 3: Install OpenClaw CLI host wrapper
+# Copies the wrapper to /usr/local/bin/openclaw so adminclaw can run
+# `openclaw <cmd>` without docker exec boilerplate.
+# The wrapper auto-detects the target container or accepts --instance <name>.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+sudo cp "${SCRIPT_DIR}/../host/openclaw-wrapper.sh" /usr/local/bin/openclaw
+sudo chmod +x /usr/local/bin/openclaw
+echo "Installed /usr/local/bin/openclaw CLI wrapper." >&2
+
 echo "SETUP_INFRA_OK"

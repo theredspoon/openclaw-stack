@@ -113,6 +113,7 @@ Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
 | `deploy/openclaw-stack/entrypoint.sh` | `<INSTALL_DIR>/openclaw-stack/entrypoint.sh` | |
 | `deploy/host/host-alert.sh` | `<INSTALL_DIR>/host/host-alert.sh` | |
 | `deploy/host/host-maintenance-check.sh` | `<INSTALL_DIR>/host/host-maintenance-check.sh` | |
+| `deploy/host/openclaw-wrapper.sh` | `/usr/local/bin/openclaw` | Installed by `setup-infra.sh` |
 | `deploy/host/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | |
 | `deploy/openclaw-stack/plugins/*` | `<INSTALL_DIR>/openclaw-stack/plugins/` | Owned by uid 1000 |
 | `.deploy/openclaw-stack/sandbox-toolkit.yaml` | `<INSTALL_DIR>/openclaw-stack/` | Bind-mounted into container |

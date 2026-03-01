@@ -23,17 +23,15 @@ No external variables required.
 
 ---
 
-## 6.1 Create Backup Script
+## 6.1 Verify Backup Script
 
-IMPORTANT: Backup script must run as root because `.openclaw` is owned by uid 1000 (container's node user), not the host's `openclaw` user (uid 1002).
+The backup script (`deploy/host/backup.sh`) is already deployed to `<INSTALL_DIR>/host/backup.sh` via the SCP pipeline in §4.3. No manual transfer needed.
+
+IMPORTANT: Backup must run as root because `.openclaw` is owned by uid 1000 (container's node user), not the host's `openclaw` user.
 
 ```bash
-# SOURCE: deploy/host/backup.sh
-sudo tee <INSTALL_DIR>/host/backup.sh << 'EOF'
-# <<< deploy/host/backup.sh >>>
-EOF
-
-sudo chmod +x <INSTALL_DIR>/host/backup.sh
+# Verify script is in place and executable
+ls -la <INSTALL_DIR>/host/backup.sh
 ```
 
 ---
@@ -96,16 +94,7 @@ sudo tar -tzf "${FIRST_INST}.openclaw/backups"/openclaw_backup_*.tar.gz | head -
 
 Session transcripts (`instances/<name>/.openclaw/agents/<agentId>/sessions/*.jsonl`) accumulate indefinitely. This cron job deletes session files and stale log files older than 30 days.
 
-### Install Prune Script
-
-```bash
-# SOURCE: deploy/host/session-prune.sh
-sudo tee <INSTALL_DIR>/host/session-prune.sh << 'EOF'
-# <<< deploy/host/session-prune.sh >>>
-EOF
-
-sudo chmod +x <INSTALL_DIR>/host/session-prune.sh
-```
+The prune script (`deploy/host/session-prune.sh`) is already deployed to `<INSTALL_DIR>/host/session-prune.sh` via the SCP pipeline in §4.3. No manual transfer needed.
 
 ### Schedule Cron Job
 

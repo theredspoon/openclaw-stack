@@ -510,6 +510,14 @@ async function main() {
     }
   }
 
+  // 7d-post. Resolve {{INSTALL_DIR}} in host/ files (logrotate config needs literal paths)
+  const installDir = String(stack.install_dir || "/home/openclaw");
+  const logrotateFile = join(DEPLOY_DIR, "host", "logrotate-openclaw");
+  if (existsSync(logrotateFile)) {
+    const content = readFileSync(logrotateFile, "utf-8");
+    writeFileSync(logrotateFile, content.replaceAll("{{INSTALL_DIR}}", installDir));
+  }
+
   // 7e. Copy sandbox toolkit into openclaw-stack/ (only if configured in stack.yml)
   if (stack.sandbox_toolkit) {
     const toolkitPath = String(stack.sandbox_toolkit);
