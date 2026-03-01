@@ -7,7 +7,9 @@
 # not the host's openclaw user (uid 1002).
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+# Resolve paths via canonical config helper
+source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 INSTANCES_DIR="${INSTALL_DIR}/instances"
 RETENTION_DAYS="${1:-30}"
 

@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 OPENCLAW_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
@@ -44,17 +44,17 @@ TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_U
 # Step 2: Rebuild gateway image (stack-scoped: STACK__STACK__IMAGE from stack.env)
 printf '\033[33m[2/4] Building gateway image...\033[0m\n'
 TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-  "sudo -u openclaw ${STACK__STACK__INSTALL_DIR}/deploy/deploy/build-openclaw.sh"
+  "sudo -u openclaw ${STACK__STACK__INSTALL_DIR}/host/build-openclaw.sh"
 
 # Step 3: Recreate container(s) with new image (brief downtime)
 if [[ ${#INSTANCE_ARGS[@]} -gt 0 ]]; then
   printf '\033[33m[3/4] Recreating %s container...\033[0m\n' "$GATEWAY"
   TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR}/deploy && docker compose up -d $GATEWAY'"
+    "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR} && docker compose up -d $GATEWAY'"
 else
   printf '\033[33m[3/4] Recreating all gateway containers...\033[0m\n'
   TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR}/deploy && docker compose up -d'"
+    "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR} && docker compose up -d'"
 fi
 
 # Step 4: Wait for healthy + show version

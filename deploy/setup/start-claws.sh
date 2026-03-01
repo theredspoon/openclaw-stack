@@ -14,7 +14,7 @@ set -euo pipefail
 #   Exit: 0 success, 1 failure
 
 # Resolve paths via canonical config helper
-source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+source "$(cd "$(dirname "$0")" && pwd)/../host/source-config.sh"
 OPENCLAW_HOME="$STACK__STACK__INSTALL_DIR"
 
 # Discover configured instances from instances directory
@@ -31,10 +31,10 @@ echo "Instances: ${INSTANCE_NAMES}(${CLAW_COUNT} claw(s))" >&2
 
 # Build image
 echo "Building ${STACK__STACK__IMAGE} image..." >&2
-sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/deploy/deploy/build-openclaw.sh" >&2
+sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/host/build-openclaw.sh" >&2
 
 # Start containers (Vector is included in the main compose when enabled)
-COMPOSE_DIR="${OPENCLAW_HOME}/deploy"
+COMPOSE_DIR="${OPENCLAW_HOME}"
 if [ "$CLAW_COUNT" -gt 1 ]; then
   echo "Multi-claw: starting openclaw-${FIRST_CLAW} first for sandbox builds..." >&2
   sudo -u openclaw bash -c \

@@ -1,50 +1,53 @@
 # Deploy Files
 
-Authoritative source files for VPS deployment. Playbooks reference these
-via `# SOURCE:` comments — never duplicate file contents in playbook heredocs.
+Authoritative source files for VPS deployment, organized into three tiers.
+
+## Directory Structure
+
+```
+deploy/
+  openclaw-stack/     ← Container bind mount (tier 1) → /app/openclaw-stack:ro
+    entrypoint.sh       Gateway entrypoint script
+    rebuild-sandboxes.sh Sandbox image builder
+    parse-toolkit.mjs   Toolkit config parser
+    dashboard/          Dashboard web app
+    plugins/            Telemetry, coordinator plugins
+  host/               ← Host-only scripts (tier 2) — cron jobs, config
+    source-config.sh    Config resolver (sources stack.env)
+    backup.sh           Backup all claw instances
+    host-alert.sh       Host resource monitoring + Telegram alerts
+    host-maintenance-check.sh  OS update/reboot checker
+    session-prune.sh    Session transcript cleanup
+    build-openclaw.sh   Build gateway image with auto-patching
+    system-hardening.sh SSH/UFW/fail2ban hardening
+    logrotate-openclaw  Logrotate config
+  setup/              ← Deploy-time scripts (tier 3) — run once during setup
+    setup-infra.sh      Create directories, clone repo
+    start-claws.sh      Build image and start containers
+    verify-deployment.sh Verify sandbox images, binaries, health
+    register-cron-jobs.sh Register cron jobs via openclaw CLI
+  vector/             ← Vector log shipper config
+    vector.yaml
+```
 
 ## Convention
 
 When a playbook bash block contains:
 
 ```
-# SOURCE: deploy/<file> → /vps/target/path
+# SOURCE: deploy/<tier>/<file> → /vps/target/path
 ```
 
-The executor reads `deploy/<file>` from this repo and deploys its contents
+The executor reads `deploy/<tier>/<file>` from this repo and deploys its contents
 to the target path on the VPS. The heredoc body contains a sentinel
-`# <<< deploy/<file> >>>` as a placeholder.
+`# <<< deploy/<tier>/<file> >>>` as a placeholder.
 
-### Templates
+## source-config.sh Discovery
 
-Files marked `(template)` in the SOURCE comment use `{{VAR}}` placeholders
-(Mustache-style). The executor substitutes values from the deployment config
-before writing to the VPS.
+Scripts source config based on their tier location:
 
-```
-# SOURCE: deploy/<file> (template) → /vps/target/path
-# VARS: VAR_NAME (source description)
-```
-
-The `# VARS:` comment documents which placeholders exist and where their
-values come from. Template syntax:
-
-- `{{VAR}}` — replaced with the variable's value at deploy time
-- `{{VAR}}` is visually distinct from Docker Compose `${VAR}` interpolation
-  and shell `$VAR` expansion, avoiding ambiguity
-
-## Deployment Scripts
-
-Scripts in `deploy/scripts/` are SCP'd to the VPS and executed remotely. They
-keep large bash out of playbook inline blocks (and out of the LLM context
-window), improving deployment reliability.
-
-| Script | Playbook | Purpose |
-|--------|----------|---------|
-| `scripts/setup-infra.sh` | 04 §4.2 | Creates directories, clones repo |
-| `scripts/deploy-config.sh` | 04 §4.3 | Copies config files, substitutes templates, sets permissions |
-| `scripts/register-cron-jobs.sh` | 04 §4.5 | Registers OpenClaw cron jobs via `openclaw cron add` |
-
-All three scripts use `set -euo pipefail`, send progress to stderr, and emit a
-single machine-parseable line on stdout (`SETUP_INFRA_OK` or
-`DEPLOY_CONFIG_OK`). Config values come from `source-config.sh`.
+| Script location | Source line | Resolves to |
+|---|---|---|
+| `deploy/host/*.sh` | `source "$(dirname $0)/source-config.sh"` | Sibling in same dir |
+| `deploy/setup/*.sh` | `source "$(dirname $0)/../host/source-config.sh"` | Parent's sibling |
+| `scripts/*.sh` | `source "$SCRIPT_DIR/../deploy/host/source-config.sh"` | Fixed relative path |

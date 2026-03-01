@@ -10,7 +10,7 @@
  *   bun run pre-deploy:dry      # Dry run (show what would be generated)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import * as yaml from "js-yaml";
 import * as dotenv from "dotenv";
@@ -491,9 +491,9 @@ async function main() {
 
   // Clean .deploy/ but preserve .git
   if (existsSync(DEPLOY_DIR)) {
-    for (const entry of new Bun.Glob("*").scanSync({ cwd: DEPLOY_DIR, dot: false })) {
-      const full = join(DEPLOY_DIR, entry);
-      rmSync(full, { recursive: true, force: true });
+    for (const entry of readdirSync(DEPLOY_DIR)) {
+      if (entry === ".git") continue;
+      rmSync(join(DEPLOY_DIR, entry), { recursive: true, force: true });
     }
   }
   mkdirSync(DEPLOY_DIR, { recursive: true });
@@ -510,11 +510,40 @@ async function main() {
   writeFileSync(join(DEPLOY_DIR, "stack.env"), generateStackEnv(env, config, claws));
   success("Wrote stack.env");
 
-  // 7d. Copy source-config.sh (config resolver for shell scripts)
-  cpSync(join(ROOT, "deploy", "scripts", "source-config.sh"), join(DEPLOY_DIR, "source-config.sh"));
-  success("Copied source-config.sh");
+  // 7d. Copy deploy/ subdirectories → .deploy/ (mirrors VPS INSTALL_DIR)
+  // Three tiers: openclaw-stack/ (container), host/ (cron/host scripts), setup/ (deploy-time)
+  const deployDirs = ["openclaw-stack", "host", "setup"];
+  for (const dir of deployDirs) {
+    const src = join(ROOT, "deploy", dir);
+    if (existsSync(src)) {
+      cpSync(src, join(DEPLOY_DIR, dir), { recursive: true });
+      success(`Copied ${dir}/`);
+    } else {
+      warn(`Deploy directory not found: deploy/${dir} (skipping)`);
+    }
+  }
 
-  // 7e. Process openclaw.jsonc for each claw → .deploy/openclaw/<name>/openclaw.json
+  // 7e. Copy sandbox toolkit into openclaw-stack/ (only if configured in stack.yml)
+  if (stack.sandbox_toolkit) {
+    const toolkitPath = String(stack.sandbox_toolkit);
+    const toolkitSrc = join(ROOT, toolkitPath);
+    if (!existsSync(toolkitSrc)) fatal(`Sandbox toolkit not found: ${toolkitPath}`);
+    cpSync(toolkitSrc, join(DEPLOY_DIR, "openclaw-stack", "sandbox-toolkit.yaml"));
+    success(`Copied sandbox toolkit (from ${toolkitPath})`);
+  } else {
+    info("No sandbox_toolkit configured — sandboxes will build without extra tools");
+  }
+
+  // 7f. Copy vector config if logging enabled
+  if (stack.vector) {
+    const vectorSrc = join(ROOT, "deploy", "vector");
+    if (existsSync(vectorSrc)) {
+      cpSync(vectorSrc, join(DEPLOY_DIR, "vector"), { recursive: true });
+      success("Copied vector/");
+    }
+  }
+
+  // 7g. Process openclaw.jsonc for each claw → .deploy/openclaw/<name>/openclaw.json
   for (const [name, claw] of Object.entries(claws)) {
     const templateFile = (claw.openclaw_json as string) || "openclaw/default/openclaw.jsonc";
     info(`Processing openclaw config for ${name} (from ${templateFile})...`);
@@ -528,56 +557,6 @@ async function main() {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, "openclaw.json"), cleanJson + "\n");
     success(`Wrote openclaw/${name}/openclaw.json`);
-  }
-
-  // 7f. Copy entrypoint-gateway.sh
-  cpSync(join(ROOT, "deploy", "entrypoint-gateway.sh"), join(DEPLOY_DIR, "entrypoint-gateway.sh"));
-  success("Copied entrypoint-gateway.sh");
-
-  // 7g. Copy deploy artifacts (plugins, dashboard, scripts, etc.)
-  const deployArtifacts = [
-    "plugins",
-    "dashboard",
-    "parse-toolkit.mjs",
-    "rebuild-sandboxes.sh",
-    "build-openclaw.sh",
-    "session-prune.sh",
-    "backup.sh",
-    "host-alert.sh",
-    "host-maintenance-check.sh",
-    "logrotate-openclaw",
-    "system-hardening.sh",
-  ];
-
-  for (const artifact of deployArtifacts) {
-    const src = join(ROOT, "deploy", artifact);
-    if (!existsSync(src)) {
-      warn(`Deploy artifact not found: deploy/${artifact} (skipping)`);
-      continue;
-    }
-    cpSync(src, join(DEPLOY_DIR, "deploy", artifact), { recursive: true });
-  }
-  success("Copied deploy artifacts");
-
-  // 7h. Copy sandbox toolkit (only if configured in stack.yml)
-  if (stack.sandbox_toolkit) {
-    const toolkitPath = String(stack.sandbox_toolkit);
-    const toolkitSrc = join(ROOT, toolkitPath);
-    if (!existsSync(toolkitSrc)) fatal(`Sandbox toolkit not found: ${toolkitPath}`);
-    cpSync(toolkitSrc, join(DEPLOY_DIR, "deploy", "sandbox-toolkit.yaml"));
-    success(`Copied sandbox toolkit (from ${toolkitPath})`);
-  } else {
-    info("No sandbox_toolkit configured — sandboxes will build without extra tools");
-  }
-
-  // 7i. Copy vector config if logging enabled
-  if (stack.vector) {
-    const vectorSrc = join(ROOT, "deploy", "vector");
-    if (existsSync(vectorSrc)) {
-      mkdirSync(join(DEPLOY_DIR, "vector"), { recursive: true });
-      cpSync(join(vectorSrc, "vector.yaml"), join(DEPLOY_DIR, "vector", "vector.yaml"));
-      success("Copied vector config");
-    }
   }
 
   // Summary

@@ -75,7 +75,7 @@ echo "Instances: $INSTANCE_NAMES"
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "env \
     INSTANCE_NAMES='${INSTANCE_NAMES}' \
-  bash ${INSTALL_DIR}/.deploy-staging/scripts/setup-infra.sh"
+  bash ${INSTALL_DIR}/.deploy-staging/setup/setup-infra.sh"
 ```
 
 Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
@@ -107,22 +107,22 @@ Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
 
 | Source (from staging) | Destination | Notes |
 |--------|------------|-------|
-| `.deploy/docker-compose.yml` | `<INSTALL_DIR>/deploy/docker-compose.yml` | Pre-generated from `.hbs` template |
+| `.deploy/docker-compose.yml` | `<INSTALL_DIR>/docker-compose.yml` | Pre-generated from `.hbs` template |
 | `.deploy/claws/<name>/openclaw.json` | `<INSTALL_DIR>/instances/<name>/.openclaw/openclaw.json` | Per-claw config (runtime `$VAR` resolved by entrypoint) |
-| `deploy/build-openclaw.sh` | `<INSTALL_DIR>/deploy/deploy/build-openclaw.sh` | |
-| `deploy/entrypoint-gateway.sh` | `<INSTALL_DIR>/deploy/entrypoint-gateway.sh` | |
-| `deploy/host-alert.sh` | `<INSTALL_DIR>/deploy/deploy/host-alert.sh` | |
-| `deploy/host-maintenance-check.sh` | `<INSTALL_DIR>/deploy/deploy/host-maintenance-check.sh` | |
-| `deploy/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | |
-| `deploy/plugins/*` | `<INSTALL_DIR>/deploy/plugins/` | Owned by uid 1000 |
-| `.deploy/deploy/sandbox-toolkit.yaml` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
-| `deploy/parse-toolkit.mjs` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
-| `deploy/rebuild-sandboxes.sh` | `<INSTALL_DIR>/deploy/` | Bind-mounted into container |
-| `deploy/dashboard/*` | `<INSTALL_DIR>/deploy/dashboard/` | Bind-mounted into container |
+| `deploy/host/build-openclaw.sh` | `<INSTALL_DIR>/host/build-openclaw.sh` | |
+| `deploy/openclaw-stack/entrypoint.sh` | `<INSTALL_DIR>/openclaw-stack/entrypoint.sh` | |
+| `deploy/host/host-alert.sh` | `<INSTALL_DIR>/host/host-alert.sh` | |
+| `deploy/host/host-maintenance-check.sh` | `<INSTALL_DIR>/host/host-maintenance-check.sh` | |
+| `deploy/host/logrotate-openclaw` | `/etc/logrotate.d/openclaw` | |
+| `deploy/openclaw-stack/plugins/*` | `<INSTALL_DIR>/openclaw-stack/plugins/` | Owned by uid 1000 |
+| `.deploy/openclaw-stack/sandbox-toolkit.yaml` | `<INSTALL_DIR>/openclaw-stack/` | Bind-mounted into container |
+| `deploy/openclaw-stack/parse-toolkit.mjs` | `<INSTALL_DIR>/openclaw-stack/` | Bind-mounted into container |
+| `deploy/openclaw-stack/rebuild-sandboxes.sh` | `<INSTALL_DIR>/openclaw-stack/` | Bind-mounted into container |
+| `deploy/openclaw-stack/dashboard/*` | `<INSTALL_DIR>/openclaw-stack/dashboard/` | Bind-mounted into container |
 
 ### Template resolution
 
-Template variables in `openclaw.jsonc` use `$VAR` syntax and are resolved at container startup by `envsubst` in `entrypoint-gateway.sh`. The docker-compose.yml passes environment variables from `stack.yml` (resolved at build time by `pre-deploy.ts`) into containers, where the entrypoint substitutes them into `openclaw.json`.
+Template variables in `openclaw.jsonc` use `$VAR` syntax and are resolved at container startup by `envsubst` in the entrypoint script. The docker-compose.yml passes environment variables from `stack.yml` (resolved at build time by `pre-deploy.ts`) into containers, where the entrypoint substitutes them into `openclaw.json`.
 
 > **`controlUi.allowedOrigins` is required.** When the gateway binds to `lan` (non-loopback), which is always the case for Docker/Tunnel deployments, `controlUi.allowedOrigins` must be set in `openclaw.json`. Without it, the gateway crashes on startup with a security check error. This is handled automatically — `pre-deploy.ts` derives `ALLOWED_ORIGIN` from the claw's `domain` in `stack.yml`. Every claw must have a domain configured.
 
@@ -134,7 +134,7 @@ The staging directory (from §4.2 Step 1) already has all pre-built artifacts. C
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "sudo -u openclaw bash -c '
     # Copy docker-compose.yml
-    cp ${INSTALL_DIR}/.deploy-staging/docker-compose.yml ${INSTALL_DIR}/deploy/docker-compose.yml
+    cp ${INSTALL_DIR}/.deploy-staging/docker-compose.yml ${INSTALL_DIR}/docker-compose.yml
 
     # Copy per-claw openclaw.json files
     for claw_dir in ${INSTALL_DIR}/.deploy-staging/claws/*/; do
@@ -143,8 +143,9 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
       cp \"\${claw_dir}openclaw.json\" ${INSTALL_DIR}/instances/\${CLAW_NAME}/.openclaw/openclaw.json
     done
 
-    # Copy deploy scripts and static files
-    cp -r ${INSTALL_DIR}/.deploy-staging/deploy/* ${INSTALL_DIR}/deploy/ 2>/dev/null || true
+    # Copy deploy scripts and static files to their tier directories
+    cp -r ${INSTALL_DIR}/.deploy-staging/host/* ${INSTALL_DIR}/host/ 2>/dev/null || true
+    cp -r ${INSTALL_DIR}/.deploy-staging/openclaw-stack/* ${INSTALL_DIR}/openclaw-stack/ 2>/dev/null || true
   '"
 ```
 
@@ -187,7 +188,7 @@ Builds the Docker image and starts containers. Multi-claw deployments start only
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/.deploy-staging/scripts/start-claws.sh"
+  "bash ${INSTALL_DIR}/.deploy-staging/setup/start-claws.sh"
 ```
 
 Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from stdout.
@@ -211,7 +212,7 @@ Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from
 >
 > - **Port already in use:** `sudo ss -tlnp | grep 18789` (first claw defaults to 18789; others get 18790+)
 > - **Sysbox not available:** `sudo systemctl status sysbox` — must be active
-> - **Invalid config:** check docker-compose.yml and openclaw.json — `cat <INSTALL_DIR>/deploy/docker-compose.yml`
+> - **Invalid config:** check docker-compose.yml and openclaw.json — `cat <INSTALL_DIR>/docker-compose.yml`
 
 ### Step 2: Wait for sandbox builds (~15-25 min first boot)
 
@@ -249,7 +250,7 @@ If `CLAW_COUNT > 1`, start all remaining claws after the first claw finishes san
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'"
 ```
 
 > **Single-claw:** Skip this step — all services were already started in Step 1.
@@ -260,7 +261,7 @@ Runs all verification checks across every running claw: sandbox images, binaries
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/.deploy-staging/scripts/verify-deployment.sh"
+  "bash ${INSTALL_DIR}/.deploy-staging/setup/verify-deployment.sh"
 ```
 
 Expects `VERIFY_DEPLOYMENT_OK` on stdout. Detailed per-claw results go to stderr.
@@ -289,7 +290,7 @@ Register the Daily VPS Health Check cron job on all claws. The script is self-co
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "bash ${INSTALL_DIR}/.deploy-staging/scripts/register-cron-jobs.sh"
+  "bash ${INSTALL_DIR}/.deploy-staging/setup/register-cron-jobs.sh"
 ```
 
 The script is idempotent — it skips registration on any claw where the job already exists.
@@ -311,14 +312,14 @@ Run the verification script to check all claws (sandbox images, binaries, permis
 
 ```bash
 env OPENCLAW_DOMAIN_PATH='${OPENCLAW_DOMAIN_PATH}' \
-  bash ${INSTALL_DIR}/.deploy-staging/scripts/verify-deployment.sh
+  bash ${INSTALL_DIR}/.deploy-staging/setup/verify-deployment.sh
 ```
 
 Or for quick manual checks:
 
 ```bash
 # Check containers are running
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'
 
 # Check gateway logs for each claw
 for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort); do
@@ -415,7 +416,7 @@ sudo docker exec "$VECTOR" ls -la /etc/vector/
 sudo docker exec "$VECTOR" wget -q -O- <LOG_WORKER_URL>/health
 
 # Restart Vector after fixing (use `up -d` instead if .env values changed)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose restart vector'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose restart vector'
 ```
 
 ### Config Overwritten After Manual Edit
@@ -443,7 +444,7 @@ If CLI commands fail, check:
 docker network ls | grep openclaw-net
 
 # Recreate by restarting compose (compose manages the network)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose down && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose down && docker compose up -d'
 ```
 
 ---
@@ -458,7 +459,7 @@ The build script auto-patches the Dockerfile and restores the git working tree a
 #!/bin/bash
 # Image name is stack-scoped: openclaw-<project>:local
 # Source stack config for STACK__STACK__IMAGE
-source <INSTALL_DIR>/deploy/stack.env
+source <INSTALL_DIR>/host/source-config.sh
 
 # 1. Tag current state for rollback
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git tag -f pre-update'
@@ -470,10 +471,10 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git fetch origin main && 
 
 # 3. Pull and rebuild
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git pull origin main'
-sudo -u openclaw <INSTALL_DIR>/deploy/deploy/build-openclaw.sh
+sudo -u openclaw <INSTALL_DIR>/host/build-openclaw.sh
 
 # 4. Recreate containers with the new image
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 
 # 5. Verify new version
 openclaw --version
@@ -496,7 +497,7 @@ If an update causes issues, roll back to the previous known-good state:
 
 ```bash
 #!/bin/bash
-source <INSTALL_DIR>/deploy/stack.env
+source <INSTALL_DIR>/host/source-config.sh
 
 # 1. Revert source to pre-update tag
 sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git checkout pre-update'
@@ -505,7 +506,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR>/openclaw && git checkout pre-update'
 docker tag "${STACK__STACK__IMAGE%:*}:rollback-$(date +%Y%m%d)" "${STACK__STACK__IMAGE}"
 
 # 3. Recreate containers with the old image
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 
 # 4. Verify
 openclaw --version

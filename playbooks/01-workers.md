@@ -203,7 +203,7 @@ Capture the Worker URL from the deploy output and update `LOG_WORKER_URL` in `.e
 bun run pre-deploy
 # Push updated .deploy/ artifacts to VPS, then recreate Vector
 # IMPORTANT: `restart` does NOT reload env vars — use `up -d` to recreate with new values
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d vector'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d vector'
 ```
 
 ### Verify

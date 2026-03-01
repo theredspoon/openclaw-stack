@@ -10,7 +10,7 @@ set -euo pipefail
 printf '\033[32mSSH into OpenClaw container \033[0m\n'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 GATEWAY=$(resolve_gateway "$@") || exit 1

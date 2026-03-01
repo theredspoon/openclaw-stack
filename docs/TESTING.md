@@ -8,7 +8,7 @@ When asked to test the OpenClaw deployment, follow both phases below. Source the
 
 ```bash
 # Load all config variables
-source deploy/scripts/source-config.sh
+source deploy/host/source-config.sh
 ```
 
 This exports `ENV__*` vars (from `.env`) and `STACK__*` vars (from `stack.yml`). Key variables used in tests below:
@@ -172,10 +172,10 @@ After running all tests, compile results:
 For a rapid health check, run this single command. Source config first for variable values.
 
 ```bash
-source deploy/scripts/source-config.sh
+source deploy/host/source-config.sh
 echo "=== VPS-1 Health ===" && \
 ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && \
+  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose ps --format \"{{.Name}}: {{.Status}}\"' && \
    echo && \
    echo '=== Claw Instances ===' && \
    ls -1 ${INSTALL_DIR}/instances/ 2>/dev/null && \
@@ -190,18 +190,18 @@ ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}"
 ### SSL Certificate Errors in Browser
 
 1. Check Cloudflare SSL mode is "Full (strict)"
-2. Verify tunnel is running: `sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'`
+2. Verify tunnel is running: `sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps cloudflared'`
 3. Check DNS routes through tunnel: `dig <OPENCLAW_DOMAIN>`
 
 ### Gateway Not Healthy
 
-1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose logs --tail 50 openclaw-<name>'`
-2. Check all containers running: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose ps'`
+1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose logs --tail 50 openclaw-<name>'`
+2. Check all containers running: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose ps'`
 3. Verify localhost access per claw (ports start at 18789, increment per claw): `curl -s http://localhost:<port>/ | head -5`
 
 ### No Logs in Cloudflare
 
-1. Check Vector logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose logs vector'`
+1. Check Vector logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose logs vector'`
 2. Verify LOG_WORKER_URL is set (base URL, no path suffix)
 3. Check Log Receiver Worker health: `curl -s https://<LOG_WORKER_URL>/health`
 

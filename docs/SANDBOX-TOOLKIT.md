@@ -232,10 +232,10 @@ Sandbox containers are **persistent per-agent** (`scope: "agent"` in `openclaw.j
 | File | Location | Purpose |
 |------|----------|---------|
 | `openclaw/default/sandbox-toolkit.yaml` | Config | Tool definitions, packages, binaries |
-| `deploy/parse-toolkit.mjs` | Parser | YAML → JSON for entrypoint/builder |
-| `deploy/rebuild-sandboxes.sh` | Builder | Layered image build with split config detection |
-| `deploy/entrypoint-gateway.sh` | Entrypoint | Shim generation (section 1g) |
-| `deploy/docker-compose.override.yml` | Compose | Bind mounts (lines 48-52) |
+| `deploy/openclaw-stack/parse-toolkit.mjs` | Parser | YAML → JSON for entrypoint/builder |
+| `deploy/openclaw-stack/rebuild-sandboxes.sh` | Builder | Layered image build with split config detection |
+| `deploy/openclaw-stack/entrypoint.sh` | Entrypoint | Shim generation (section 1h) |
+| `docker-compose.yml.hbs` | Compose | Bind mounts for `openclaw-stack/` |
 
 ### Gotchas
 

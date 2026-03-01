@@ -85,21 +85,21 @@ Node.js dashboard server (zero dependencies — built-in `http` module only). Re
 - **Health checking**: TCP probes each container's noVNC port before proxying; shows friendly HTML error page if the container is down (avoids Cloudflare intercepting 502 errors)
 - **Index page**: lists all registered sessions with live up/down status indicators, auto-refreshes every 10 seconds
 
-### `deploy/entrypoint-gateway.sh` (Phase 2b)
+### `deploy/openclaw-stack/entrypoint.sh` (Phase 2b)
 
 Starts the dashboard server as a background process before gosu drops privileges:
 
 ```bash
-DASHBOARD_SERVER="/app/deploy/dashboard.mjs"
+DASHBOARD_SERVER="/app/openclaw-stack/dashboard/server.mjs"
 if [ -f "$DASHBOARD_SERVER" ]; then
   node "$DASHBOARD_SERVER" &
 fi
 ```
 
-### `deploy/docker-compose.override.yml`
+### `docker-compose.yml`
 
 - Port mapping: `127.0.0.1:6090:6090` (localhost-only for tunnel access)
-- Volume: `./deploy/dashboard.mjs:/app/deploy/dashboard.mjs:ro`
+- Volume: `./openclaw-stack:/app/openclaw-stack:ro`
 - Environment: `DASHBOARD_BASE_PATH=${DASHBOARD_BASE_PATH:-}` (set from `OPENCLAW_DASHBOARD_DOMAIN_PATH`)
 
 ### Cloudflare Tunnel Route
@@ -228,9 +228,9 @@ sudo docker logs openclaw-main-claw 2>&1 | grep dashboard
 
 ### Dashboard not starting
 
-Check that `dashboard.mjs` is bind-mounted and the entrypoint reached Phase 2b:
+Check that the dashboard is bind-mounted and the entrypoint reached Phase 2b:
 
 ```bash
-sudo docker exec openclaw-main-claw ls -la /app/deploy/dashboard.mjs
+sudo docker exec openclaw-main-claw ls -la /app/openclaw-stack/dashboard/server.mjs
 sudo docker logs openclaw-main-claw 2>&1 | grep "Dashboard server"
 ```

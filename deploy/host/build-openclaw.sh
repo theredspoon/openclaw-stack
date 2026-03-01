@@ -13,11 +13,11 @@
 #   2. Dockerfile: clear build-time jiti cache (belt-and-suspenders with entrypoint §2c)
 #   3. .dockerignore: exclude local runtime dirs (data/, deploy/) from build context
 #
-# Usage: sudo -u openclaw ${INSTALL_DIR}/deploy/deploy/build-openclaw.sh
+# Usage: sudo -u openclaw ${INSTALL_DIR}/host/build-openclaw.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/../source-config.sh"
+source "${SCRIPT_DIR}/source-config.sh"
 
 OPENCLAW_DIR="${STACK__STACK__INSTALL_DIR}/openclaw"
 cd "$OPENCLAW_DIR"

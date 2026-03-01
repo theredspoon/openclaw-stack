@@ -15,7 +15,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 # Extract --instance before passing remaining args to openclaw

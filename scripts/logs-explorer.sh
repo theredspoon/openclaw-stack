@@ -58,7 +58,7 @@ fi
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
-  source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+  source "$SCRIPT_DIR/../deploy/host/source-config.sh"
   printf '\033[36mOpenClaw Session Debug Tool\033[0m (VPS: %s)\n\n' "$ENV__VPS_IP"
   echo "Interactive TUI (no args):"
   echo "  $0"
@@ -70,7 +70,7 @@ fi
 
 # ─── Direct mode: SCP + SSH ──────────────────────────────────────────────────
 
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/select-claw.sh"
 
 # Common SSH/SCP options (scp uses -P for port, ssh uses -p)

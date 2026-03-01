@@ -97,7 +97,7 @@ Alerts are only sent on **state changes** — you won't get repeated messages fo
 
 ## Updating Configs
 
-See [deploy/host-alert.sh](../deploy/host-alert.sh) for threshold configs.
+See [deploy/host/host-alert.sh](../deploy/host/host-alert.sh) for threshold configs.
 
 Ask claude to `redeploy host alert` after you've made any changes to host-alert.sh
 or the Telegram settings in `.env`.

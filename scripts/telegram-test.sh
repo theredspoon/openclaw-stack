@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 
 if [[ -z "${ENV__HOSTALERT_TELEGRAM_BOT_TOKEN:-}" ]]; then
   echo "Error: ENV__HOSTALERT_TELEGRAM_BOT_TOKEN is not set in stack.env" >&2

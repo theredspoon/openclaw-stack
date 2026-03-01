@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sandbox image builder — runs inside the gateway container.
-# Called by entrypoint-gateway.sh on boot and by update-sandboxes.sh via docker exec.
+# Called by entrypoint.sh on boot and by update-sandboxes.sh via docker exec.
 #
 # Image layer architecture:
 #   openclaw-sandbox:bookworm-slim                     (upstream base)
@@ -19,11 +19,11 @@
 # Staleness: warns when images are older than 30 days.
 #
 # Usage:
-#   /app/deploy/rebuild-sandboxes.sh                    # boot mode: build missing, detect config changes
-#   /app/deploy/rebuild-sandboxes.sh --force            # force rebuild toolkit (+ packages/base if needed)
-#   /app/deploy/rebuild-sandboxes.sh --force --all      # force rebuild all including browser
-#   /app/deploy/rebuild-sandboxes.sh --quick <toolname> # layer a single tool on top of toolkit image
-#   /app/deploy/rebuild-sandboxes.sh --dry-run          # show what would be rebuilt
+#   /app/openclaw-stack/rebuild-sandboxes.sh                    # boot mode: build missing, detect config changes
+#   /app/openclaw-stack/rebuild-sandboxes.sh --force            # force rebuild toolkit (+ packages/base if needed)
+#   /app/openclaw-stack/rebuild-sandboxes.sh --force --all      # force rebuild all including browser
+#   /app/openclaw-stack/rebuild-sandboxes.sh --quick <toolname> # layer a single tool on top of toolkit image
+#   /app/openclaw-stack/rebuild-sandboxes.sh --dry-run          # show what would be rebuilt
 #
 # Sysbox build gotchas:
 #   - Do NOT use `docker build -f - /dev/null` — Sysbox needs a real build context.
@@ -33,8 +33,8 @@
 
 set -uo pipefail
 
-TOOLKIT_CONFIG="/app/deploy/sandbox-toolkit.yaml"
-TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
+TOOLKIT_CONFIG="/app/openclaw-stack/sandbox-toolkit.yaml"
+TOOLKIT_PARSER="/app/openclaw-stack/parse-toolkit.mjs"
 DIGESTS_FILE="/var/lib/docker/openclaw-image-digests.json"
 STALENESS_DAYS=30
 

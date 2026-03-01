@@ -122,8 +122,8 @@ The gateway does NOT block on binary checks at startup. A missing binary doesn't
 |------|------|
 | `deploy/openclaw.json` | Agent configs, skill assignments, sandbox images, bind mounts |
 | `openclaw/default/sandbox-toolkit.yaml` | Tool declarations — bins listed here get auto-shimmed |
-| `deploy/entrypoint-gateway.sh` §1g | Shim generation at gateway boot |
-| `deploy/plugins/coordinator/index.js` | Builds routing table from agent configs → `AGENTS.md` |
+| `deploy/openclaw-stack/entrypoint.sh` §1h | Shim generation at gateway boot |
+| `deploy/openclaw-stack/plugins/coordinator/index.js` | Builds routing table from agent configs → `AGENTS.md` |
 | `source/openclaw/src/agents/skills/config.ts` | `shouldIncludeSkill()` — skill filtering logic |
 | `source/openclaw/src/shared/config-eval.ts` | `hasBinary()` — binary existence check |
 | `source/openclaw/src/agents/skills/workspace.ts` | `filterSkillEntries()` — applies filters when building prompt |

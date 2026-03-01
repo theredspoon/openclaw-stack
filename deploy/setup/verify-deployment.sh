@@ -13,7 +13,7 @@ set -euo pipefail
 #   Exit: 0 all pass, 1 any failure
 
 # Resolve paths via canonical config helper
-source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+source "$(cd "$(dirname "$0")" && pwd)/../host/source-config.sh"
 
 DOMAIN_PATH="${STACK__STACK__DEFAULTS__DOMAIN_PATH:-}"
 FAILED=0

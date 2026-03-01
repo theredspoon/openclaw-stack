@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 # Pass through flags to rebuild-sandboxes.sh
@@ -54,7 +54,7 @@ fi
 
 # Run rebuild-sandboxes.sh inside the running gateway container
 TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -t "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-  "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $FLAGS"
+  "sudo docker exec $GATEWAY /app/openclaw-stack/rebuild-sandboxes.sh $FLAGS"
 
 echo ""
 printf '\033[32mDone. New sandbox containers will use the rebuilt images.\033[0m\n'

@@ -10,8 +10,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# shellcheck source=source-config.sh
-source "$SCRIPT_DIR/../source-config.sh"
+# shellcheck source=../host/source-config.sh
+source "$SCRIPT_DIR/../host/source-config.sh"
 
 # Read pre-resolved config
 CLAW_IDS="${STACK__CLAWS__IDS:?STACK__CLAWS__IDS not set in stack.env}"

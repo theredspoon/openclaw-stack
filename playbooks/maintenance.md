@@ -30,11 +30,11 @@ NEW_TOKEN=$(openssl rand -hex 32)
 # 2. Write new token to per-claw .gateway-token file
 echo "$NEW_TOKEN" | sudo tee <INSTALL_DIR>/instances/<CLAW_NAME>/.openclaw/.gateway-token > /dev/null
 
-# 3. Update the deploy .env with the new token
-# Edit <INSTALL_DIR>/deploy/.env to update the claw's GATEWAY_TOKEN variable
+# 3. Update the .env with the new token
+# Edit <INSTALL_DIR>/.env to update the claw's GATEWAY_TOKEN variable
 
 # 4. Recreate the claw container (up -d, NOT restart — restart doesn't reload .env)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d openclaw-<CLAW_NAME>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d openclaw-<CLAW_NAME>'
 
 # 5. Update all paired devices with new token (existing browser URLs will need the new token parameter)
 # Repeat steps 2-5 for each claw being rotated
@@ -59,7 +59,7 @@ bun run pre-deploy
 # Push updated artifacts to VPS (via .deploy/ or SCP)
 
 # 4. Recreate all claws to pick up new env values
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 ```
 
 > **Verify:** Run § 7.3 — AI Gateway Worker health check returns `{"status":"ok"}`.
@@ -81,7 +81,7 @@ bun run pre-deploy
 # Push updated artifacts to VPS (via .deploy/ or SCP)
 
 # 4. Recreate Vector to pick up new env values (see CLAUDE.md: restart vs up -d)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d vector'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d vector'
 ```
 
 > **Verify:** Run § 7.2 (Vector running) and § 7.3 (Log Receiver Worker health check returns `{"status":"ok"}`).
@@ -171,19 +171,19 @@ No container restart needed — builds happen inside the running container's nes
 
 Several deploy files are bind-mounted read-only into claw containers. These can be updated without a full image rebuild — just SCP the file and restart the claws.
 
-**Bind-mounted files:** `dashboard/`, `entrypoint-gateway.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`
+**Bind-mounted files:** `dashboard/`, `entrypoint.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`
 
 ```bash
 # From local machine — copy to VPS (use -r for directories like dashboard/ or plugins/)
-scp -i <SSH_KEY> -P <SSH_PORT> [-r] deploy/<path> adminclaw@<VPS_IP>:/tmp/deploy-update
+scp -i <SSH_KEY> -P <SSH_PORT> [-r] deploy/openclaw-stack/<path> adminclaw@<VPS_IP>:/tmp/deploy-update
 
 # Move into place, fix ownership, and restart all claws (single SSH session)
 ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> "
-  sudo rm -rf <INSTALL_DIR>/deploy/<path>
-  sudo cp -r /tmp/deploy-update <INSTALL_DIR>/deploy/<path>
-  sudo chown -R 1000:1000 <INSTALL_DIR>/deploy/<path>
+  sudo rm -rf <INSTALL_DIR>/openclaw-stack/<path>
+  sudo cp -r /tmp/deploy-update <INSTALL_DIR>/openclaw-stack/<path>
+  sudo chown -R 1000:1000 <INSTALL_DIR>/openclaw-stack/<path>
   rm -rf /tmp/deploy-update
-  sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose restart'
+  sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose restart'
 "
 ```
 
@@ -223,7 +223,7 @@ scp -P ${SSH_PORT} -i ${SSH_KEY} .deploy/claws/personal-claw/openclaw.json \
 
 # 3. Restart that claw to pick up new config (restart is fine for bind-mounted file changes)
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose restart openclaw-personal-claw'"
+  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose restart openclaw-personal-claw'"
 ```
 
 ---
@@ -245,11 +245,11 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
    ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} "
      sudo -u openclaw mkdir -p ${INSTALL_DIR}/instances/<name>/.openclaw
      sudo -u openclaw cp ${INSTALL_DIR}/.deploy-staging/claws/<name>/openclaw.json ${INSTALL_DIR}/instances/<name>/.openclaw/
-     sudo -u openclaw cp ${INSTALL_DIR}/.deploy-staging/docker-compose.yml ${INSTALL_DIR}/deploy/docker-compose.yml
+     sudo -u openclaw cp ${INSTALL_DIR}/.deploy-staging/docker-compose.yml ${INSTALL_DIR}/docker-compose.yml
    "
    ```
 6. Start the new claw:
    ```bash
    ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-     "sudo -u openclaw bash -c 'cd ${INSTALL_DIR}/deploy && docker compose up -d openclaw-<name>'"
+     "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose up -d openclaw-<name>'"
    ```

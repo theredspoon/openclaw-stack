@@ -104,10 +104,10 @@ All docker compose commands run as openclaw (adminclaw can't cd into openclaw's 
 
 ```bash
 # Main compose project — starts all claws (+ Vector when stack.logging.vector: true):
-# Pattern: sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose <cmd>'
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'       # Start all services
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps'           # Status
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs -f'      # Follow logs
+# Pattern: sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose <cmd>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'       # Start all services
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'           # Status
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose logs -f'      # Follow logs
 ```
 
 > **Vector** is included in the main compose project when `stack.logging.vector: true` in `stack.yml`.

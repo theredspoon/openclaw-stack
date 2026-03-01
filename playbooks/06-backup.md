@@ -28,12 +28,12 @@ No external variables required.
 IMPORTANT: Backup script must run as root because `.openclaw` is owned by uid 1000 (container's node user), not the host's `openclaw` user (uid 1002).
 
 ```bash
-# SOURCE: deploy/backup.sh
-sudo tee <INSTALL_DIR>/deploy/deploy/backup.sh << 'EOF'
-# <<< deploy/backup.sh >>>
+# SOURCE: deploy/host/backup.sh
+sudo tee <INSTALL_DIR>/host/backup.sh << 'EOF'
+# <<< deploy/host/backup.sh >>>
 EOF
 
-sudo chmod +x <INSTALL_DIR>/deploy/deploy/backup.sh
+sudo chmod +x <INSTALL_DIR>/host/backup.sh
 ```
 
 ---
@@ -46,7 +46,7 @@ sudo chmod +x <INSTALL_DIR>/deploy/deploy/backup.sh
 # This avoids permission issues with uid 1000 owned directories
 sudo tee /etc/cron.d/openclaw-backup << 'EOF'
 # OpenClaw daily backup - runs as root to access uid 1000 owned directories
-0 3 * * * root <INSTALL_DIR>/deploy/deploy/backup.sh >> <INSTALL_DIR>/logs/backup.log 2>&1
+0 3 * * * root <INSTALL_DIR>/host/backup.sh >> <INSTALL_DIR>/logs/backup.log 2>&1
 EOF
 
 sudo chmod 644 /etc/cron.d/openclaw-backup
@@ -62,7 +62,7 @@ sudo chown openclaw:openclaw <INSTALL_DIR>/logs
 
 ```bash
 # Run backup manually
-sudo <INSTALL_DIR>/deploy/deploy/backup.sh
+sudo <INSTALL_DIR>/host/backup.sh
 
 # Verify backup was created (per-instance)
 for inst_dir in <INSTALL_DIR>/instances/*/; do
@@ -88,7 +88,7 @@ sudo tar -tzf "${FIRST_INST}.openclaw/backups"/openclaw_backup_*.tar.gz | head -
 > OpenClaw has been started at least once (directories are created on first
 > boot). Verify paths exist:"
 >
-> `sudo ls -la <INSTALL_DIR>/instances/*/.openclaw/openclaw.json <INSTALL_DIR>/deploy/docker-compose.yml`
+> `sudo ls -la <INSTALL_DIR>/instances/*/.openclaw/openclaw.json <INSTALL_DIR>/docker-compose.yml`
 
 ---
 
@@ -99,12 +99,12 @@ Session transcripts (`instances/<name>/.openclaw/agents/<agentId>/sessions/*.jso
 ### Install Prune Script
 
 ```bash
-# SOURCE: deploy/session-prune.sh
-sudo tee <INSTALL_DIR>/deploy/deploy/session-prune.sh << 'EOF'
-# <<< deploy/session-prune.sh >>>
+# SOURCE: deploy/host/session-prune.sh
+sudo tee <INSTALL_DIR>/host/session-prune.sh << 'EOF'
+# <<< deploy/host/session-prune.sh >>>
 EOF
 
-sudo chmod +x <INSTALL_DIR>/deploy/deploy/session-prune.sh
+sudo chmod +x <INSTALL_DIR>/host/session-prune.sh
 ```
 
 ### Schedule Cron Job
@@ -112,7 +112,7 @@ sudo chmod +x <INSTALL_DIR>/deploy/deploy/session-prune.sh
 ```bash
 sudo tee /etc/cron.d/openclaw-session-prune << 'EOF'
 # OpenClaw session & log pruning — runs as root (uid 1000 owned directories)
-30 3 * * * root <INSTALL_DIR>/deploy/deploy/session-prune.sh >> <INSTALL_DIR>/logs/session-prune.log 2>&1
+30 3 * * * root <INSTALL_DIR>/host/session-prune.sh >> <INSTALL_DIR>/logs/session-prune.log 2>&1
 EOF
 
 sudo chmod 644 /etc/cron.d/openclaw-session-prune
@@ -121,11 +121,11 @@ sudo chmod 644 /etc/cron.d/openclaw-session-prune
 ### Test Manually
 
 ```bash
-sudo <INSTALL_DIR>/deploy/deploy/session-prune.sh
+sudo <INSTALL_DIR>/host/session-prune.sh
 # Expected: "<date>: Pruned 0 session files, 0 stale log files (retention: 30 days)"
 
 # Optional: test with a shorter retention to verify it works
-# sudo <INSTALL_DIR>/deploy/deploy/session-prune.sh 1
+# sudo <INSTALL_DIR>/host/session-prune.sh 1
 ```
 
 ---
@@ -161,7 +161,7 @@ cat <INSTALL_DIR>/logs/session-prune.log
 | `instances/<name>/.openclaw/openclaw.json` | OpenClaw configuration (per-claw) |
 | `instances/<name>/.openclaw/credentials/` | API keys and tokens (per-claw) |
 | `instances/<name>/.openclaw/workspace/` | User workspaces and data (per-claw) |
-| `deploy/docker-compose.yml` | Docker Compose deployment config |
+| `docker-compose.yml` | Docker Compose deployment config |
 
 ---
 
@@ -175,7 +175,7 @@ for inst_dir in <INSTALL_DIR>/instances/*/; do
 done
 
 # Stop all claws (or just the one being restored)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose down'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose down'
 
 # Restore a specific claw from backup
 INSTANCE="main-claw"  # ← change to the claw being restored
@@ -186,7 +186,7 @@ sudo tar -xzf "${BACKUP_FILE}" -C "<INSTALL_DIR>/instances/${INSTANCE}"
 sudo chown -R 1000:1000 "<INSTALL_DIR>/instances/${INSTANCE}/.openclaw"
 
 # Restart
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 ```
 
 ---
@@ -205,7 +205,7 @@ sudo ls -la <INSTALL_DIR>/instances/*/.openclaw/
 
 # Solution: Backup runs as root via /etc/cron.d (not user crontab)
 cat /etc/cron.d/openclaw-backup
-# Should show: 0 3 * * * root <INSTALL_DIR>/deploy/deploy/backup.sh ...
+# Should show: 0 3 * * * root <INSTALL_DIR>/host/backup.sh ...
 ```
 
 ### Backup Not Running
@@ -218,7 +218,7 @@ sudo systemctl status cron
 sudo grep CRON /var/log/syslog | tail -20
 
 # Test script manually
-sudo <INSTALL_DIR>/deploy/deploy/backup.sh
+sudo <INSTALL_DIR>/host/backup.sh
 ```
 
 ### Backup File Empty or Corrupted

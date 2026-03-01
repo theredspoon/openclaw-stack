@@ -272,7 +272,7 @@
       "memory-core" // File-backed memory search tools
     ],
     "load": {
-      "paths": ["/app/deploy/plugins"] // Load directly from deploy dir — avoids copying into OpenClaw's namespace
+      "paths": ["/app/openclaw-stack/plugins"] // Load directly from openclaw-stack mount — avoids copying into OpenClaw's namespace
     },
     "slots": {
       "memory": "memory-core" // Bundled memory plugin — provides memory_search and memory_get tools
@@ -282,7 +282,7 @@
       // Auto-discovers routes from agents.list[].skills via loadConfig() and writes
       // a routing table to the coordinator's AGENTS.md (loaded into system prompt).
       // No duplicate route config needed — the agent "skills" arrays are the source of truth.
-      // See deploy/plugins/coordinator/README.md for details.
+      // See deploy/openclaw-stack/plugins/coordinator/README.md for details.
       "coordinator": {
         "enabled": true,
         "config": {

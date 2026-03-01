@@ -80,23 +80,23 @@ When `CF_API_TOKEN` is set, automate tunnel creation, route configuration, and D
 
 1. **Verify token permissions:**
    ```bash
-   deploy/scripts/cf-tunnel-setup.sh verify
+   scripts/cf-tunnel-setup.sh verify
    ```
    If verification fails, report the missing permissions and link to the API token creation page.
 
 2. **List existing tunnels:**
    ```bash
-   deploy/scripts/cf-tunnel-setup.sh list-tunnels
+   scripts/cf-tunnel-setup.sh list-tunnels
    ```
 
 3. **Prompt user:** Use an existing tunnel or create a new one?
    - If existing: user selects from the list, then fetch the tunnel token:
      ```bash
-     deploy/scripts/cf-tunnel-setup.sh get-token <tunnel-id>
+     scripts/cf-tunnel-setup.sh get-token <tunnel-id>
      ```
    - If new: ask for a tunnel name (default: `openclaw`), then create:
      ```bash
-     deploy/scripts/cf-tunnel-setup.sh create-tunnel <name>
+     scripts/cf-tunnel-setup.sh create-tunnel <name>
      ```
      This outputs `TUNNEL_ID=...` and `CF_TUNNEL_TOKEN=...`.
 
@@ -104,7 +104,7 @@ When `CF_API_TOKEN` is set, automate tunnel creation, route configuration, and D
 
 5. **Configure routes + DNS:**
    ```bash
-   deploy/scripts/cf-tunnel-setup.sh setup-routes
+   scripts/cf-tunnel-setup.sh setup-routes
    ```
    This reads all instance configs, configures tunnel ingress rules, and creates DNS CNAME records.
 

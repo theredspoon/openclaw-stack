@@ -65,7 +65,7 @@ CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -
 echo "Claw containers: $CLAWS"
 
 # Check containers are running
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'
 
 # Check claw logs for errors
 for CLAW in $CLAWS; do
@@ -90,7 +90,7 @@ This is expected on the first reboot after deployment. Docker Compose services u
 > "Containers didn't auto-start after reboot. This is a known first-reboot issue — Sysbox wasn't ready when Docker tried to restart the containers. Start them manually:"
 
 ```bash
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 ```
 
 > Subsequent reboots typically work because Sysbox starts faster on warm boots. If containers consistently fail to start after reboot, check that Sysbox is enabled: `sudo systemctl is-enabled sysbox`.
@@ -173,10 +173,10 @@ curl -s https://<AI_GATEWAY_WORKER_URL>/health
 
 ```bash
 # Check cloudflared container is running
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps cloudflared'
 
 # Check tunnel logs for errors
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs --tail 20 cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose logs --tail 20 cloudflared'
 
 # Verify port 443 is closed
 sudo ufw status | grep 443 || echo "Port 443 not in UFW (correct)"
@@ -215,7 +215,7 @@ ss -tlnp | grep <SSH_PORT>
 
 # Services and cron jobs
 sudo systemctl status sysbox
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'
 sudo docker logs --tail 5 $(sudo docker ps --format '{{.Names}}' | grep 'vector$')
 cat /etc/cron.d/openclaw-backup
 cat /etc/cron.d/openclaw-alerts
@@ -302,7 +302,7 @@ FIRST_CLAW=$(echo "$CLAWS" | head -1)
 
 # Get the list of all tool binaries from sandbox-toolkit.yaml
 BINS=$(sudo docker exec --user node "$FIRST_CLAW" \
-  node /app/deploy/parse-toolkit.mjs /app/deploy/sandbox-toolkit.yaml \
+  node /app/openclaw-stack/parse-toolkit.mjs /app/openclaw-stack/sandbox-toolkit.yaml \
   | jq -r '.allBins[]')
 echo "Bins to test: $BINS"
 
@@ -359,7 +359,7 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 **If tools are missing:**
 
-- Rebuild the sandbox image: `sudo docker exec --user node $FIRST_CLAW /app/deploy/rebuild-sandboxes.sh --force`
+- Rebuild the sandbox image: `sudo docker exec --user node $FIRST_CLAW /app/openclaw-stack/rebuild-sandboxes.sh --force`
 - Then recreate containers: `sudo docker exec --user node $FIRST_CLAW openclaw sandbox recreate --all --force`
 
 ---
@@ -368,7 +368,7 @@ echo "Results: $PASS passed, $FAIL failed, $TOTAL total"
 
 ```bash
 # Test the alerter script manually (should not send alerts if everything is healthy)
-sudo <INSTALL_DIR>/deploy/host-alert.sh
+sudo <INSTALL_DIR>/host/host-alert.sh
 echo $?  # Should be 0
 
 # Verify health.json was written (even without Telegram) — check first instance
@@ -376,7 +376,7 @@ FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
 cat "${FIRST_INST}.openclaw/workspace/host-status/health.json"
 
 # Test the maintenance checker
-sudo <INSTALL_DIR>/deploy/host-maintenance-check.sh
+sudo <INSTALL_DIR>/host/host-maintenance-check.sh
 echo $?  # Should be 0
 
 # Verify maintenance.json was written
@@ -396,8 +396,8 @@ openclaw cron list
 
 ```bash
 # Test Telegram delivery (if configured)
-TELEGRAM_TOKEN=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/deploy/stack.env)
-TELEGRAM_CHAT=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/deploy/stack.env)
+TELEGRAM_TOKEN=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_BOT_TOKEN=\K.+' <INSTALL_DIR>/stack.env)
+TELEGRAM_CHAT=$(sudo grep -oP 'ENV__HOSTALERT_TELEGRAM_CHAT_ID=\K.+' <INSTALL_DIR>/stack.env)
 
 if [[ -n "$TELEGRAM_TOKEN" && -n "$TELEGRAM_CHAT" ]]; then
   RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
@@ -513,7 +513,7 @@ cd .deploy && git add -A && git commit -m "Update resource limits" && git push
 
 # On VPS: pull and recreate containers with new limits
 ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && git pull && docker compose up -d'"
+  "sudo -u openclaw bash -c 'cd <INSTALL_DIR> && git pull && docker compose up -d'"
 ```
 
 ---
@@ -592,8 +592,8 @@ npx wrangler d1 execute <D1_DATABASE_NAME> --command="SELECT type, category, age
 ### Container Issues
 
 ```bash
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps'
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs -f <service>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose logs -f <service>'
 docker system df
 free -h
 ```
@@ -605,7 +605,7 @@ free -h
 sudo docker logs --tail 50 $(sudo docker ps --format '{{.Names}}' | grep 'vector$')
 
 # Restart Vector (use `up -d vector` instead if .env values changed)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose restart vector'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose restart vector'
 
 # Check if Worker endpoint is reachable
 curl -s https://<LOG_WORKER_URL>/health
@@ -623,15 +623,15 @@ sudo ufw status                   # Check firewall rules
 
 ```bash
 # Check cloudflared container status and logs
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose ps cloudflared'
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose logs --tail 30 cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose logs --tail 30 cloudflared'
 
 # Check if DNS resolves to tunnel
 dig <OPENCLAW_DOMAIN>
 # Should show CNAME to <tunnel-id>.cfargotunnel.com
 
 # Token issues — recreate the container (picks up new token from stack.env)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d cloudflared'
 ```
 
 ### Service Not Starting After Reboot

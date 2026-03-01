@@ -77,7 +77,7 @@ if [ -d /app/.git ]; then
     # ── Exclude bind-mounted and generated files from git dirty check ──
     # The update engine runs: git status --porcelain -- :!dist/control-ui/
     # Any untracked files cause it to skip with reason: "dirty".
-    # Bind mounts (deploy/, scripts/entrypoint-gateway.sh) and generated files
+    # Bind mounts (openclaw-stack/) and generated files
     # (.git-info*) appear as untracked. Rather than hardcoding paths, discover
     # them dynamically so new bind mounts are auto-excluded.
     EXCLUDE_FILE="/app/.git/info/exclude"
@@ -121,8 +121,8 @@ echo "[entrypoint] npm global prefix set to $npm_global"
 SKILL_BINS="/opt/skill-bins"
 mkdir -p "$SKILL_BINS"
 
-TOOLKIT_CONFIG="/app/deploy/sandbox-toolkit.yaml"
-TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
+TOOLKIT_CONFIG="/app/openclaw-stack/sandbox-toolkit.yaml"
+TOOLKIT_PARSER="/app/openclaw-stack/parse-toolkit.mjs"
 
 if [ -f "$TOOLKIT_CONFIG" ] && [ -f "$TOOLKIT_PARSER" ]; then
   TOOLKIT_JSON=$(node "$TOOLKIT_PARSER" "$TOOLKIT_CONFIG")
@@ -189,9 +189,9 @@ if command -v dockerd > /dev/null 2>&1; then
     # This reduces first-boot time from ~15min (build) to ~30s (load).
     # rebuild-sandboxes.sh still runs after and verifies/rebuilds if needed.
     # Check both locations:
-    #   /app/deploy/sandbox-images.tar      — read-only deploy mount (pre-packaged)
+    #   /app/openclaw-stack/sandbox-images.tar      — read-only deploy mount (pre-packaged)
     #   /var/lib/docker/sandbox-images.tar  — writable per-claw dir (placed by sync-images)
-    for SANDBOX_ARCHIVE in "/app/deploy/sandbox-images.tar" "/var/lib/docker/sandbox-images.tar"; do
+    for SANDBOX_ARCHIVE in "/app/openclaw-stack/sandbox-images.tar" "/var/lib/docker/sandbox-images.tar"; do
       if [ -f "$SANDBOX_ARCHIVE" ]; then
         if ! docker image inspect openclaw-sandbox-toolkit:bookworm-slim > /dev/null 2>&1; then
           echo "[entrypoint] Loading pre-built sandbox images from ${SANDBOX_ARCHIVE}..."
@@ -214,7 +214,7 @@ if command -v dockerd > /dev/null 2>&1; then
     # Missing images will surface during deployment verification or when agents run.
     (
       set +e
-      /app/deploy/rebuild-sandboxes.sh
+      /app/openclaw-stack/rebuild-sandboxes.sh
     ) || true
   fi
 else
@@ -226,7 +226,7 @@ fi
 # Reads browsers.json dynamically to discover sandbox browser containers and their mapped ports.
 # Run as node to avoid creating root-owned jiti cache files in /tmp/jiti/
 # that would block the gateway (also node) from writing cache entries.
-DASHBOARD_SERVER="/app/deploy/dashboard/server.mjs"
+DASHBOARD_SERVER="/app/openclaw-stack/dashboard/server.mjs"
 if [ -f "$DASHBOARD_SERVER" ]; then
   # Supervisor loop: restart dashboard if it crashes, with backoff to avoid spin.
   # - set +e: parent script uses set -e which subshells inherit; without this,

@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 SYNC_ONLY=false
@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-DEPLOY_DIR="${STACK__STACK__INSTALL_DIR}/deploy"
+OPENCLAW_STACK_DIR="${STACK__STACK__INSTALL_DIR}/openclaw-stack"
 
 # Files to sync: local path -> VPS host path
 # These are bind-mounted into the container via docker-compose.yml volumes
@@ -71,13 +71,13 @@ fi
 
 SYNC_LOCAL=(
   "$STACK__STACK__SANDBOX_TOOLKIT"
-  "deploy/parse-toolkit.mjs"
-  "deploy/rebuild-sandboxes.sh"
+  "deploy/openclaw-stack/parse-toolkit.mjs"
+  "deploy/openclaw-stack/rebuild-sandboxes.sh"
 )
 SYNC_REMOTE=(
-  "$DEPLOY_DIR/sandbox-toolkit.yaml"
-  "$DEPLOY_DIR/parse-toolkit.mjs"
-  "$DEPLOY_DIR/rebuild-sandboxes.sh"
+  "$OPENCLAW_STACK_DIR/sandbox-toolkit.yaml"
+  "$OPENCLAW_STACK_DIR/parse-toolkit.mjs"
+  "$OPENCLAW_STACK_DIR/rebuild-sandboxes.sh"
 )
 
 printf '\033[32mUpdating sandbox toolkit on %s...\033[0m\n' "$ENV__VPS_IP"
@@ -133,8 +133,8 @@ if [ "$DRY_RUN" = true ]; then
 else
   TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
     "sudo docker exec -i --user root $GATEWAY sh" << 'SHIM_SCRIPT'
-TOOLKIT_CONFIG="/app/deploy/sandbox-toolkit.yaml"
-TOOLKIT_PARSER="/app/deploy/parse-toolkit.mjs"
+TOOLKIT_CONFIG="/app/openclaw-stack/sandbox-toolkit.yaml"
+TOOLKIT_PARSER="/app/openclaw-stack/parse-toolkit.mjs"
 if [ ! -f "$TOOLKIT_CONFIG" ] || [ ! -f "$TOOLKIT_PARSER" ]; then
   echo "  WARNING: toolkit files not found in container"
   exit 0
@@ -190,10 +190,10 @@ fi
 
 if [ "$DRY_RUN" = true ]; then
   TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $REBUILD_FLAGS"
+    "sudo docker exec $GATEWAY /app/openclaw-stack/rebuild-sandboxes.sh $REBUILD_FLAGS"
 else
   TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -t "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo docker exec $GATEWAY /app/deploy/rebuild-sandboxes.sh $REBUILD_FLAGS"
+    "sudo docker exec $GATEWAY /app/openclaw-stack/rebuild-sandboxes.sh $REBUILD_FLAGS"
 fi
 
 echo ""

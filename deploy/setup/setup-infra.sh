@@ -18,7 +18,7 @@ set -euo pipefail
 #   Exit: 0 success, 1 failure
 
 # Resolve paths via canonical config helper
-source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+source "$(cd "$(dirname "$0")" && pwd)/../host/source-config.sh"
 INSTALL_DIR="$STACK__STACK__INSTALL_DIR"
 
 # INSTANCE_NAMES is required — always-multi-claw means at least "main-claw"
@@ -37,7 +37,7 @@ set -euo pipefail
 OPENCLAW_HOME="$1"
 
 # NOTE: Do NOT create ${OPENCLAW_HOME}/openclaw here — git clone creates it in Part 2
-mkdir -p "${OPENCLAW_HOME}/deploy/deploy"
+# Deploy directories (openclaw-stack/, host/, setup/, vector/) are created by rsync from .deploy/
 mkdir -p "${OPENCLAW_HOME}/instances"
 DIREOF
 

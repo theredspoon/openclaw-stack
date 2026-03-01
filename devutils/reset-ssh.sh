@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/../.deploy/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 
 : "${ENV__VPS_IP:?ENV__VPS_IP not set in stack.env}"
 : "${ENV__SSH_KEY:=~/.ssh/vps1_openclaw_ed25519}"

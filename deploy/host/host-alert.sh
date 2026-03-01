@@ -19,7 +19,7 @@ if [[ "${1:-}" == "--report" ]]; then
 fi
 
 # Resolve paths via canonical config helper
-source "$(cd "$(dirname "$0")" && pwd)/scripts/source-config.sh"
+source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
 INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 
 STATE_FILE="${INSTALL_DIR}/.host-alert-state"

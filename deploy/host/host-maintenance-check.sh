@@ -8,7 +8,9 @@
 # Runs as root (needs apt and systemctl access). No Telegram dependency.
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/home/openclaw}"
+# Resolve paths via canonical config helper
+source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 INSTANCES_DIR="${INSTALL_DIR}/instances"
 
 # --- Security updates ---

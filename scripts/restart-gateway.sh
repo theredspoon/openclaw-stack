@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../deploy/scripts/source-config.sh"
+source "$SCRIPT_DIR/../deploy/host/source-config.sh"
 source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 GATEWAY=$(resolve_gateway "$@") || exit 1
@@ -25,7 +25,7 @@ fi
 
 printf '\033[33mRestarting %s...\033[0m\n' "$GATEWAY"
 TERM=xterm-256color ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-  "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR}/deploy && docker compose restart $GATEWAY'"
+  "sudo -u openclaw bash -c 'cd ${STACK__STACK__INSTALL_DIR} && docker compose restart $GATEWAY'"
 
 # Wait for gateway to be healthy
 printf '\033[33mWaiting for gateway to be healthy...\033[0m\n'

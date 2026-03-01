@@ -77,7 +77,7 @@ The Solution
 
 What we do
 
-In deploy/entrypoint-gateway.sh, section 2c, right before dropping privileges:
+In deploy/openclaw-stack/entrypoint.sh, section 2c, right before dropping privileges:
 
 export TMPDIR="/home/node/.cache/tmp"
 mkdir -p "$TMPDIR"

@@ -377,7 +377,7 @@ Each subdomain needs its own Cloudflare Access application (or extend a single a
 The compose file uses `cloudflare/cloudflared:latest`. To update:
 
 ```bash
-sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose pull cloudflared && docker compose up -d cloudflared'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose pull cloudflared && docker compose up -d cloudflared'
 ```
 
 ### Viewing Tunnel Metrics
@@ -405,5 +405,5 @@ If the token is compromised:
    ```bash
    bun run pre-deploy
    # Push updated stack.env to VPS, then:
-   sudo -u openclaw bash -c 'cd <INSTALL_DIR>/deploy && docker compose up -d cloudflared'
+   sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d cloudflared'
    ```
