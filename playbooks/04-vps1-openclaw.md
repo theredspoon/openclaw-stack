@@ -178,7 +178,7 @@ timeout 900 bash -c "until sudo docker logs ${FIRST_CLAW} 2>&1 | grep -q 'Execut
 echo "READY"
 ```
 
-2. **Poll for progress every 30 seconds** from the main context. Each poll is a lightweight SSH command:
+1. **Poll for progress every 30 seconds** from the main context. Each poll is a lightweight SSH command:
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
@@ -187,7 +187,7 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
 
 Print the result as a status update to the user (e.g., `[entrypoint] Building toolkit sandbox image...`). Continue polling until the background task completes.
 
-3. **Check background task completion** between polls using `TaskOutput` with `block: false`. When the background task returns `READY`, proceed to the next step.
+1. **Check background task completion** between polls using `TaskOutput` with `block: false`. When the background task returns `READY`, proceed to the next step.
 
 > **Note:** Check for the "Executing as node" log line, not the health endpoint — health responds before sandbox builds complete.
 
@@ -234,6 +234,7 @@ connections yet, the output will show an empty device list — that's normal.
 ## 4.5 Deploy Cron Jobs, Logrotate, and OpenClaw CLI Crons
 
 Install all host-level scheduled tasks and logrotate config. The script handles:
+
 - **Static crons:** backup (`cron-openclaw-backup`), session-prune (`cron-openclaw-session-prune`) → `/etc/cron.d/`
 - **Dynamic crons:** alerts (15-min health check + daily report), maintenance (30 min before report) → `/etc/cron.d/`
 - **Logrotate:** `logrotate-openclaw` → `/etc/logrotate.d/openclaw`
@@ -289,7 +290,7 @@ for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | 
 done
 
 # Check Vector is running (part of main compose when stack.logging.vector: true)
-# Container name is <project>-vector (e.g., muxxibot-vector)
+# Container name is <project>-vector (e.g., clawstack-vector)
 sudo docker ps --format '{{.Names}}' | grep vector
 ```
 

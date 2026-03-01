@@ -17,7 +17,7 @@ This exports `ENV__*` vars (from `.env`) and `STACK__*` vars (from `stack.yml`).
 - `ENV__SSH_KEY` - SSH key location
 - `ENV__SSH_USER` - SSH username (should be `adminclaw`)
 - `ENV__SSH_PORT` - SSH port (should be `222`)
-- `STACK__STACK__INSTALL_DIR` - VPS install base (default: `/home/muxxibot/openclaw`)
+- `STACK__STACK__INSTALL_DIR` - VPS install base (default: `/home/openclaw`)
 - Per-claw domain/path: `STACK__CLAWS__<NAME>__DOMAIN`, `STACK__CLAWS__<NAME>__DASHBOARD_PATH`
 
 ---
