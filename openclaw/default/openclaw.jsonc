@@ -179,19 +179,21 @@
         "sandbox": {
           // Override default "all" — operator DM runs on host for full filesystem/docker access.
           // Group chats and subagent spawns still get sandboxed.
-          "mode": "non-main"
-          // When main is running as non-main, tool calls will run in a sandbox
-          // Uncomment this section if you need the full sandbox-toolkit in the main sandbox
-          // "docker": {
-          //   "image": "openclaw-sandbox-toolkit:bookworm-slim", // sandbox-toolkit has the full toolkit bins
-          //   // Dangerously allow external bind sources flag is needed when bind mounting outside of the agent's workspace
-          //   dangerouslyAllowExternalBindSources: true,
-          //   // Per-agent binds replace (not merge) defaults — repeat all needed binds
-          //   "binds": [
-          //     // Make host-status reports available to any main agent sandbox tool
-          //     "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
-          //   ]
-          // }
+          "mode": "non-main",
+          "docker": {
+            // Host-status reports (health.json, maintenance.json) written by host cron scripts.
+            // Bind into sandbox workspace so the read tool can access them (host-status/health.json).
+            // Needs both flags: external source (outside sandbox workspace) + reserved target (/workspace/).
+            // Openclaw cron runs in an isolated session sandbox, so we need to allow external bind sources and reserved container targets.
+            // cron job reads the reports and notifies user over Telegram if there are any issues.
+            // The cron is redundant to the host-alert.sh cron that runs on host - it's used to allow the agent
+            // to help the user debug if there are any issues. It also reports on the main Telegram channel.
+            "dangerouslyAllowExternalBindSources": true,
+            "dangerouslyAllowReservedContainerTargets": true,
+            "binds": [
+              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
+            ]
+          }
         },
         "skills": [], // Intentionally empty, main delegates skills in this setup
         "tools": {

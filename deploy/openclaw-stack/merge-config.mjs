@@ -4,6 +4,8 @@
 // Template-controlled fields (containing $VAR references like $ANTHROPIC_BASE_URL)
 // always come from staged. User-modified fields (no $VAR) are preserved from live.
 // New template keys are added; removed template keys are kept if present in live.
+// Arrays of objects with "id" fields (e.g. agents.list) are merged by matching
+// elements on id — per-agent template changes propagate without replacing the array.
 //
 // Usage: node merge-config.mjs --staged <file> --live <file> --output <file>
 
@@ -37,6 +39,33 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+// Arrays of objects where every element has an "id" field (e.g. agents.list)
+// are merged by matching elements on id, then recursing into each pair.
+// This lets per-agent template changes propagate without replacing the whole array.
+function isIdArray(arr) {
+  return arr.length > 0 && arr.every((el) => isPlainObject(el) && typeof el.id === 'string');
+}
+
+function mergeIdArrays(staged, live) {
+  const liveById = new Map(live.map((el) => [el.id, el]));
+  const seen = new Set();
+  const result = [];
+
+  // Walk staged order — merge matched, add new
+  for (const s of staged) {
+    seen.add(s.id);
+    const l = liveById.get(s.id);
+    result.push(l ? merge(s, l) : s);
+  }
+
+  // Preserve live-only entries (user added an agent at runtime)
+  for (const l of live) {
+    if (!seen.has(l.id)) result.push(l);
+  }
+
+  return result;
+}
+
 function merge(staged, live) {
   // $VAR references mark template-controlled fields — always use staged
   if (hasVarRef(staged)) return staged;
@@ -53,6 +82,11 @@ function merge(staged, live) {
       }
     }
     return result;
+  }
+
+  // Both are id-keyed arrays — merge by id
+  if (Array.isArray(staged) && Array.isArray(live) && isIdArray(staged) && isIdArray(live)) {
+    return mergeIdArrays(staged, live);
   }
 
   // Scalar or array without $VAR — preserve live (potentially user-modified)
