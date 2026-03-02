@@ -113,6 +113,12 @@ fi
 
 echo "=== Registering OpenClaw CLI cron jobs ==="
 
+# Check that stack manifests exist (register-stack.sh should run before this)
+if [ ! -d "/etc/openclaw-stacks" ] || [ -z "$(ls /etc/openclaw-stacks/*.env 2>/dev/null)" ]; then
+  echo "  Warning: No stack manifests in /etc/openclaw-stacks/ — run register-stack.sh first."
+  echo "  Host scripts (host-alert.sh, backup.sh, etc.) need manifests for cross-stack discovery."
+fi
+
 if ! command -v openclaw &>/dev/null; then
   echo "  openclaw CLI not available — containers may not be running yet."
   echo "  Re-run this script after containers are started to register CLI cron jobs."
@@ -167,11 +173,13 @@ for CLAW in "${CLAWS[@]}"; do
 Analyze for issues that need human attention:
 
 Health (health.json):
+- containers: check each entry — \"stopped\" or \"restarting\" means a claw is down
+- containers_ok is false means at least one expected container is not running
 - disk_pct approaching or exceeding disk_threshold
 - memory_pct approaching or exceeding memory_threshold
 - load_avg significantly above cpu_count
-- docker_ok or gateway_ok is false
-- crashed is non-empty (containers restarting)
+- docker_ok is false
+- crashed is non-empty (unexpected containers restarting)
 - backup_ok is false or backup_age_hours > 36
 - timestamp older than 30 minutes (monitoring may be broken)
 

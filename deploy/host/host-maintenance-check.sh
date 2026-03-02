@@ -10,8 +10,8 @@ set -euo pipefail
 
 # Resolve paths via canonical config helper
 source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
-INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
-INSTANCES_DIR="${INSTALL_DIR}/instances"
+# Cross-stack discovery from /etc/openclaw-stacks/ manifests
+source "$(cd "$(dirname "$0")" && pwd)/source-stacks.sh"
 
 # --- Security updates ---
 # Simulate upgrade and count packages from security sources
@@ -57,10 +57,14 @@ maintenance_json="{
   \"uptime_hours\": ${uptime_hours}
 }"
 
-for inst_dir in "${INSTANCES_DIR}"/*/; do
-  [ -d "$inst_dir" ] || continue
-  status_dir="${inst_dir}.openclaw/workspace/host-status"
-  mkdir -p "$status_dir"
-  echo "$maintenance_json" > "${status_dir}/maintenance.json"
-  chmod 644 "${status_dir}/maintenance.json"
-done
+# Write maintenance.json to all instances across all stacks
+while IFS= read -r install_dir; do
+  [ -n "$install_dir" ] || continue
+  for inst_dir in "${install_dir}/instances"/*/; do
+    [ -d "$inst_dir" ] || continue
+    status_dir="${inst_dir}.openclaw/workspace/host-status"
+    mkdir -p "$status_dir"
+    echo "$maintenance_json" > "${status_dir}/maintenance.json"
+    chmod 644 "${status_dir}/maintenance.json"
+  done
+done < <(all_install_dirs)

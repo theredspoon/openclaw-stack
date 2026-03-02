@@ -6,7 +6,11 @@
 # You can hardcode values directly — .env references are a convenience.
 
 # ── VPS Host ──────────────────────────────────────────────────
-# Set to false to skip host-level config (secondary stacks on shared VPS)
+# Set host to false to skip host-level config (secondary stacks on shared VPS)
+# host: false
+# Each stack self registers to /etc/openclaw-stacks regardless of host config
+# Only one stack needs to enable host for backup and host-alerter scripts to get installed
+# Host scripts check /etc/openclaw-stacks to discover all stacks running on the VPS
 host:
   hostname: ${HOSTNAME}
 

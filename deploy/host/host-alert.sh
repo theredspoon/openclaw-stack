@@ -20,10 +20,11 @@ fi
 
 # Resolve paths via canonical config helper
 source "$(cd "$(dirname "$0")" && pwd)/source-config.sh"
+# Cross-stack discovery from /etc/openclaw-stacks/ manifests
+source "$(cd "$(dirname "$0")" && pwd)/source-stacks.sh"
 INSTALL_DIR="${STACK__STACK__INSTALL_DIR}"
 
 STATE_FILE="${INSTALL_DIR}/.host-alert-state"
-INSTANCES_DIR="${INSTALL_DIR}/instances"
 
 # Thresholds
 DISK_THRESHOLD=85
@@ -63,57 +64,85 @@ if ! docker info >/dev/null 2>&1; then
   docker_ok=false
 fi
 
-# Gateway container check (any openclaw-* container, excluding utility containers)
-gateway_ok=true
+# Per-container status check via stack manifests
+containers_json=""
+containers_all_ok=true
 if $docker_ok; then
-  gateway_containers=$(docker ps --format '{{.Names}}' 2>/dev/null \
-    | grep '^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' || true)
-  if [[ -z "$gateway_containers" ]]; then
-    alerts+=("🔴 No OpenClaw gateway containers running")
-    gateway_ok=false
-  fi
+  running=$(docker ps --format '{{.Names}}' 2>/dev/null || true)
+  restarting=$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | awk '/Restarting/ {print $1}' || true)
+
+  while IFS= read -r expected; do
+    [ -n "$expected" ] || continue
+    if echo "$restarting" | grep -qx "$expected"; then
+      status="restarting"
+      alerts+=("🔴 Container restarting: $expected")
+      containers_all_ok=false
+    elif echo "$running" | grep -qx "$expected"; then
+      status="running"
+    else
+      status="stopped"
+      alerts+=("🔴 Container not running: $expected")
+      containers_all_ok=false
+    fi
+    containers_json+="    \"${expected}\": \"${status}\","$'\n'
+  done < <(all_expected_containers)
+
+  # Remove trailing comma from last entry (printf avoids extra trailing newline)
+  containers_json=$(printf '%s' "$containers_json" | sed '$ s/,$//')
 fi
 
-# Container crash detection (containers in Restarting state)
+# Detect unexpected crashing containers (not already reported above)
 crashed=""
 if $docker_ok; then
-  crashed=$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | \
-    awk '/Restarting/ {print $1}' | tr '\n' ', ' | sed 's/,$//')
+  all_restarting=$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | \
+    awk '/Restarting/ {print $1}' || true)
+  # Filter out containers already reported as expected
+  extra_crashed=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! echo "$containers_json" | grep -q "\"${name}\""; then
+      extra_crashed+="${name},"
+    fi
+  done <<< "$all_restarting"
+  crashed=$(echo "$extra_crashed" | sed 's/,$//')
   if [[ -n "$crashed" ]]; then
-    alerts+=("Containers restarting: $crashed")
+    alerts+=("⚠️ Unexpected containers restarting: $crashed")
   fi
 fi
 
 # Backup freshness (warn if no backup in last 36 hours)
-# Check all instance backup directories
+# Check all instance backup directories across all stacks
 backup_ok=true
 backup_age_hours=""
 found_any_backup_dir=false
-for inst_dir in ${INSTALL_DIR}/instances/*/; do
-  [[ -d "$inst_dir" ]] || continue
-  backup_dir="${inst_dir}.openclaw/backups"
-  [[ -d "$backup_dir" ]] || continue
-  found_any_backup_dir=true
-  latest_backup=$(find "$backup_dir" -name "openclaw_backup_*.tar.gz" -mmin -2160 | head -1)
-  if [[ -z "$latest_backup" ]]; then
-    inst_name=$(basename "$inst_dir")
-    alerts+=("⚠️ No backup in last 36 hours for ${inst_name}")
-    backup_ok=false
-  else
-    backup_age_seconds=$(( $(date +%s) - $(stat -c %Y "$latest_backup" 2>/dev/null || echo 0) ))
-    age_hours=$(( backup_age_seconds / 3600 ))
-    # Track the most recent backup age across all instances
-    if [[ -z "$backup_age_hours" ]] || (( age_hours < backup_age_hours )); then
-      backup_age_hours=$age_hours
+while IFS= read -r stack_dir; do
+  [ -n "$stack_dir" ] || continue
+  for inst_dir in "${stack_dir}/instances"/*/; do
+    [[ -d "$inst_dir" ]] || continue
+    backup_dir="${inst_dir}.openclaw/backups"
+    [[ -d "$backup_dir" ]] || continue
+    found_any_backup_dir=true
+    latest_backup=$(find "$backup_dir" -name "openclaw_backup_*.tar.gz" -mmin -2160 | head -1)
+    if [[ -z "$latest_backup" ]]; then
+      inst_name=$(basename "$inst_dir")
+      alerts+=("⚠️ No backup in last 36 hours for ${inst_name}")
+      backup_ok=false
+    else
+      backup_age_seconds=$(( $(date +%s) - $(stat -c %Y "$latest_backup" 2>/dev/null || echo 0) ))
+      age_hours=$(( backup_age_seconds / 3600 ))
+      # Track the most recent backup age across all instances
+      if [[ -z "$backup_age_hours" ]] || (( age_hours < backup_age_hours )); then
+        backup_age_hours=$age_hours
+      fi
     fi
-  fi
-done
+  done
+done < <(all_install_dirs)
 if ! $found_any_backup_dir; then
-  alerts+=("⚠️ No backup directories found under ${INSTANCES_DIR}")
+  alerts+=("⚠️ No backup directories found across registered stacks")
   backup_ok=false
 fi
 
-# --- Write health snapshot to all instances (always, regardless of Telegram config) ---
+# --- Write health snapshot to all instances across all stacks ---
 health_json="{
   \"timestamp\": \"$(date -Iseconds)\",
   \"disk_pct\": ${disk_pct},
@@ -125,19 +154,25 @@ health_json="{
   \"load_avg\": \"${load_avg}\",
   \"cpu_count\": ${cpu_count},
   \"docker_ok\": ${docker_ok},
-  \"gateway_ok\": ${gateway_ok},
+  \"containers\": {
+${containers_json}
+  },
+  \"containers_ok\": ${containers_all_ok},
   \"crashed\": \"${crashed}\",
   \"backup_ok\": ${backup_ok},
   \"backup_age_hours\": ${backup_age_hours:-null}
 }"
 
-for inst_dir in "${INSTANCES_DIR}"/*/; do
-  [ -d "$inst_dir" ] || continue
-  status_dir="${inst_dir}.openclaw/workspace/host-status"
-  mkdir -p "$status_dir"
-  echo "$health_json" > "${status_dir}/health.json"
-  chmod 644 "${status_dir}/health.json"
-done
+while IFS= read -r stack_dir; do
+  [ -n "$stack_dir" ] || continue
+  for inst_dir in "${stack_dir}/instances"/*/; do
+    [ -d "$inst_dir" ] || continue
+    status_dir="${inst_dir}.openclaw/workspace/host-status"
+    mkdir -p "$status_dir"
+    echo "$health_json" > "${status_dir}/health.json"
+    chmod 644 "${status_dir}/health.json"
+  done
+done < <(all_install_dirs)
 
 # --- Check Telegram config (gates all Telegram-sending logic below) ---
 TELEGRAM_CONFIGURED=false
@@ -203,24 +238,31 @@ if $REPORT_MODE; then
     ((warn_count+=1))
   fi
 
-  # Gateway
-  if $gateway_ok && $docker_ok; then
-    report+=$'\n'"✅ Gateway"
-  else
-    report+=$'\n'"🔴 Gateway: down"
-    ((warn_count+=1))
-  fi
-
-  # Containers
-  if [[ -z "$crashed" ]]; then
-    if $docker_ok; then
+  # Containers (per-container status from manifests)
+  if $docker_ok; then
+    if $containers_all_ok; then
       report+=$'\n'"✅ Containers: ${container_running}/${container_total} running"
     else
-      report+=$'\n'"⚠️ Containers: unknown"
-      ((warn_count+=1))
+      # List problem containers individually
+      while IFS= read -r expected; do
+        [ -n "$expected" ] || continue
+        if echo "$restarting" | grep -qx "$expected" 2>/dev/null; then
+          report+=$'\n'"🔴 ${expected}: restarting"
+          ((warn_count+=1))
+        elif ! echo "$running" | grep -qx "$expected" 2>/dev/null; then
+          report+=$'\n'"🔴 ${expected}: stopped"
+          ((warn_count+=1))
+        fi
+      done < <(all_expected_containers)
+      # Show running count for context
+      report+=$'\n'"ℹ️ Total: ${container_running}/${container_total} running"
     fi
   else
-    report+=$'\n'"⚠️ Containers: ${crashed} restarting"
+    report+=$'\n'"⚠️ Containers: unknown (Docker down)"
+    ((warn_count+=1))
+  fi
+  if [[ -n "$crashed" ]]; then
+    report+=$'\n'"⚠️ Unexpected restarting: ${crashed}"
     ((warn_count+=1))
   fi
 
@@ -235,16 +277,19 @@ if $REPORT_MODE; then
     ((warn_count+=1))
   fi
 
-  # Maintenance section — read from maintenance.json (first instance found)
+  # Maintenance section — read from maintenance.json (first instance found across all stacks)
   maint_file=""
-  for inst_dir in "${INSTANCES_DIR}"/*/; do
-    [ -d "$inst_dir" ] || continue
-    candidate="${inst_dir}.openclaw/workspace/host-status/maintenance.json"
-    if [[ -f "$candidate" ]]; then
-      maint_file="$candidate"
-      break
-    fi
-  done
+  while IFS= read -r stack_dir; do
+    [ -n "$stack_dir" ] || continue
+    for inst_dir in "${stack_dir}/instances"/*/; do
+      [ -d "$inst_dir" ] || continue
+      candidate="${inst_dir}.openclaw/workspace/host-status/maintenance.json"
+      if [[ -f "$candidate" ]]; then
+        maint_file="$candidate"
+        break 2
+      fi
+    done
+  done < <(all_install_dirs)
   if [[ -n "$maint_file" && -f "$maint_file" ]]; then
     maint_age_seconds=$(( $(date +%s) - $(stat -c %Y "$maint_file" 2>/dev/null || echo 0) ))
     maint_age_hours=$(( maint_age_seconds / 3600 ))
