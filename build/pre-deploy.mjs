@@ -311,6 +311,7 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     const sr = stack.sandbox_registry;
     // Auto-generate token if not explicitly set (cached in stack.json between builds)
     sr.token = resolveAutoToken(sr.token, "stack.sandbox_registry.token", previousDeploy);
+    sr.log_level = sr.log_level || "warn";
     if (sr.port && !sr.url) {
       stack.sandbox_registry_container = true;
       stack.sandbox_registry_port = sr.port;
@@ -326,7 +327,7 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     const gwUrl = claw.ai_gateway?.url || stack.ai_gateway.url;
     const gwToken = claw.ai_gateway?.token || stack.ai_gateway.token;
 
-    claw.gateway_token = claw.gateway_token || randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+    // gateway_token already resolved in main() via .env.local
     claw.anthropic_api_key = gwToken;
     claw.anthropic_base_url = gwUrl + "/anthropic";
     claw.openai_api_key = gwToken;
@@ -518,7 +519,7 @@ async function main() {
       generated++;
     }
   }
-  writeEnvLocal({ ...envLocal, ...resolvedProtected });
+  // writeEnvLocal deferred to step 5a (combined with gateway tokens)
   if (generated > 0) {
     success(`Protected vars: ${generated} generated, cached in .env.local`);
   } else {
@@ -556,7 +557,19 @@ async function main() {
   stack.resources.max_cpu = resolvedResources.max_cpu;
   stack.resources.max_mem = formatMemory(resolvedResources.max_mem_mb);
 
-  // 5. Compute derived values for template
+  // 5a. Resolve per-claw gateway tokens (stack.yml > .env.local > generate)
+  const gwTokenGenerator = () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  const gwTokenUpdates = {};
+  for (const [name, claw] of Object.entries(claws)) {
+    const envKey = name.replace(/-/g, "_").toUpperCase() + "_GATEWAY_TOKEN";
+    if (!claw.gateway_token) {
+      claw.gateway_token = envLocal[envKey] || gwTokenGenerator();
+    }
+    gwTokenUpdates[envKey] = claw.gateway_token;
+  }
+  writeEnvLocal({ ...envLocal, ...resolvedProtected, ...gwTokenUpdates });
+
+  // 5b. Compute derived values for template
   info("Computing derived values...");
   const previousDeploy = loadPreviousDeploy();
   computeDerivedValues(claws, stack, host, previousDeploy);

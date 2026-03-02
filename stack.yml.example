@@ -47,6 +47,7 @@ stack:
   sandbox_registry:
     token: ${SANDBOX_REGISTRY_TOKEN:-}       # auto-generated if empty
     port: 5100                               # host port (own registry)
+    log_level: warn                          # error|warn|info|debug
     # OR: use another stack's registry (no container in this stack):
     # url: "10.0.0.1:5100"                   # set url instead of port
 

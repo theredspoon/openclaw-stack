@@ -156,6 +156,9 @@ services:
       - REGISTRY_AUTH_HTPASSWD_REALM=openclaw-sandbox
       - REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd
       - REGISTRY_STORAGE_DELETE_ENABLED=true
+      - REGISTRY_HTTP_SECRET={{stack.sandbox_registry.token}}
+      - REGISTRY_LOG_LEVEL={{stack.sandbox_registry.log_level}}
+      - REGISTRY_LOG_ACCESSLOG_DISABLED=true
     networks: [openclaw-net]
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://openclaw:{{stack.sandbox_registry.token}}@localhost:5000/v2/"]
