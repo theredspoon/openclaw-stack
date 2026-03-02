@@ -32,6 +32,11 @@ services:
   openclaw-{{@key}}:
     <<: *claw
     container_name: openclaw-{{@key}}
+{{#if ../stack.sandbox_registry_container}}
+    depends_on:
+      sandbox-registry:
+        condition: service_started
+{{/if}}
     ports:
       - "127.0.0.1:{{this.gateway_port}}:{{this.gateway_port}}"
       - "127.0.0.1:{{this.dashboard_port}}:6090"

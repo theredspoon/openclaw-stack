@@ -113,7 +113,7 @@ fi
 if [ -d "${DEPLOY_DIR}/sandbox-registry" ]; then
   info "Syncing sandbox-registry/..."
   ${SSH_CMD} "${VPS}" "sudo mkdir -p ${INSTALL_DIR}/sandbox-registry/data"
-  do_rsync --delete \
+  do_rsync --delete --exclude='data/' \
     "${DEPLOY_DIR}/sandbox-registry/" \
     "${VPS}:${INSTALL_DIR}/sandbox-registry/"
   success "sandbox-registry/"

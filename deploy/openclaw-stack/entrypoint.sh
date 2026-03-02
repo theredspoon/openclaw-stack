@@ -161,7 +161,11 @@ REGISTRY_URL=""
 if [ -n "${SANDBOX_REGISTRY_URL:-}" ]; then
   REGISTRY_URL="$SANDBOX_REGISTRY_URL"
 elif [ -n "${SANDBOX_REGISTRY_PORT:-}" ]; then
-  HOST_GW=$(ip route | awk '/default/ {print $3}')
+  # ip may not be installed; fall back to /proc/net/route (|| true for pipefail)
+  HOST_GW=$(ip route 2>/dev/null | awk '/default/ {print $3}' || true)
+  if [ -z "$HOST_GW" ] && [ -f /proc/net/route ]; then
+    HOST_GW=$(awk '$2 == "00000000" {h=$3; printf "%d.%d.%d.%d", "0x"substr(h,7,2), "0x"substr(h,5,2), "0x"substr(h,3,2), "0x"substr(h,1,2); exit}' /proc/net/route)
+  fi
   REGISTRY_URL="${HOST_GW}:${SANDBOX_REGISTRY_PORT}"
 fi
 
