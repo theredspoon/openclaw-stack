@@ -15,6 +15,7 @@
     "ordercli",
     "pids",
     "reloadable",
+    "shellcheck",
     "tmpfs",
     "urlencode",
     "wacli",
