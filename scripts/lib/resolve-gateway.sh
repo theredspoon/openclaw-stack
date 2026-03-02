@@ -46,7 +46,7 @@ resolve_gateway() {
   local containers
   containers=$(ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
     "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'" 2>/dev/null \
+    "sudo docker ps --format '{{.Names}}' --filter 'name=openclaw-'" 2>/dev/null \
     | grep -v 'sbx-' \
     || true)
 

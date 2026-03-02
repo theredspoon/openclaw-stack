@@ -23,7 +23,7 @@ fi
 
 # Auto-detect from running containers
 if [ -z "$CONTAINER" ]; then
-  RUNNING=$(sudo docker ps --filter "name=-openclaw-" --filter "status=running" \
+  RUNNING=$(sudo docker ps --filter "name=openclaw-" --filter "status=running" \
     --format '{{.Names}}' | grep -v 'sbx-' | sort)
   COUNT=$(echo "$RUNNING" | grep -c . || true)
 
