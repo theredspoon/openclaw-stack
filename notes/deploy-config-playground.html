@@ -746,7 +746,7 @@
           color: 'green',
           desc: 'Handlebars template for Docker Compose. Uses {{#each claws}} to generate per-claw service blocks. {{#if}} toggles optional services (egress proxy, vector).',
           example:
-            '{{#each claws}}\n  openclaw-{{@key}}:\n    <<: *claw\n    ports:\n      - "127.0.0.1:{{this.gateway_port}}:{{this.gateway_port}}"\n    environment:\n      - ANTHROPIC_BASE_URL={{this.anthropic_base_url}}\n{{/each}}\n{{#if stack.egress_proxy}}\n  egress-proxy: ...\n{{/if}}',
+            '{{#each claws}}\n  {{../stack.project_name}}-openclaw-{{@key}}:\n    <<: *claw\n    container_name: {{../stack.project_name}}-openclaw-{{@key}}\n    ports:\n      - "127.0.0.1:{{this.gateway_port}}:{{this.gateway_port}}"\n    environment:\n      - ANTHROPIC_BASE_URL={{this.anthropic_base_url}}\n{{/each}}\n{{#if stack.egress_proxy}}\n  egress-proxy: ...\n{{/if}}',
         },
         {
           id: 'jsonc',
@@ -786,7 +786,7 @@
           color: 'green',
           desc: 'Rendered Docker Compose file. All Handlebars resolved. Per-claw services, cloudflared, optional egress-proxy and vector. Ready for docker compose up.',
           example:
-            'services:\n  openclaw-personal-claw:\n    <<: *claw\n    ports:\n      - "127.0.0.1:18789:18789"\n    environment:\n      - ANTHROPIC_BASE_URL=https://ai-gw.example.workers.dev/anthropic\n  cloudflared:\n    image: cloudflare/cloudflared:latest',
+            'services:\n  openclaw-stack-openclaw-personal-claw:\n    <<: *claw\n    ports:\n      - "127.0.0.1:18789:18789"\n    environment:\n      - ANTHROPIC_BASE_URL=https://ai-gw.example.workers.dev/anthropic\n  cloudflared:\n    image: cloudflare/cloudflared:latest',
         },
         {
           id: 'stack-json',
@@ -1129,7 +1129,7 @@
             source: 'Rendered from docker-compose.yml.hbs',
             desc: 'Fully rendered Docker Compose file. All Handlebars expressions resolved. Contains per-claw service blocks, cloudflared tunnel, and optional egress-proxy/vector services.',
             example:
-              'services:\n  openclaw-personal-claw:\n    <<: *claw\n    container_name: openclaw-personal-claw\n    ports:\n      - "127.0.0.1:18789:18789"\n      - "127.0.0.1:6090:6090"\n    environment:\n      - ANTHROPIC_BASE_URL=https://ai-gw.example.workers.dev/anthropic\n      - OPENAI_BASE_URL=https://ai-gw.example.workers.dev/openai/v1\n  cloudflared:\n    image: cloudflare/cloudflared:latest\n    command: tunnel run',
+              'services:\n  openclaw-stack-openclaw-personal-claw:\n    <<: *claw\n    container_name: openclaw-stack-openclaw-personal-claw\n    ports:\n      - "127.0.0.1:18789:18789"\n      - "127.0.0.1:6090:6090"\n    environment:\n      - ANTHROPIC_BASE_URL=https://ai-gw.example.workers.dev/anthropic\n      - OPENAI_BASE_URL=https://ai-gw.example.workers.dev/openai/v1\n  cloudflared:\n    image: cloudflare/cloudflared:latest\n    command: tunnel run',
           },
           {
             name: 'stack.json',
@@ -1905,8 +1905,9 @@ x-openclaw-claw: &claw
 
 services:
 <span class="hl-green">{{#each claws}}</span>
-  openclaw-<span class="hl-green">{{@key}}</span>:
+  <span class="hl-green">{{../stack.project_name}}</span>-openclaw-<span class="hl-green">{{@key}}</span>:
     <<: *claw
+    container_name: <span class="hl-green">{{../stack.project_name}}</span>-openclaw-<span class="hl-green">{{@key}}</span>
     ports:
       - "127.0.0.1:<span class="hl-green">{{this.gateway_port}}</span>:<span class="hl-green">{{this.gateway_port}}</span>"
     environment:
@@ -1934,8 +1935,9 @@ x-openclaw-claw: &claw
   runtime: sysbox-runc
 
 services:
-  <span class="hl-teal">openclaw-personal-claw</span>:
+  <span class="hl-teal">openclaw-stack-openclaw-personal-claw</span>:
     <<: *claw
+    container_name: <span class="hl-teal">openclaw-stack-openclaw-personal-claw</span>
     ports:
       - "127.0.0.1:<span class="hl-teal">18789</span>:<span class="hl-teal">18789</span>"
     environment:
@@ -1943,7 +1945,7 @@ services:
 `
         if (multi) {
           rendered += `
-  <span class="hl-teal">openclaw-work-claw</span>:
+  <span class="hl-teal">openclaw-stack-openclaw-work-claw</span>:
     <<: *claw
     ports:
       - "127.0.0.1:<span class="hl-teal">18790</span>:<span class="hl-teal">18790</span>"

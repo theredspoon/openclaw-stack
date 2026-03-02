@@ -19,8 +19,9 @@ DOMAIN_PATH="${STACK__STACK__DEFAULTS__DOMAIN_PATH:-}"
 FAILED=0
 
 # Discover running claws
-CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' \
-  | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+CLAWS=$(sudo docker ps --format '{{.Names}}' --filter "name=${PROJECT_NAME}-openclaw-" \
+  | grep -v 'sbx-' | sort)
 
 if [ -z "$CLAWS" ]; then
   echo "ERROR: No running claw containers found" >&2

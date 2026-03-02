@@ -6,18 +6,25 @@
 #   1. --instance <name> flag (explicit, stripped before passing to openclaw)
 #   2. Auto-detect: single running container = use it, multiple = interactive picker
 
+# Resolve project name from stack.env (for container name prefix)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/source-config.sh" ]; then
+  source "${SCRIPT_DIR}/source-config.sh"
+fi
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+
 CONTAINER=""
 
 # Check --instance flag
 if [ "$1" = "--instance" ] && [ -n "$2" ]; then
-  CONTAINER="openclaw-$2"
+  CONTAINER="${PROJECT_NAME}-openclaw-$2"
   shift 2
 fi
 
 # Auto-detect from running containers
 if [ -z "$CONTAINER" ]; then
-  RUNNING=$(sudo docker ps --filter "name=openclaw-" --filter "status=running" \
-    --format '{{.Names}}' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+  RUNNING=$(sudo docker ps --filter "name=-openclaw-" --filter "status=running" \
+    --format '{{.Names}}' | grep -v 'sbx-' | sort)
   COUNT=$(echo "$RUNNING" | grep -c . || true)
 
   if [ "$COUNT" -eq 0 ]; then

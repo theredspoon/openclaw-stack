@@ -181,15 +181,15 @@ This avoids the concurrency problems of a shared browser sidecar approach.
 
 ```bash
 # Dashboard is listening (use base path if configured)
-sudo docker exec openclaw-main-claw curl -s http://127.0.0.1:6090/
+sudo docker exec openclaw-stack-openclaw-main-claw curl -s http://127.0.0.1:6090/
 # Or with base path:
-sudo docker exec openclaw-main-claw curl -s http://127.0.0.1:6090/dashboard/
+sudo docker exec openclaw-stack-openclaw-main-claw curl -s http://127.0.0.1:6090/dashboard/
 
 # Check startup log for base path
-sudo docker logs openclaw-main-claw 2>&1 | grep 'dashboard'
+sudo docker logs openclaw-stack-openclaw-main-claw 2>&1 | grep 'dashboard'
 
 # After a browser task runs, check session routing
-sudo docker exec openclaw-main-claw curl -s http://127.0.0.1:6090/dashboard/browser/main/vnc.html
+sudo docker exec openclaw-stack-openclaw-main-claw curl -s http://127.0.0.1:6090/dashboard/browser/main/vnc.html
 
 # External access via tunnel
 curl -s https://<OPENCLAW_DASHBOARD_DOMAIN><OPENCLAW_DASHBOARD_DOMAIN_PATH>/
@@ -210,7 +210,7 @@ The noVNC WebSocket path is wrong. Ensure the URL includes `?path=browser/<agent
 The dashboard server is returning a 5xx status. Check gateway logs:
 
 ```bash
-sudo docker logs openclaw-main-claw 2>&1 | grep dashboard
+sudo docker logs openclaw-stack-openclaw-main-claw 2>&1 | grep dashboard
 ```
 
 ### Dashboard not starting
@@ -218,6 +218,6 @@ sudo docker logs openclaw-main-claw 2>&1 | grep dashboard
 Check that the dashboard is bind-mounted and the entrypoint reached Phase 2b:
 
 ```bash
-sudo docker exec openclaw-main-claw ls -la /app/openclaw-stack/dashboard/server.mjs
-sudo docker logs openclaw-main-claw 2>&1 | grep "Dashboard server"
+sudo docker exec openclaw-stack-openclaw-main-claw ls -la /app/openclaw-stack/dashboard/server.mjs
+sudo docker logs openclaw-stack-openclaw-main-claw 2>&1 | grep "Dashboard server"
 ```

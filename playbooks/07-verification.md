@@ -61,7 +61,7 @@ ssh -i <SSH_KEY> -p <SSH_PORT> -o ConnectTimeout=10 adminclaw@<VPS_IP> "echo 'VP
 
 ```bash
 # Discover all running claw containers for per-claw checks
-CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-' | sort)
 echo "Claw containers: $CLAWS"
 
 # Check containers are running

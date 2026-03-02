@@ -195,7 +195,7 @@ ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}"
 
 ### Gateway Not Healthy
 
-1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose logs --tail 50 openclaw-<name>'`
+1. Check container logs: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose logs --tail 50 openclaw-stack-openclaw-<name>'`
 2. Check all containers running: `sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose ps'`
 3. Verify localhost access per claw (ports start at 18789, increment per claw): `curl -s http://localhost:<port>/ | head -5`
 

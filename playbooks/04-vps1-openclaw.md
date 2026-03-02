@@ -141,7 +141,7 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
   "bash ${INSTALL_DIR}/host/start-claws.sh"
 ```
 
-Captures `FIRST_CLAW=openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from stdout.
+Captures `FIRST_CLAW=<PROJECT_NAME>-openclaw-<name>`, `CLAW_COUNT=N`, and `START_CLAWS_OK` from stdout.
 
 **If build fails:**
 
@@ -281,14 +281,14 @@ Or for quick manual checks:
 sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps'
 
 # Check gateway logs for each claw
-for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort); do
+for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-' | sort); do
   echo "=== $CLAW ==="
   sudo docker logs --tail 50 "$CLAW"
 done
 
 # Test internal endpoint — use the assigned port for the claw being tested
 # First claw defaults to 18789; check actual ports: docker compose ps
-for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-'); do
+for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'); do
   GW_PORT=$(sudo docker port "$CLAW" 2>/dev/null | grep -oP '0\.0\.0\.0:\K\d+' | head -1)
   echo "$CLAW (port $GW_PORT):"
   curl -s "http://localhost:${GW_PORT}${OPENCLAW_DOMAIN_PATH}/" | head -5
@@ -307,7 +307,7 @@ sudo docker ps --format '{{.Names}}' | grep vector
 
 ```bash
 # Check logs for config errors (replace <name> with actual claw name)
-sudo docker logs openclaw-<name>
+sudo docker logs <PROJECT_NAME>-openclaw-<name>
 
 # Common issue: Invalid config keys in openclaw.json
 # Solution: Keep config minimal, only use documented keys
@@ -345,7 +345,7 @@ for inst_dir in <INSTALL_DIR>/instances/*/; do
 done
 
 # Or fix inside each container
-for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-'); do
+for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'); do
   sudo docker exec "$CLAW" chown -R 1000:1000 /home/node/.openclaw
 done
 ```
@@ -382,8 +382,8 @@ To make persistent config changes, update the openclaw config template (see `def
 The `openclaw` host wrapper uses `docker exec`, which bypasses WebSocket device pairing.
 If CLI commands fail, check:
 
-1. The gateway container is running: `sudo docker ps --filter 'name=^openclaw-'`
-2. The `.openclaw` directory has correct ownership: `sudo docker exec openclaw-<name> chown -R 1000:1000 /home/node/.openclaw`
+1. The gateway container is running: `sudo docker ps --filter 'name=-openclaw-'`
+2. The `.openclaw` directory has correct ownership: `sudo docker exec <PROJECT_NAME>-openclaw-<name> chown -R 1000:1000 /home/node/.openclaw`
 
 ### Network Issues
 
@@ -427,7 +427,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 # 5. Verify new version
 openclaw --version
 # Verify each claw is responding
-for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-'); do
+for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'); do
   GW_PORT=$(sudo docker port "$CLAW" | grep -oP '0\.0\.0\.0:\K\d+' | head -1)
   echo "$CLAW (port $GW_PORT):"
   curl -s "http://localhost:${GW_PORT}${OPENCLAW_DOMAIN_PATH}/" | head -3
@@ -459,7 +459,7 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 # 4. Verify
 openclaw --version
 # Verify each claw is responding
-for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-'); do
+for CLAW in $(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'); do
   GW_PORT=$(sudo docker port "$CLAW" | grep -oP '0\.0\.0\.0:\K\d+' | head -1)
   echo "$CLAW (port $GW_PORT):"
   curl -s "http://localhost:${GW_PORT}${OPENCLAW_DOMAIN_PATH}/" | head -3

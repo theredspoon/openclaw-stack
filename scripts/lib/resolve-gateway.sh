@@ -35,18 +35,19 @@ resolve_gateway() {
   # Fall back to env var
   instance="${instance:-${OPENCLAW_INSTANCE:-}}"
 
+  local project_name="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+
   if [[ -n "$instance" ]]; then
-    echo "openclaw-${instance}"
+    echo "${project_name}-openclaw-${instance}"
     return 0
   fi
 
-  # Auto-detect: find running openclaw-* gateway containers (exclude utility containers)
+  # Auto-detect: find running claw containers (match -openclaw- substring, exclude sandbox containers)
   local containers
   containers=$(ssh -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" -o ConnectTimeout=10 -o BatchMode=yes \
     "${ENV__SSH_USER}@${ENV__VPS_IP}" \
-    "sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-'" 2>/dev/null \
-    | grep -v '^openclaw-cli$' \
-    | grep -v '^openclaw-sbx-' \
+    "sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-'" 2>/dev/null \
+    | grep -v 'sbx-' \
     || true)
 
   if [[ -z "$containers" ]]; then
@@ -54,11 +55,11 @@ resolve_gateway() {
     return 1
   fi
 
-  # Strip openclaw- prefix for the picker, then re-add it
+  # Strip project-openclaw- prefix for the picker, then re-add it
   local names
-  names=$(echo "$containers" | sed 's/^openclaw-//')
+  names=$(echo "$containers" | sed "s/^${project_name}-openclaw-//")
 
   local selected
   selected=$(select_claw "$names") || return 1
-  echo "openclaw-${selected}"
+  echo "${project_name}-openclaw-${selected}"
 }

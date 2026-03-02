@@ -37,9 +37,10 @@ sudo -u openclaw INSTALL_DIR="${STACK__STACK__INSTALL_DIR}" "${OPENCLAW_HOME}/ho
 COMPOSE_DIR="${OPENCLAW_HOME}"
 if [ "$CLAW_COUNT" -gt 1 ] && [ -z "${STACK__STACK__SANDBOX_REGISTRY__PORT:-}" ] && [ -z "${STACK__STACK__SANDBOX_REGISTRY__URL:-}" ]; then
   # No registry: stagger startup so first claw builds sandbox images before others start
-  echo "Multi-claw (no registry): starting openclaw-${FIRST_CLAW} first for sandbox builds..." >&2
+  SERVICE="${STACK__STACK__PROJECT_NAME}-openclaw-${FIRST_CLAW}"
+  echo "Multi-claw (no registry): starting ${SERVICE} first for sandbox builds..." >&2
   sudo -u openclaw bash -c \
-    "cd ${COMPOSE_DIR} && docker compose up -d openclaw-${FIRST_CLAW}"
+    "cd ${COMPOSE_DIR} && docker compose up -d ${SERVICE}"
 else
   # Single-claw, or registry available (all claws pull simultaneously)
   echo "Starting all services..." >&2
@@ -48,6 +49,6 @@ else
 fi
 
 # Output for caller
-echo "FIRST_CLAW=openclaw-${FIRST_CLAW}"
+echo "FIRST_CLAW=${STACK__STACK__PROJECT_NAME}-openclaw-${FIRST_CLAW}"
 echo "CLAW_COUNT=${CLAW_COUNT}"
 echo "START_CLAWS_OK"

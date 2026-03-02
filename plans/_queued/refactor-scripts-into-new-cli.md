@@ -24,12 +24,12 @@ claw (CLI entry)
 └─ Action Menu ──────────────────────────────────
    │
    │  Phase 1 (this plan)
-   ├── Logs             exec: docker logs --tail 100 -f openclaw-<name>
-   ├── SSH              exec: docker exec -it -u node openclaw-<name> bash
+   ├── Logs             exec: docker logs --tail 100 -f <project_name>-openclaw-<name>
+   ├── SSH              exec: docker exec -it -u node <project_name>-openclaw-<name> bash
    │
    │  Phase 2
    ├── Health           openclaw health / doctor / status
-   ├── Restart          docker compose restart openclaw-<name>
+   ├── Restart          docker compose restart <project_name>-openclaw-<name>
    ├── OpenClaw ►       submenu
    │   ├── Config       openclaw config get/set/schema
    │   ├── Models       openclaw models list/set/aliases
@@ -154,13 +154,13 @@ cli/
 **Logs** (same as `logs-openclaw.sh`):
 
 ```
-TERM=xterm-256color ssh -i <key> -p <port> <user>@<ip> "sudo docker logs --tail 100 -f openclaw-<name>"
+TERM=xterm-256color ssh -i <key> -p <port> <user>@<ip> "sudo docker logs --tail 100 -f <project_name>-openclaw-<name>"
 ```
 
 **SSH** (same as `ssh-gateway.sh`):
 
 ```
-TERM=xterm-256color ssh -t -i <key> -p <port> <user>@<ip> "sudo docker exec -it -u node openclaw-<name> bash"
+TERM=xterm-256color ssh -t -i <key> -p <port> <user>@<ip> "sudo docker exec -it -u node <project_name>-openclaw-<name> bash"
 ```
 
 ---

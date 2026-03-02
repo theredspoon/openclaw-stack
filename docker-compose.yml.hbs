@@ -29,9 +29,9 @@ x-openclaw-claw: &claw
 services:
   # ── Claws (auto-generated from stack.yml) ─────────────────────
 {{#each claws}}
-  openclaw-{{@key}}:
+  {{../stack.project_name}}-openclaw-{{@key}}:
     <<: *claw
-    container_name: openclaw-{{@key}}
+    container_name: {{../stack.project_name}}-openclaw-{{@key}}
 {{#if ../stack.sandbox_registry_container}}
     depends_on:
       sandbox-registry:

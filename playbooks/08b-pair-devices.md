@@ -16,7 +16,7 @@ Discover running claws and read each claw's gateway token:
 
 ```bash
 # On VPS: list claws and their gateway tokens (from env var, not openclaw.json)
-CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort)
+CLAWS=$(sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-' | sort)
 for CLAW in $CLAWS; do
   TOKEN=$(sudo docker exec --user node "$CLAW" printenv OPENCLAW_GATEWAY_TOKEN 2>/dev/null || echo "UNKNOWN")
   echo "$CLAW: token=$TOKEN"
@@ -41,8 +41,8 @@ Ask the user to open each claw's URL in their browser, one at a time. Each claw 
 
 1. Check the tunnel is running:
    - `ssh ... "sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose ps cloudflared'"`
-2. Check the claw is running: `ssh ... "sudo docker ps --filter 'name=^openclaw-'"`
-3. Check claw logs: `ssh ... "sudo docker logs --tail 20 openclaw-<name>"`
+2. Check the claw is running: `ssh ... "sudo docker ps --filter 'name=-openclaw-'"`
+3. Check claw logs: `ssh ... "sudo docker logs --tail 20 <PROJECT_NAME>-openclaw-<name>"`
 4. Verify DNS is resolving to the correct destination
 
 Ask the user to confirm they can see the page (even with the pairing error) before proceeding.
@@ -88,16 +88,16 @@ If `openclaw --instance <CLAW_NAME> devices list` fails with "pairing required",
 ```bash
 # Discover the claw's gateway port (each claw gets a unique port: 18789, 18790, ...)
 PORT=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo docker port openclaw-<CLAW_NAME> | grep -oP '0\.0\.0\.0:\K\d+' | head -1")
+  "sudo docker port <PROJECT_NAME>-openclaw-<CLAW_NAME> | grep -oP '0\.0\.0\.0:\K\d+' | head -1")
 echo "Claw port: $PORT"
 
 # Read token from the claw's env var
 TOKEN=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo docker exec --user node openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN")
+  "sudo docker exec --user node <PROJECT_NAME>-openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN")
 
 # Re-pair CLI with explicit token and port (loopback triggers auto-approval)
 ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo docker exec --user node openclaw-<CLAW_NAME> \
+  "sudo docker exec --user node <PROJECT_NAME>-openclaw-<CLAW_NAME> \
     openclaw devices list --url ws://localhost:${PORT} --token $TOKEN"
 ```
 
@@ -118,7 +118,7 @@ This re-pairs the CLI via loopback auto-approval. Now retry Approach 1.
   approval. Look for WebSocket errors.
 - **File ownership issues:** If the CLI fails with permission errors, the `.openclaw`
   directory may be owned by root (created before gosu drops to node). Fix with:
-  `sudo docker exec openclaw-<CLAW_NAME> chown -R 1000:1000 /home/node/.openclaw`
+  `sudo docker exec <PROJECT_NAME>-openclaw-<CLAW_NAME> chown -R 1000:1000 /home/node/.openclaw`
 
 ---
 
@@ -134,7 +134,7 @@ After pairing all claws, ask the user to confirm for each:
 ```bash
 # Check claw logs for auth/pairing errors
 ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo docker logs --tail 30 openclaw-<CLAW_NAME>"
+  "sudo docker logs --tail 30 <PROJECT_NAME>-openclaw-<CLAW_NAME>"
 
 # Re-list devices to confirm approval went through
 ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
@@ -177,7 +177,7 @@ If the bot token is empty, skip this step — Telegram was not configured.
 
 - Hard-refresh the browser page.
 - Check claw logs for errors after the approval.
-- Verify the claw container hasn't restarted: `sudo docker ps --filter 'name=^openclaw-'`
+- Verify the claw container hasn't restarted: `sudo docker ps --filter 'name=-openclaw-'`
 
 ### Control UI shows "unauthorized" or "disconnected" (was working before)
 
@@ -196,7 +196,7 @@ Read the token from VPS if needed:
 
 ```bash
 ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-  "sudo docker exec --user node openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN"
+  "sudo docker exec --user node <PROJECT_NAME>-openclaw-<CLAW_NAME> printenv OPENCLAW_GATEWAY_TOKEN"
 ```
 
 After the user clicks the URL:

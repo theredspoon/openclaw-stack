@@ -38,7 +38,7 @@ echo "$NEW_TOKEN" | sudo tee <INSTALL_DIR>/instances/<CLAW_NAME>/.openclaw/.gate
 # Edit <INSTALL_DIR>/.env to update the claw's GATEWAY_TOKEN variable
 
 # 4. Recreate the claw container (up -d, NOT restart — restart doesn't reload .env)
-sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d openclaw-<CLAW_NAME>'
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d <PROJECT_NAME>-openclaw-<CLAW_NAME>'
 
 # 5. Update all paired devices with new token (existing browser URLs will need the new token parameter)
 # Repeat steps 2-5 for each claw being rotated
@@ -264,7 +264,7 @@ ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> \
 scripts/tag-deploy.sh "updated bind-mounted files"
 ```
 
-> To restart only a specific claw: `docker compose restart openclaw-<CLAW_NAME>`
+> To restart only a specific claw: `docker compose restart <PROJECT_NAME>-openclaw-<CLAW_NAME>`
 
 > **Note:** `sandbox-toolkit.yaml` changes are also auto-detected on container restart via Docker label comparison, triggering a sandbox image rebuild if needed.
 
@@ -299,7 +299,7 @@ scripts/sync-deploy.sh --instance personal-claw
 
 # 3. Restart that claw to pick up new config (restart is fine for bind-mounted file changes)
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose restart openclaw-personal-claw'"
+  "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose restart openclaw-stack-openclaw-personal-claw'"
 ```
 
 ---
@@ -316,7 +316,7 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
 4. Start the new claw:
    ```bash
    ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
-     "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose up -d openclaw-<name>'"
+     "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose up -d openclaw-stack-openclaw-<name>'"
    ```
 5. Tag successful deploy after verifying the new claw is healthy:
    ```bash

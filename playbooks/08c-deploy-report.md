@@ -23,7 +23,7 @@ Collect the following values and present them in a single, neatly formatted repo
 
    ```bash
    CLAWS=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
-     "sudo docker ps --format '{{.Names}}' --filter 'name=^openclaw-' | grep -v '^openclaw-cli$' | grep -v '^openclaw-sbx-' | sort")
+     "sudo docker ps --format '{{.Names}}' --filter 'name=-openclaw-' | sort")
    for CLAW in $CLAWS; do
      TOKEN=$(ssh -i <SSH_KEY> -p <SSH_PORT> <SSH_USER>@<VPS_IP> \
        "sudo docker exec --user node $CLAW printenv OPENCLAW_GATEWAY_TOKEN")
