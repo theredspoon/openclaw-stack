@@ -213,13 +213,16 @@ Several deploy files are bind-mounted read-only into claw containers. These can 
 **Bind-mounted files:** `dashboard/`, `entrypoint.sh`, `rebuild-sandboxes.sh`, `parse-toolkit.mjs`, `sandbox-toolkit.yaml`, `plugins/`
 
 ```bash
-# From local machine — rebuild and sync
+# From local machine — rebuild and sync (shows diff, auto-commits on VPS)
 npm run pre-deploy
 scripts/sync-deploy.sh
 
 # Restart all claws to pick up changes (restart is fine for bind-mounted file changes)
 ssh -i <SSH_KEY> -p <SSH_PORT> adminclaw@<VPS_IP> \
   "sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose restart'"
+
+# Tag successful deploy after verifying services are healthy
+scripts/tag-deploy.sh "updated bind-mounted files"
 ```
 
 > To restart only a specific claw: `docker compose restart openclaw-<CLAW_NAME>`
@@ -276,3 +279,32 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
    ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
      "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose up -d openclaw-<name>'"
    ```
+5. Tag successful deploy after verifying the new claw is healthy:
+   ```bash
+   scripts/tag-deploy.sh "added <name> claw"
+   ```
+
+---
+
+## Deploy History
+
+The VPS INSTALL_DIR is a git repo that tracks deploy-managed config. Each `sync-deploy.sh` run auto-commits changes, and `tag-deploy.sh` marks successful deploys.
+
+```bash
+# View deploy history
+ssh ... "cd <INSTALL_DIR> && git log --oneline --decorate"
+
+# Show what changed in a specific deploy
+ssh ... "cd <INSTALL_DIR> && git show <commit> --stat"
+
+# Diff between two deploys (or a deploy and a tag)
+ssh ... "cd <INSTALL_DIR> && git diff <tag1>..<tag2>"
+
+# List all deploy tags
+ssh ... "cd <INSTALL_DIR> && git tag -l 'deploy-*'"
+
+# Roll back to a previous deploy state (review diff first)
+ssh ... "cd <INSTALL_DIR> && git diff HEAD..<tag> --stat"
+ssh ... "cd <INSTALL_DIR> && git checkout <tag> -- ."
+# Then: docker compose up -d to apply
+```

@@ -296,6 +296,8 @@ Deployment Plan:
      a. Deploy Cloudflare Workers (01-workers.md) — local              ~5 min
      b. Base setup & hardening (02-base-setup.md) — VPS               ~10 min
   2. Build + sync deploy artifacts (npm run pre-deploy + sync-deploy.sh --fresh)
+     Note: First sync won't show a deploy diff (git not yet initialized on VPS).
+     After setup-infra.sh runs, subsequent syncs show diffs and auto-commit.
   3. Docker + Sysbox (03-docker.md → 03b-sysbox.md)
   4. OpenClaw deployment (04-vps1-openclaw.md)
   5. Backup + cron verification (06-backup.md)

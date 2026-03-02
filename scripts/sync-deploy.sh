@@ -61,6 +61,14 @@ do_rsync() {
 info "Ensuring target directories on VPS..."
 ${SSH_CMD} "${VPS}" "sudo mkdir -p ${INSTALL_DIR}/{host,openclaw-stack,setup}"
 
+# .gitignore for deploy tracking repo
+GITIGNORE_SRC="${REPO_ROOT}/deploy/vps-gitignore"
+if [ -f "$GITIGNORE_SRC" ]; then
+  info "Syncing .gitignore..."
+  do_rsync "$GITIGNORE_SRC" "${VPS}:${INSTALL_DIR}/.gitignore"
+  success ".gitignore"
+fi
+
 # Root files (compose, stack.env, stack.json) — no --delete (would nuke siblings)
 info "Syncing root files (docker-compose.yml, stack.env, stack.json)..."
 do_rsync \
@@ -119,7 +127,8 @@ ${SSH_CMD} "${VPS}" "sudo chown -R openclaw:openclaw \
   ${INSTALL_DIR}/stack.json \
   ${INSTALL_DIR}/host \
   ${INSTALL_DIR}/openclaw-stack \
-  ${INSTALL_DIR}/setup"
+  ${INSTALL_DIR}/setup && \
+  [ -f ${INSTALL_DIR}/.gitignore ] && sudo chown openclaw:openclaw ${INSTALL_DIR}/.gitignore || true"
 
 if [ -f "${DEPLOY_DIR}/vector/vector.yaml" ]; then
   ${SSH_CMD} "${VPS}" "sudo chown openclaw:openclaw ${INSTALL_DIR}/vector/vector.yaml"
@@ -168,6 +177,26 @@ if [ -n "$SYNC_INSTANCES" ]; then
     ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${INSTALL_DIR}/instances/${name}/.openclaw ${INSTALL_DIR}/instances/${name}/.openclaw/openclaw.json"
     success "instances/${name}/.openclaw/openclaw.json (owner: 1000:1000)"
   done
+fi
+
+# ── Deploy tracking (diff + auto-commit) ─────────────────────────────────────
+
+if ! $DRY_RUN; then
+  info "Deploy diff..."
+  ${SSH_CMD} "${VPS}" "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && \
+    if [ -d .git ]; then \
+      git add -A && \
+      DIFF=\$(git diff --cached --stat) && \
+      if [ -n \"\$DIFF\" ]; then echo \"\$DIFF\"; else echo \"(no changes)\"; fi; \
+    else \
+      echo \"(deploy tracking not initialized — run setup-infra.sh first)\"; \
+    fi'"
+
+  # Auto-commit if there are staged changes
+  ${SSH_CMD} "${VPS}" "sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && \
+    if [ -d .git ] && ! git diff --cached --quiet 2>/dev/null; then \
+      git commit -m \"deploy: sync \$(date -u +%Y-%m-%dT%H:%M:%SZ)\"; \
+    fi'"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

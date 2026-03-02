@@ -58,6 +58,8 @@ ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \
 
 Expects `SETUP_INFRA_OK` on stdout (all other output goes to stderr).
 
+**Note:** `setup-infra.sh` also initializes a deploy tracking git repo at `INSTALL_DIR`. This repo tracks deploy-managed config files (docker-compose.yml, stack.env, openclaw.json, etc.) and ignores runtime data. After initialization, each `sync-deploy.sh` run shows a diff and auto-commits changes.
+
 **If git clone fails with "fatal: unable to access":**
 
 > "Can't reach GitHub from the VPS. Check network connectivity:"
@@ -122,7 +124,7 @@ To add a new skill to an agent, add it to the agent's `skills` array in `opencla
 
 ### Step 0: Configure git identity for openclaw user
 
-The build script creates patch branches and commits — git requires a user identity:
+The build script (`build-openclaw.sh`) creates patch branches and commits in the OpenClaw source repo — git requires a user identity. The deploy tracking repo at `INSTALL_DIR` has its own repo-local config (set by `setup-infra.sh`), so this global config is only needed for the source repo:
 
 ```bash
 ssh -i ${SSH_KEY} -p ${SSH_PORT} ${SSH_USER}@${VPS_IP} \

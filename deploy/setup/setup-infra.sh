@@ -76,6 +76,26 @@ done
 
 echo "Directory structure created." >&2
 
+# Part 1b: Initialize deploy tracking repo
+# Tracks deploy-managed config at INSTALL_DIR with git, enabling diff review
+# and rollback. The .gitignore (synced by sync-deploy.sh) excludes runtime data.
+sudo -u openclaw bash -s "$INSTALL_DIR" << 'GITEOF'
+set -euo pipefail
+cd "$1"
+if [ ! -d .git ]; then
+  git init -b main
+  git config user.email "openclaw@localhost"
+  git config user.name "openclaw-deploy"
+  # .gitignore is synced by sync-deploy.sh; if present, commit it
+  if [ -f .gitignore ]; then
+    git add .gitignore
+    git commit -m "init: deploy tracking"
+  fi
+fi
+GITEOF
+
+echo "Deploy tracking repo initialized." >&2
+
 # Part 2: Clone OpenClaw Repository
 OPENCLAW_SOURCE="${STACK__STACK__OPENCLAW__SOURCE:-https://github.com/openclaw/openclaw.git}"
 sudo -u openclaw bash -s "$INSTALL_DIR" "$OPENCLAW_SOURCE" << 'CLONEEOF'
