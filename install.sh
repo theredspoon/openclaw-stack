@@ -274,12 +274,19 @@ echo "    workers/ai-gateway/wrangler.jsonc"
 echo "    workers/log-receiver/wrangler.jsonc"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# ── Step 11: Next steps ──────────────────────────────────────────
+# ── Step 11: Launch Claude onboarding ────────────────────────────
 
 echo ""
-info "Next: Run Claude Code for guided configuration:"
-echo ""
-echo "    claude \"onboard\""
-echo ""
-echo "  This will walk you through domain, Telegram, and stack setup."
-echo ""
+if command -v claude >/dev/null 2>&1; then
+  info "Launching Claude Code for guided configuration..."
+  echo ""
+  claude "onboard"
+else
+  info "Next: Install Claude Code, then run:"
+  echo ""
+  echo "    cd $(pwd)"
+  echo "    claude \"onboard\""
+  echo ""
+  echo "  This will walk you through domain, Telegram, and stack setup."
+  echo ""
+fi

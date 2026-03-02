@@ -10,21 +10,23 @@ Automated deployment of [OpenClaw](https://docs.openclaw.ai) on a single VPS, or
 
 ## Quick Start
 
-**Option A: Let Claude walk you through everything**
+**Option A: Guided setup (recommended)**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/simple10/openclaude/main/docs/CLAUDE_INSTALL.md -o CLAUDE.md
-claude "start"
+# Interactive bash script clones the repo & sets up SSH access
+# Then runs `claude "onboard"`
+bash <(curl -fsSL https://raw.githubusercontent.com/simple10/claudiusmaximus/main/install.sh)
 ```
 
-**Option B: Clone and go**
+**Option B: Manual**
 
 ```bash
 git clone git@github.com:simple10/openclaude.git openclaw-vps
 cd openclaw-vps
 cp .env.example .env && cp stack.yml.example stack.yml
-# Edit .env and stack.yml with your values, or let Claude help:
+# Edit .env and stack.yml with your values, then:
 claude "start"
+# Or claude "onboard" if you need help from claude on setting up the .env
 ```
 
 `npm run pre-deploy` builds `.deploy/` from `.env` + `stack.yml` + `docker-compose.yml.hbs`. Claude reads the playbooks and executes them step-by-step over SSH. First deploy takes ~30 minutes.
@@ -47,10 +49,10 @@ claude "start"
    (HTTPS)          Worker         Worker
         |           (LLM proxy)    (log capture)
         v               ^               ^
-  +-------------------------------------+-------+
+  +-------------------------------------+--------+
   |  VPS                                         |
   |                                              |
-  |  +-- openclaw-claw (Sysbox) ------------+   |
+  |  +-- openclaw-claw (Sysbox) -------------+   |
   |  |  Gateway process (Node.js)            |   |
   |  |  Nested Docker daemon                 |   |
   |  |    -> sandbox containers (per agent)  |   |
@@ -86,12 +88,13 @@ Build deployment artifacts: `npm run pre-deploy` (or `npm run pre-deploy:dry` to
 Just use OpenClaw normally. Host alerts notify you via Telegram if something needs attention. Use Claude to troubleshoot or make changes:
 
 ```bash
-claude "start"
+claude
 ```
 
 > Update OpenClaw to the latest version
 > Run the verification tests
 > Show me the gateway logs
+> Help me pair a new browser with the gateway
 
 ### Helper Scripts
 
@@ -102,7 +105,7 @@ Local CLI scripts for common tasks without Claude:
 ./scripts/health-check.sh             # Docker and gateway health
 ./scripts/ssh-vps.sh                  # SSH to VPS host
 ./scripts/ssh-openclaw.sh             # SSH into gateway container
-./scripts/logs-session.sh             # Chat session logs
+./scripts/logs-explorer.sh            # TUI for browsing openclaw logs
 ./scripts/update-openclaw.sh          # Pull latest + rebuild gateway
 ./scripts/update-sandbox-toolkit.sh   # Sync toolkit config + rebuild sandbox images
 ./scripts/restart-sandboxes.sh        # Restart sandbox containers
@@ -141,7 +144,6 @@ Tools available inside agent sandboxes are defined in `openclaw/default/sandbox-
 | [Claude Subscription](docs/CLAUDE-SUBSCRIPTION.md) | Using Claude Code subscription tokens with OpenClaw |
 | [Security](docs/SECURITY.md) | Full security model: network, auth, device pairing, containers |
 | [Testing](docs/TESTING.md) | End-to-end verification (SSH + browser via DevTools MCP) |
-| [Claude Install](docs/CLAUDE_INSTALL.md) | Standalone setup assistant (used by Quick Start option A) |
 
 ## Security Overview
 
@@ -170,5 +172,3 @@ Requires [DevTools MCP](https://github.com/anthropics/devtools-mcp) installed in
 
 - OpenClaw Documentation: <https://docs.openclaw.ai>
 - OpenClaw GitHub: <https://github.com/openclaw/openclaw>
-- [Agents Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.agents.ts)
-- [Models Config](https://github.com/openclaw/openclaw/blob/main/src/config/types.models.ts)
