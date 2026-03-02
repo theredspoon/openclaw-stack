@@ -40,6 +40,31 @@ claude "start"
 - **VPS** — Ubuntu 24.04+, kernel 5.12+, minimum 4 GB RAM / 2 vCPUs (8 GB+ / 4+ recommended)
 - **[Cloudflare account](https://dash.cloudflare.com/sign-up)** — (free tier) with a domain managed in Cloudflare DNS
 
+## Features
+
+<p align="center"><em>Mission Control — agent browsers, cost tracking, and gateway stats</em></p>
+<p align="center">
+  <img src="docs/assets/screenshot-mission-control.png" alt="Mission Control Dashboard" width="700">
+</p>
+
+**Easy Browser Access**
+
+- Each agent gets its own browser sandbox
+- Access the browser via noVNC in the dashboard
+- Easy management of browser auth - just login to a site in the agent browser
+- OpenClaw never needs your website credentials
+
+<p align="center"><em>Host Alerter — daily health summary and real-time alerts via Telegram</em></p>
+<p align="center">
+  <img src="docs/assets/telegram-host-alerter-report.png" alt="Host Alerter Telegram Report" width="400">
+</p>
+
+- **Multi-claw Stacks** — Run multiple OpenClaw instances on one VPS, each in its own Sysbox container with dedicated resources, Telegram bot, and subdomain
+- **AI Gateway Proxy** — Cloudflare Worker proxies LLM requests to Anthropic/OpenAI with per-user KV credentials. API keys never touch the VPS. Self-service `/config` UI for credential management
+- **LLM Observability** — Structured logging via Vector to Cloudflare Workers, with optional Langfuse tracing for cost and latency analysis
+- **Egress Proxy** — Optional sidecar that routes requests through the VPS IP to bypass WAF blocks on Cloudflare Worker IPs (e.g., ChatGPT Codex)
+- **Claude-driven Deployment & Maintenance** — Modular playbooks that Claude Code executes step-by-step. First deploy ~30 minutes, mostly hands-off
+
 ## Architecture
 
 This project deploys OpenClaw stacks to a VPS or dedicated server.
@@ -82,24 +107,6 @@ Multiple stacks can run on the same VPS. Each stack can contain multiple claws.
 - No ports are exposed to the public internet.
 - All traffic flows through the Cloudflare Tunnel (outbound-only). SSH is the only open firewall port.
 - LLM provider API keys are stored as Cloudflare KV secrets and injected at the edge.
-
-## Features
-
-<p align="center"><em>Mission Control — agent browsers, cost tracking, and gateway stats</em></p>
-<p align="center">
-  <img src="docs/assets/screenshot-mission-control.png" alt="Mission Control Dashboard" width="700">
-</p>
-
-<p align="center"><em>Host Alerter — daily health summary and real-time alerts via Telegram</em></p>
-<p align="center">
-  <img src="docs/assets/telegram-host-alerter-report.png" alt="Host Alerter Telegram Report" width="400">
-</p>
-
-- **Multi-claw stacks** — Run multiple OpenClaw instances on one VPS, each in its own Sysbox container with dedicated resources, Telegram bot, and subdomain
-- **AI Gateway proxy** — Cloudflare Worker proxies LLM requests to Anthropic/OpenAI with per-user KV credentials. API keys never touch the VPS. Self-service `/config` UI for credential management
-- **LLM observability** — Structured logging via Vector to Cloudflare Workers, with optional Langfuse tracing for cost and latency analysis
-- **Egress proxy** — Optional sidecar that routes requests through the VPS IP to bypass WAF blocks on Cloudflare Worker IPs (e.g., ChatGPT Codex)
-- **Claude-driven deployment & maintenance** — Modular playbooks that Claude Code executes step-by-step. First deploy ~30 minutes, mostly hands-off
 
 ## Configuration
 
