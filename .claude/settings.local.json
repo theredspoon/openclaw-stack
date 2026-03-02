@@ -32,10 +32,7 @@
       "mcp__chrome-devtools__wait_for",
       "Bash(git check-ignore:*)",
       "Bash(head:*)",
-      "Bash(shellcheck:*)",
-      "Bash(node:*)",
-      "Bash(git:*)",
-      "Bash(bash:*)"
+      "Bash(shellcheck:*)"
     ]
   }
 }

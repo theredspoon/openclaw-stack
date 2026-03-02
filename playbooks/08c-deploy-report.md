@@ -17,7 +17,7 @@ Collect the following values and present them in a single, neatly formatted repo
 
 ## Values to collect
 
-1. **User passwords** — these were generated and displayed during `02-base-setup.md` section 2.2. If you no longer have them in context (e.g., context was compressed), inform the user the passwords were displayed during base setup and can be reset via VNC/console access.
+1. **User passwords** — source `scripts/lib/source-config.sh` to get `ADMINCLAW_PASSWORD` and `OPENCLAW_PASSWORD`. These are auto-generated and persisted in `.env.local`.
 
 2. **Per-claw gateway tokens** — read from container env var (NOT openclaw.json):
 
@@ -106,7 +106,7 @@ All URLs are protected by Cloudflare Access.
 
 | Secret | Value |
 |--------|-------|
-| AI Gateway Admin Token | `<ADMIN_AUTH_TOKEN>` |
+| AI Gateway Admin Token | `<AI_WORKER_ADMIN_AUTH_TOKEN>` |
 
 > **Keep the admin token safe** — it controls user creation, deletion, and credential access for the AI Gateway.
 
@@ -153,7 +153,7 @@ Read `HOSTALERT_TELEGRAM_BOT_TOKEN` and `HOSTALERT_TELEGRAM_CHAT_ID` from `.env`
 
 > To add or update provider API keys, visit the AI Gateway Config URL above. For advanced configuration (Cloudflare AI Gateway, Claude Code subscription), see [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md).
 
-> **Note:** If user passwords are no longer in the conversation context, they can be reset via VNC/console access on the VPS.
+> **Note:** User passwords and the AI Gateway admin token are always available via `source scripts/lib/source-config.sh` (stored in `.env.local`).
 
 ## Save and display
 

@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync, rea
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawn, spawnSync } from "child_process";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import * as yaml from "js-yaml";
 import * as dotenv from "dotenv";
 import Handlebars from "handlebars";
@@ -78,6 +78,36 @@ function resolveAutoToken(value, cachePath, previousDeploy) {
   }
   if (cached) return cached;
   return randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+}
+
+// ── Protected Vars ───────────────────────────────────────────────────────────
+// Secrets auto-generated into .env.local (not synced to VPS).
+// Resolution order: .env > .env.local > generate.
+
+const PROTECTED_VARS = {
+  ADMINCLAW_PASSWORD: () => randomBytes(18).toString("base64"),
+  OPENCLAW_PASSWORD: () => randomBytes(18).toString("base64"),
+  AI_WORKER_ADMIN_AUTH_TOKEN: () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, ""),
+};
+
+/** Read .env.local (protected vars cache). Returns {} if missing. */
+function readEnvLocal() {
+  const path = join(ROOT, ".env.local");
+  if (!existsSync(path)) return {};
+  return dotenv.parse(readFileSync(path));
+}
+
+/** Write key=value pairs to .env.local with header comment. */
+function writeEnvLocal(vars) {
+  const lines = [
+    "# .env.local — Auto-generated protected vars (DO NOT COMMIT)",
+    "# Managed by pre-deploy and update-env.mjs",
+    "",
+  ];
+  for (const [key, val] of Object.entries(vars)) {
+    lines.push(`${key}=${val}`);
+  }
+  writeFileSync(join(ROOT, ".env.local"), lines.join("\n") + "\n");
 }
 
 // ── Step 1: Read .env ────────────────────────────────────────────────────────
@@ -472,6 +502,28 @@ async function main() {
   info("Reading .env...");
   const env = readDotEnv();
   success(`.env loaded (${Object.keys(env).length} vars)`);
+
+  // 1b. Resolve protected vars (.env > .env.local > generate)
+  info("Resolving protected vars...");
+  const envLocal = readEnvLocal();
+  const resolvedProtected = {};
+  let generated = 0;
+  for (const [name, generator] of Object.entries(PROTECTED_VARS)) {
+    if (env[name]) {
+      resolvedProtected[name] = env[name];
+    } else if (envLocal[name]) {
+      resolvedProtected[name] = envLocal[name];
+    } else {
+      resolvedProtected[name] = generator();
+      generated++;
+    }
+  }
+  writeEnvLocal({ ...envLocal, ...resolvedProtected });
+  if (generated > 0) {
+    success(`Protected vars: ${generated} generated, cached in .env.local`);
+  } else {
+    success("Protected vars: all cached (no new generation)");
+  }
 
   // 2. Read and resolve stack.yml
   info("Reading stack.yml...");

@@ -12,7 +12,7 @@ All secrets should be rotated on a regular cadence. If a token is suspected comp
 |-------|----------|-----------------|
 | Gateway token (per-claw) | VPS `<INSTALL_DIR>/instances/<name>/.openclaw/openclaw.json` | 90 days |
 | `AI_GATEWAY_TOKEN` (user token) | Local `.env` + AI Gateway KV (`token:*`) | 90 days |
-| `ADMIN_AUTH_TOKEN` | AI Gateway Worker secret | 90 days |
+| `AI_WORKER_ADMIN_AUTH_TOKEN` | `.env.local` + AI Gateway Worker secret | 90 days |
 | `LOG_WORKER_TOKEN` | Local `.env` + Log Receiver Worker secret | 90 days |
 | Provider API keys (Anthropic, OpenAI, etc.) | AI Gateway KV (`creds:*`) — managed via `/config` UI | Per provider policy |
 | `EGRESS_PROXY_AUTH_TOKEN` | Local `.env` + AI Gateway Worker secret + VPS egress proxy container | 90 days |
@@ -72,28 +72,31 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d'
 
 #### AI Gateway Admin Token
 
-The `ADMIN_AUTH_TOKEN` protects `/admin/*` endpoints. Rotate it via wrangler:
+The `AI_WORKER_ADMIN_AUTH_TOKEN` protects `/admin/*` endpoints. Rotate via `update-env.mjs`:
 
 ```bash
+node build/update-env.mjs AI_WORKER_ADMIN_AUTH_TOKEN --generate
+source scripts/lib/source-config.sh --force
 cd workers/ai-gateway
-echo "$(openssl rand -hex 32)" | npx wrangler secret put ADMIN_AUTH_TOKEN
+echo "$AI_WORKER_ADMIN_AUTH_TOKEN" | npx wrangler secret put ADMIN_AUTH_TOKEN
 ```
 
-Save the new token — it's needed for user management. No VPS update needed (admin token is not used by claws).
+No VPS update needed (admin token is not used by claws).
 
 #### Log Worker Token
 
 > **Skip** if `stack.logging.vector` is `false`.
 
 ```bash
-# 1. Generate new token
-NEW_TOKEN=$(openssl rand -hex 32)
+# 1. Generate new token and update .env
+node build/update-env.mjs LOG_WORKER_TOKEN --generate
+source scripts/lib/source-config.sh --force
 
 # 2. Update Worker secret (from local machine)
 cd workers/log-receiver
-echo "$NEW_TOKEN" | npx wrangler secret put AUTH_TOKEN
+echo "$ENV__LOG_WORKER_TOKEN" | npx wrangler secret put AUTH_TOKEN
 
-# 3. Update LOG_WORKER_TOKEN in local .env, rebuild and push artifacts
+# 3. Rebuild and push artifacts
 npm run pre-deploy
 scripts/sync-deploy.sh
 
@@ -132,14 +135,15 @@ See [`docs/AI-GATEWAY-CONFIG.md`](../docs/AI-GATEWAY-CONFIG.md) for details.
 The egress proxy auth token is shared between the AI Gateway Worker and the VPS egress proxy container. Rotate both simultaneously:
 
 ```bash
-# 1. Generate new token
-NEW_TOKEN=$(openssl rand -hex 32)
+# 1. Generate new token and update .env
+node build/update-env.mjs EGRESS_PROXY_AUTH_TOKEN --generate
+source scripts/lib/source-config.sh --force
 
 # 2. Update AI Gateway Worker secrets
 cd workers/ai-gateway
-echo "$NEW_TOKEN" | npx wrangler secret put EGRESS_PROXY_AUTH_TOKEN
+echo "$STACK__STACK__EGRESS_PROXY__AUTH_TOKEN" | npx wrangler secret put EGRESS_PROXY_AUTH_TOKEN
 
-# 3. Update EGRESS_PROXY_AUTH_TOKEN in local .env, rebuild and push artifacts
+# 3. Rebuild and push artifacts
 npm run pre-deploy
 scripts/sync-deploy.sh
 
@@ -154,11 +158,10 @@ sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d egress-proxy'
 > **Skip** if `stack.sandbox_registry` is not configured in `stack.yml`.
 
 ```bash
-# 1. Generate new token
-NEW_TOKEN=$(openssl rand -hex 32)
+# 1. Generate new token and update .env
+node build/update-env.mjs SANDBOX_REGISTRY_TOKEN --generate
 
-# 2. Update SANDBOX_REGISTRY_TOKEN in local .env, rebuild and push artifacts
-# (regenerates htpasswd with bcrypt)
+# 2. Rebuild and push artifacts (regenerates htpasswd with bcrypt)
 npm run pre-deploy
 scripts/sync-deploy.sh
 
