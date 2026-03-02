@@ -86,6 +86,7 @@ export default {
     // Route to provider
     const route = matchProviderRoute(request.method, pathname)
     if (!route) {
+      console.error(`No route match: ${request.method} ${pathname}`)
       return addCorsHeaders(jsonError('Not found', 404))
     }
 
@@ -123,6 +124,22 @@ export default {
       )
     } else {
       response = await proxyOpenAI(apiKey, request, providerConfig, upstreamPath, log, requestBody)
+    }
+
+    // Detect upstream WAF blocks (e.g. chatgpt.com blocks Cloudflare Worker IPs)
+    // and return a useful JSON error instead of forwarding the HTML challenge page.
+    if (response.status === 403) {
+      const ct = response.headers.get('content-type') || ''
+      if (ct.includes('text/html')) {
+        const host = new URL(providerConfig.baseUrl).hostname
+        log.error(`[proxy] upstream ${host} returned 403 HTML — likely WAF/bot block`)
+        return addCorsHeaders(jsonError(
+          `Upstream ${host} blocked this request (403). ` +
+          `chatgpt.com blocks requests from Cloudflare Workers. ` +
+          `Configure the openai-codex provider baseUrl to connect directly, bypassing this worker.`,
+          502
+        ))
+      }
     }
 
     // Llemtry: tee the response stream and report in the background

@@ -342,6 +342,10 @@
         "baseUrl": "$ANTHROPIC_BASE_URL",
         "models": []
       },
+      "openai-codex": {
+        "baseUrl": "$OPENAI_CODEX_BASE_URL",
+        "models": []
+      },
       "openai": {
         "baseUrl": "$OPENAI_BASE_URL",
         "models": []

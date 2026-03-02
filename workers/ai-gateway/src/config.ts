@@ -28,4 +28,13 @@ export const PROVIDER_CONFIG = {
 
   // ── OpenAI ─────────────────────────────────────────────────
   openai: useCfGateway ? cfAiGateway : { baseUrl: 'https://api.openai.com' },
+
+  // ── OpenAI Codex subscription ─────────────────────────────
+  // Uses chatgpt.com/backend-api instead of api.openai.com.
+  // NOTE (2026-03-01): chatgpt.com's Cloudflare WAF blocks requests from
+  // Cloudflare Worker IPs (403 "you have been blocked"). Proxying codex
+  // requests through this worker does not work. Configure the openai-codex
+  // provider in OpenClaw to connect directly to chatgpt.com instead.
+  // The route and config are preserved here for when this restriction changes.
+  'openai-codex': { baseUrl: 'https://chatgpt.com/backend-api' },
 }

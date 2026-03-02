@@ -250,6 +250,7 @@ function computeDerivedValues(claws, stack, host) {
     claw.anthropic_base_url = gwUrl + "/anthropic";
     claw.openai_api_key = gwToken;
     claw.openai_base_url = gwUrl + "/openai/v1";
+    claw.openai_codex_base_url = gwUrl + "/openai-codex";
     claw.allowed_origin = "https://" + claw.domain;
     claw.vps_hostname = host.hostname || "";
     claw.log_worker_url = logUrl;
