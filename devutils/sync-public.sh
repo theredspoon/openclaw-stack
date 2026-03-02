@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-EXCLUDE_DIRS=(plans devutils cli notes .github)
+EXCLUDE_DIRS=(plans devutils cli notes)
 SOURCE_BRANCH="main"
 TARGET_BRANCH="public"
 
