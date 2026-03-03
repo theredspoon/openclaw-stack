@@ -205,26 +205,34 @@ if [ -n "$SYNC_INSTANCES" ]; then
       sudo chown 1000:1000 ${remote_dir} && \
       sudo chmod 700 ${remote_dir}"
 
-    # Download live config for drift detection (normal mode) or diff comparison (fresh/force).
+    # Build resolved upload file first — needed for both drift detection and upload.
+    # Resolves ALL ${VAR} refs using the claw's docker-compose env vars so the
+    # uploaded file has concrete values matching the container runtime.
+    RESOLVE_SCRIPT="${DEPLOY_DIR}/openclaw-stack/resolve-config-vars.mjs"
+    upload_tmp=$(mktemp)
+    node "$RESOLVE_SCRIPT" "$local_file" "$name" > "$upload_tmp"
+    upload_file="$upload_tmp"
+
+    # Download live config for drift detection and restart-required analysis.
     tmp_dir=$(mktemp -d)
     has_live_config=false
 
-    # Pull live config + stored hash locally. Runs in all modes so we can
-    # detect restart-required changes even on --fresh/--force deploys.
     do_rsync \
-      --include='openclaw.json' --include='openclaw.json.sha256' --exclude='*' \
+      --include='openclaw.json' --exclude='*' \
       "${VPS}:${remote_dir}/" "$tmp_dir/" 2>/dev/null || true
 
     if [ -f "$tmp_dir/openclaw.json" ]; then
       has_live_config=true
     fi
 
-    if ! $FRESH && ! $FORCE && $has_live_config && [ -f "$tmp_dir/openclaw.json.sha256" ]; then
-      # Drift detection — compare stored hash vs live content hash
-      stored_hash=$(cat "$tmp_dir/openclaw.json.sha256")
+    if ! $FRESH && ! $FORCE && $has_live_config; then
+      # Drift detection — compare what we'd upload vs what's live on VPS.
+      # Both are hashed with config-hash (normalized: sorted keys, no meta, compact JSON).
+      upload_hash=$(node "$CONFIG_HASH" "$upload_file")
       live_hash=$(node "$CONFIG_HASH" "$tmp_dir/openclaw.json")
 
-      if [ "$stored_hash" != "$live_hash" ]; then
+      if [ "$upload_hash" != "$live_hash" ]; then
+        rm -f "$upload_tmp"
         rm -rf "$tmp_dir"
         # Drift: download live-version with diff for user review
         rm -f "$live_version"
@@ -240,21 +248,9 @@ if [ -n "$SYNC_INSTANCES" ]; then
     # No drift — clean up any stale live-version from previous drift
     rm -f "$live_version"
 
-    # Upload config (always as openclaw.json — no staging)
-    # Resolve ALL ${VAR} refs using the claw's docker-compose env vars.
-    # Uploaded file has concrete values matching the container runtime,
-    # preventing false drift when OpenClaw's control UI rewrites the config.
-    RESOLVE_SCRIPT="${DEPLOY_DIR}/openclaw-stack/resolve-config-vars.mjs"
-    upload_tmp=$(mktemp)
-    node "$RESOLVE_SCRIPT" "$local_file" "$name" > "$upload_tmp"
-    upload_file="$upload_tmp"
-
     info "Syncing instance config: ${name}..."
     do_rsync "$upload_file" "${VPS}:${remote_dir}/openclaw.json"
     ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${remote_dir}/openclaw.json"
-
-    # Write deploy hash for future drift detection (hash the uploaded version, with empty vars resolved)
-    local_hash=$(node "$CONFIG_HASH" "$upload_file")
 
     # Detect restart-required changes by comparing live config to uploaded config
     if $has_live_config; then
@@ -280,8 +276,7 @@ if [ -n "$SYNC_INSTANCES" ]; then
 
     [ -n "${upload_tmp:-}" ] && rm -f "$upload_tmp"
     rm -rf "$tmp_dir"
-    ${SSH_CMD} "${VPS}" "echo ${local_hash} | sudo tee ${remote_dir}/openclaw.json.sha256 > /dev/null && sudo chown 1000:1000 ${remote_dir}/openclaw.json.sha256"
-    success "openclaw/${name}/openclaw.jsonc → instances/${name}/.openclaw/openclaw.json (hash: ${local_hash:0:12}...)"
+    success "openclaw/${name}/openclaw.jsonc → instances/${name}/.openclaw/openclaw.json"
   done
 
   if $DRIFT_DETECTED; then
