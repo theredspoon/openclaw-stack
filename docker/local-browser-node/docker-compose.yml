@@ -1,0 +1,31 @@
+services:
+  # Cloudflare Access proxy: tunnels WebSocket through CF Access to the gateway.
+  # The browser-node shares this container's network namespace (localhost).
+  cloudflared-access:
+    image: cloudflare/cloudflared:latest
+    command: >-
+      access tcp
+      --hostname ${GATEWAY_DOMAIN}
+      --url 127.0.0.1:18789
+      --id ${CF_ACCESS_CLIENT_ID}
+      --secret ${CF_ACCESS_CLIENT_SECRET}
+    restart: unless-stopped
+
+  # OpenClaw node host with headless Chromium.
+  # Connects to gateway via the cloudflared sidecar on localhost.
+  browser-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OPENCLAW_VERSION: ${OPENCLAW_VERSION:-stable}
+    container_name: openclaw-browser-node
+    network_mode: "service:cloudflared-access"
+    depends_on:
+      - cloudflared-access
+    env_file: .env
+    volumes:
+      - ./data/openclaw:/home/node/.openclaw
+    restart: unless-stopped
+    # Chromium needs shared memory for rendering
+    shm_size: '2gb'
