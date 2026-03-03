@@ -20,13 +20,13 @@ OCEOF
 # ── CF Access WebSocket proxy ──────────────────────────────────
 if [ -n "${GATEWAY_DOMAIN:-}" ]; then
   echo "[browser-node] Starting WS proxy → wss://${GATEWAY_DOMAIN}"
-  node /app/ws-proxy.mjs &
+  node /opt/ws-proxy/ws-proxy.mjs &
   sleep 0.5
 fi
 
 # ── Start node host ───────────────────────────────────────────
 echo "[browser-node] Starting node host → 127.0.0.1:18789"
-node /app/openclaw.mjs node run \
+openclaw node run \
   --host 127.0.0.1 \
   --port 18789 \
   --display-name "${NODE_DISPLAY_NAME:-local-browser-node}"

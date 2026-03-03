@@ -1,16 +1,13 @@
-# noVNC browser node: OpenClaw node host with visible Chromium via noVNC.
-# Based on node:22-bookworm (ARM native on Apple Silicon).
-# Access browser at http://localhost:6080
+# Extension relay node: OpenClaw relay server for controlling the host's
+# Chrome browser via the OpenClaw Browser Relay extension.
+# No Chromium or display server — lightest profile.
+# Chrome extension files available at ./data/openclaw/browser/chrome-extension/
 
 FROM node:22-bookworm
 
-# System deps: Chromium + display server (Xvfb, x11vnc, noVNC) + locale/tz
+# Minimal deps: just git for cloning OpenClaw (no browser, no GUI)
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      chromium git xvfb x11vnc novnc websockify \
-      xfce4 xfce4-terminal dbus-x11 \
-      tzdata locales && \
-    sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Bun (required by OpenClaw build scripts)
@@ -62,14 +59,14 @@ RUN pnpm ui:build
 USER root
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw && chmod 755 /app/openclaw.mjs
 
-COPY --chown=root:root novnc-entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=root:root extension-entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY --chown=root:root ws-proxy.mjs /app/ws-proxy.mjs
 RUN chmod 755 /usr/local/bin/entrypoint.sh
 
 ENV NODE_ENV=production
-ENV DISPLAY=:99
 
-EXPOSE 6080
+# Extension relay port (controlPort + 1)
+EXPOSE 18792
 
 USER node
 

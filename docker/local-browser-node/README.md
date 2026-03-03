@@ -1,6 +1,6 @@
 # Local Browser Node
 
-Run an OpenClaw **node host** with Chromium on your local machine. The VPS gateway's main agent auto-routes browser tool calls to this node. You can see and interact with the browser via KasmVNC at **https://localhost:6901** — log into websites, and OpenClaw uses those authenticated sessions.
+Run an OpenClaw **node host** with Chromium on your local machine. The VPS gateway's main agent auto-routes browser tool calls to this node. You can see and interact with the browser via KasmVNC at **<https://localhost:6901>** — log into websites, and OpenClaw uses those authenticated sessions.
 
 ## Why
 
@@ -49,7 +49,7 @@ First build takes ~5 min (git clone + pnpm install + build + Chromium).
 
 ### 5. Access the Browser
 
-Open **https://localhost:6901** in your browser to see and interact with the containerized Chromium via KasmVNC. Log into websites here — OpenClaw's agent will use those authenticated sessions.
+Open **<https://localhost:6901>** in your browser to see and interact with the containerized Chromium via KasmVNC. Log into websites here — OpenClaw's agent will use those authenticated sessions.
 
 Default credentials: `kasm_user` / `password`
 
@@ -91,6 +91,7 @@ Default credentials: `kasm_user` / `password`
 ## Verification
 
 On the VPS:
+
 ```bash
 openclaw nodes status
 # Should list the node with "browser" capability
@@ -104,3 +105,7 @@ Test: ask the main agent to browse a URL — you'll see it happen in the KasmVNC
 - **Mac must be running**: browser only available while the container is up
 - **First build**: ~5 min (subsequent starts are instant)
 - **Chromium memory**: ~200-400MB per tab on top of container overhead
+
+## Resources
+
+- <https://demo.fingerprint.com/playground> - test if your settings make you look like a bot
