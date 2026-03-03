@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - run: |
           git remote add public-repo https://x-access-token:${{ secrets.PUBLIC_REPO_TOKEN }}@github.com/simple10/openclaw-stack.git
           git push public-repo HEAD:${{ github.ref_name }}
