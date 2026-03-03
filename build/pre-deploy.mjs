@@ -612,6 +612,28 @@ async function main() {
     }
   }
 
+  // 7d-ii. Write list of env vars that are empty in the container environment.
+  // sync-deploy resolves these in openclaw.json before uploading so OpenClaw's
+  // native ${VAR} substitution doesn't throw MissingEnvVarError on hot-reload.
+  // Map: env var name → claw property that determines its value.
+  const potentiallyEmptyVars = {
+    OPENCLAW_DOMAIN_PATH: "domain_path",
+    VPS_HOSTNAME: "vps_hostname",
+    LOG_WORKER_TOKEN: "log_worker_token",
+    EVENTS_URL: "events_url",
+    LLEMTRY_URL: "llemtry_url",
+    ADMIN_TELEGRAM_ID: "telegram.allow_from",
+  };
+  // Check against first claw (these vars are stack-wide, same for all claws)
+  const firstClaw = Object.values(claws)[0];
+  const emptyVars = Object.entries(potentiallyEmptyVars)
+    .filter(([, prop]) => {
+      const val = prop.split(".").reduce((o, k) => o?.[k], firstClaw);
+      return !val && val !== 0 && val !== false;
+    })
+    .map(([envVar]) => envVar);
+  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), emptyVars.join("\n") + "\n");
+
   // 7d-post. Resolve {{INSTALL_DIR}} in host/ files (cron configs, logrotate)
   const installDir = String(stack.install_dir || "/home/openclaw");
   const hostDir = join(DEPLOY_DIR, "host");

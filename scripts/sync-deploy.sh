@@ -172,6 +172,7 @@ if [ -n "$SYNC_INSTANCES" ]; then
   fi
 
   CONFIG_HASH="${DEPLOY_DIR}/openclaw-stack/config-hash.mjs"
+  EMPTY_VARS_FILE="${DEPLOY_DIR}/openclaw-stack/empty-env-vars"
   DRIFT_DETECTED=false
 
   for name in $INSTANCE_LIST; do
@@ -233,12 +234,25 @@ if [ -n "$SYNC_INSTANCES" ]; then
     rm -f "$live_version"
 
     # Upload config (always as openclaw.json — no staging)
+    # Resolve empty env vars so OpenClaw's ${VAR} substitution doesn't throw
+    # MissingEnvVarError on hot-reload. Source file stays clean with ${VAR} refs.
+    upload_file="$local_file"
+    if [ -f "$EMPTY_VARS_FILE" ]; then
+      upload_tmp=$(mktemp)
+      cp "$local_file" "$upload_tmp"
+      while IFS= read -r var; do
+        [ -n "$var" ] && sed -i '' "s/\${${var}}//g" "$upload_tmp"
+      done < "$EMPTY_VARS_FILE"
+      upload_file="$upload_tmp"
+    fi
+
     info "Syncing instance config: ${name}..."
-    do_rsync "$local_file" "${VPS}:${remote_dir}/openclaw.json"
+    do_rsync "$upload_file" "${VPS}:${remote_dir}/openclaw.json"
     ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${remote_dir}/openclaw.json"
 
-    # Write deploy hash for future drift detection
-    local_hash=$(node "$CONFIG_HASH" "$local_file")
+    # Write deploy hash for future drift detection (hash the uploaded version, with empty vars resolved)
+    local_hash=$(node "$CONFIG_HASH" "$upload_file")
+    [ -n "${upload_tmp:-}" ] && rm -f "$upload_tmp"
     ${SSH_CMD} "${VPS}" "echo ${local_hash} | sudo tee ${remote_dir}/openclaw.json.sha256 > /dev/null && sudo chown 1000:1000 ${remote_dir}/openclaw.json.sha256"
     success "openclaw/${name}/openclaw.jsonc → instances/${name}/.openclaw/openclaw.json (hash: ${local_hash:0:12}...)"
   done

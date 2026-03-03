@@ -35,32 +35,7 @@ if [ -d "$openclaw_dir" ]; then
   fi
 fi
 
-# ── 1d. Resolve empty env vars in openclaw.json ──────────────────────
-# OpenClaw's native ${VAR} substitution throws MissingEnvVarError for vars
-# that are empty or undefined. These vars are legitimately empty when their
-# feature is unconfigured (no domain path, no logging, etc.).
-# Non-empty vars are left as ${VAR} for OpenClaw to resolve natively in memory.
-POTENTIALLY_EMPTY_VARS="OPENCLAW_DOMAIN_PATH VPS_HOSTNAME LOG_WORKER_TOKEN EVENTS_URL LLEMTRY_URL ADMIN_TELEGRAM_ID"
-config_file="/home/node/.openclaw/openclaw.json"
-if [ -f "$config_file" ]; then
-  resolved_count=0
-  for var in $POTENTIALLY_EMPTY_VARS; do
-    # Check if the var reference in openclaw.json resolves to an empty value from env var
-    # If it does, remove the var reference from the file
-    val="${!var:-}"
-    if [ -z "$val" ] && grep -q "\${${var}}" "$config_file"; then
-      sed -i "s/\${${var}}//g" "$config_file"
-      resolved_count=$((resolved_count + 1))
-    fi
-  done
-  if [ "$resolved_count" -gt 0 ]; then
-    chmod 600 "$config_file"
-    chown 1000:1000 "$config_file"
-    echo "[entrypoint] Resolved ${resolved_count} empty env var(s) in openclaw.json"
-  fi
-fi
-
-# ── 1e. Conditional update support + git-info cache ─────────────────
+# ── 1d. Conditional update support + git-info cache ─────────────────
 if [ -d /app/.git ]; then
   VERSION=$(node -e "console.log(require('/app/package.json').version)" 2>/dev/null || echo "unknown")
 
@@ -292,25 +267,7 @@ mkdir -p "$TMPDIR"
 chown 1000:1000 "$TMPDIR"
 echo "[entrypoint] TMPDIR: $TMPDIR"
 
-# ── 3. Background hash finalization ────────────────────────────────────
-# OpenClaw rewrites openclaw.json on startup (resolves ${VAR}, adds meta,
-# reorganizes keys). The deploy-time hash is immediately invalidated.
-# Wait for the gateway to finish processing, then compute a stable hash
-# for drift detection on the next deploy. config-hash.mjs strips meta and
-# deep-sorts keys, so only real config value changes cause drift.
-config_file="/home/node/.openclaw/openclaw.json"
-if [ -f "$config_file" ]; then
-  (
-    sleep 90
-    if [ -f "$config_file" ]; then
-      node /app/openclaw-stack/config-hash.mjs "$config_file" > "${config_file}.sha256"
-      chown 1000:1000 "${config_file}.sha256"
-      echo "[entrypoint] Config hash finalized (post-startup)"
-    fi
-  ) &
-fi
-
-# ── 4. Drop privileges and exec gateway ─────────────────────────────
+# ── 3. Drop privileges and exec gateway ─────────────────────────────
 # gosu drops from root to node user without spawning a subshell,
 # preserving PID structure for proper signal handling via tini
 echo "[entrypoint] Executing as node: $*"
