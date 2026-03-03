@@ -358,4 +358,10 @@ else
     warn "  Changed keys: ${all_restart_keys}"
     warn "  Run: sudo -u openclaw bash -c 'cd ${INSTALL_DIR} && docker compose up -d --force-recreate'"
   fi
+
+  # Workspace sync reminder (only when instance configs were synced)
+  if [ -n "$SYNC_INSTANCES" ]; then
+    echo ""
+    info "Tip: sync agent workspaces with: scripts/sync-workspaces.sh down"
+  fi
 fi
