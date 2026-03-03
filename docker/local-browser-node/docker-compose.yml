@@ -1,18 +1,5 @@
 services:
-  # Cloudflare Access proxy: tunnels WebSocket through CF Access to the gateway.
-  # The browser-node shares this container's network namespace (localhost).
-  cloudflared-access:
-    image: cloudflare/cloudflared:latest
-    command: >-
-      access tcp
-      --hostname ${GATEWAY_DOMAIN}
-      --url 127.0.0.1:18789
-      --id ${CF_ACCESS_CLIENT_ID}
-      --secret ${CF_ACCESS_CLIENT_SECRET}
-    restart: unless-stopped
-
-  # OpenClaw node host with headless Chromium.
-  # Connects to gateway via the cloudflared sidecar on localhost.
+  # Default: KasmVNC desktop — visible browser at https://localhost:6901
   browser-node:
     build:
       context: .
@@ -20,14 +7,60 @@ services:
       args:
         OPENCLAW_VERSION: stable
     container_name: openclaw-browser-node
-    network_mode: "service:cloudflared-access"
-    depends_on:
-      - cloudflared-access
     environment:
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN}
+      CF_ACCESS_CLIENT_ID: ${CF_ACCESS_CLIENT_ID}
+      CF_ACCESS_CLIENT_SECRET: ${CF_ACCESS_CLIENT_SECRET}
+      NODE_DISPLAY_NAME: local-browser-node
+      VNC_PW: password
+    ports:
+      - "6901:6901"
+    volumes:
+      - ./data/openclaw:/home/kasm-user/.openclaw
+    restart: unless-stopped
+    shm_size: '2gb'
+
+  # noVNC mode — visible Chromium via http://localhost:6080 (ARM native)
+  # Activate with: ./run.sh --profile novnc up --build
+  browser-node-novnc:
+    profiles: [novnc]
+    build:
+      context: .
+      dockerfile: Dockerfile.novnc
+      args:
+        OPENCLAW_VERSION: stable
+    container_name: openclaw-browser-node-novnc
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN}
+      CF_ACCESS_CLIENT_ID: ${CF_ACCESS_CLIENT_ID}
+      CF_ACCESS_CLIENT_SECRET: ${CF_ACCESS_CLIENT_SECRET}
+      NODE_DISPLAY_NAME: local-browser-node
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./data/openclaw:/home/node/.openclaw
+    restart: unless-stopped
+    shm_size: '2gb'
+
+  # Headless mode (no GUI, lighter weight)
+  # Activate with: ./run.sh --profile headless up --build
+  browser-node-headless:
+    profiles: [headless]
+    build:
+      context: .
+      dockerfile: Dockerfile.headless
+      args:
+        OPENCLAW_VERSION: stable
+    container_name: openclaw-browser-node-headless
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN}
+      CF_ACCESS_CLIENT_ID: ${CF_ACCESS_CLIENT_ID}
+      CF_ACCESS_CLIENT_SECRET: ${CF_ACCESS_CLIENT_SECRET}
       NODE_DISPLAY_NAME: local-browser-node
     volumes:
       - ./data/openclaw:/home/node/.openclaw
     restart: unless-stopped
-    # Chromium needs shared memory for rendering
     shm_size: '2gb'

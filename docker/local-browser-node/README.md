@@ -1,6 +1,6 @@
 # Local Browser Node
 
-Run an OpenClaw **node host** with headless Chromium on your local machine. The VPS gateway's main agent auto-routes browser tool calls to this node.
+Run an OpenClaw **node host** with Chromium on your local machine. The VPS gateway's main agent auto-routes browser tool calls to this node. You can see and interact with the browser via KasmVNC at **https://localhost:6901** — log into websites, and OpenClaw uses those authenticated sessions.
 
 ## Why
 
@@ -42,38 +42,50 @@ That's it — the gateway domain and token are resolved automatically from `stac
 
 ```bash
 cd docker/local-browser-node
-./run.sh up --build -d
+./run.sh up --build
 ```
 
 First build takes ~5 min (git clone + pnpm install + build + Chromium).
 
+### 5. Access the Browser
+
+Open **https://localhost:6901** in your browser to see and interact with the containerized Chromium via KasmVNC. Log into websites here — OpenClaw's agent will use those authenticated sessions.
+
+Default credentials: `kasm_user` / `password`
+
 ## How It Works
 
 ```
-Mac                                     Cloudflare                     VPS
-┌──────────────┐                    ┌───────────────┐           ┌──────────────┐
-│ browser-node │ ws://localhost ──► │ cloudflared   │ ─wss──►  │ CF Edge      │
-│ (Chromium)   │                   │ access proxy  │           │ ↓ Access     │
-│              │ ◄──────────────── │ (sidecar)     │ ◄──────── │ ↓ Tunnel     │
-└──────────────┘                   └───────────────┘           │ ↓ Gateway    │
-      shared network namespace                                 └──────────────┘
+┌──────────────────────────────────────────────┐
+│            browser-node container             │
+│                                               │
+│  Chromium ◄──── KasmVNC desktop ─────────────│──► https://localhost:6901
+│     ▲                                         │
+│     │ CDP                                     │
+│  openclaw node run ──► ws-proxy.mjs ──────────┼──► wss://gateway.domain
+│  (ws://localhost:18789)  (CF Access headers)   │
+└──────────────────────────────────────────────┘
 ```
 
 1. `run.sh` sources `source-config.sh` → resolves gateway domain and token from the claw name
-2. **cloudflared sidecar** listens on `localhost:18789`, authenticates through CF Access
-3. **browser-node** connects via `ws://localhost:18789` (shared network namespace)
-4. Gateway token auth → node registered with `caps: ["system", "browser"]`
+2. KasmVNC provides a full desktop environment with Chromium visible
+3. `ws-proxy.mjs` listens on `localhost:18789`, proxies to `wss://<gateway>` with CF Access headers
+4. `openclaw node run` connects via the proxy → registered with `caps: ["system", "browser"]`
 5. Main agent's browser tool auto-discovers the node and routes through it
+6. You interact with Chromium via KasmVNC at `https://localhost:6901`
 
 ## Operations
 
 ```bash
 # All commands via run.sh (resolves config automatically)
-./run.sh up --build -d         # Build & start
+./run.sh up --build            # Build & start (foreground, see logs)
+./run.sh up --build -d         # Build & start (background)
 ./run.sh logs -f               # Follow logs
-./run.sh logs -f browser-node  # Just the node
 ./run.sh down                  # Stop
 ./run.sh build --no-cache      # Rebuild (new OpenClaw version)
+
+# Headless mode (no GUI, lighter weight)
+./run.sh --profile headless up --build
 ```
 
 ## Verification
@@ -84,7 +96,7 @@ openclaw nodes status
 # Should list the node with "browser" capability
 ```
 
-Test: ask the main agent to browse a URL.
+Test: ask the main agent to browse a URL — you'll see it happen in the KasmVNC window.
 
 ## Caveats
 

@@ -7,7 +7,7 @@ cat > /home/node/.openclaw/openclaw.json << 'OCEOF'
 {
   "browser": {
     "enabled": true,
-    "headless": true,
+    "headless": false,
     "noSandbox": true,
     "executablePath": "/usr/bin/chromium"
   },
@@ -16,6 +16,28 @@ cat > /home/node/.openclaw/openclaw.json << 'OCEOF'
   }
 }
 OCEOF
+
+# ── Display server ───────────────────────────────────────────
+echo "[browser-node] Starting Xvfb on :99"
+Xvfb :99 -screen 0 1920x1080x24 &
+sleep 1
+
+echo "[browser-node] Starting Xfce4 desktop"
+export DISPLAY=:99
+startxfce4 &
+sleep 2
+
+echo "[browser-node] Starting x11vnc"
+x11vnc -display :99 -forever -nopw -shared -rfbport 5900 &
+sleep 0.5
+
+echo "[browser-node] Starting noVNC on port 6080"
+websockify --web /usr/share/novnc 6080 localhost:5900 &
+sleep 0.5
+
+# ── Launch Chromium on desktop ───────────────────────────────
+echo "[browser-node] Launching Chromium"
+chromium --no-sandbox --start-maximized --disable-gpu --display=:99 &
 
 # ── CF Access WebSocket proxy ──────────────────────────────────
 if [ -n "${GATEWAY_DOMAIN:-}" ]; then
