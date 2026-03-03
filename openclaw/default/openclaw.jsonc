@@ -191,7 +191,7 @@
           "mode": "non-main",
           "docker": {
             // Host-status reports (health.json, maintenance.json) written by host cron scripts.
-            // Bind into sandbox workspace so the read tool can access them (host-status/health.json).
+            // Bind into sandbox workspace so the read tool can access them (.host-status/health.json).
             // Needs both flags: external source (outside sandbox workspace) + reserved target (/workspace/).
             // Openclaw cron runs in an isolated session sandbox, so we need to allow external bind sources and reserved container targets.
             // cron job reads the reports and notifies user over Telegram if there are any issues.
@@ -201,7 +201,7 @@
             "dangerouslyAllowExternalBindSources": true,
             "dangerouslyAllowReservedContainerTargets": true,
             "binds": [
-              "/home/node/.openclaw/workspace/host-status:/workspace/host-status:ro"
+              "/home/node/.openclaw/workspace/.host-status:/workspace/.host-status:ro"
             ]
           }
         },

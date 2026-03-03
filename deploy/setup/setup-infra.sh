@@ -66,10 +66,10 @@ INSTEOF
   sudo chown -R 1000:1000 "${INSTALL_DIR}/instances/${inst_name}/.openclaw"
 
   # Host status directory — written by root cron scripts, read by agents via workspace
-  # Lives under workspace/ so agents can read via relative path (host-status/health.json)
+  # Dotdir so it's auto-excluded from workspace rsync (--exclude=.*)
   # Root-owned with 755/644 permissions so both root can write and container can read
-  sudo mkdir -p "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/host-status"
-  sudo chmod 755 "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/host-status"
+  sudo mkdir -p "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/.host-status"
+  sudo chmod 755 "${INSTALL_DIR}/instances/${inst_name}/.openclaw/workspace/.host-status"
 
   echo "  Created directories for claw: ${inst_name}" >&2
 done

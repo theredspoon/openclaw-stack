@@ -400,14 +400,14 @@ echo $?  # Should be 0
 
 # Verify health.json was written (even without Telegram) — check first instance
 FIRST_INST=$(ls -d <INSTALL_DIR>/instances/*/ | head -1)
-cat "${FIRST_INST}.openclaw/workspace/host-status/health.json"
+cat "${FIRST_INST}.openclaw/workspace/.host-status/health.json"
 
 # Test the maintenance checker
 sudo <INSTALL_DIR>/host/host-maintenance-check.sh
 echo $?  # Should be 0
 
 # Verify maintenance.json was written
-cat "${FIRST_INST}.openclaw/workspace/host-status/maintenance.json"
+cat "${FIRST_INST}.openclaw/workspace/.host-status/maintenance.json"
 
 # Check host cron jobs are installed
 cat /etc/cron.d/openclaw-alerts
