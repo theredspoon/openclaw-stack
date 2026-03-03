@@ -4,7 +4,6 @@ certs/
 
 # ── Secrets & user config (never commit) ───────────────────────
 .env
-.env.local
 stack.yml
 openclaw-config.env
 

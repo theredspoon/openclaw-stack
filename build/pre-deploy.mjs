@@ -81,8 +81,8 @@ function resolveAutoToken(value, cachePath, previousDeploy) {
 }
 
 // ── Protected Vars ───────────────────────────────────────────────────────────
-// Secrets auto-generated into .env.local (not synced to VPS).
-// Resolution order: .env > .env.local > generate.
+// Secrets auto-generated into .env when not already set.
+// Resolution order: .env > generate.
 
 const PROTECTED_VARS = {
   ADMINCLAW_PASSWORD: () => randomBytes(18).toString("base64"),
@@ -90,24 +90,36 @@ const PROTECTED_VARS = {
   AI_WORKER_ADMIN_AUTH_TOKEN: () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, ""),
 };
 
-/** Read .env.local (protected vars cache). Returns {} if missing. */
-function readEnvLocal() {
-  const path = join(ROOT, ".env.local");
-  if (!existsSync(path)) return {};
-  return dotenv.parse(readFileSync(path));
-}
+const AUTO_GENERATED_HEADER = "# ── Auto-generated (managed by pre-deploy — do not edit above this line) ──";
 
-/** Write key=value pairs to .env.local with header comment. */
-function writeEnvLocal(vars) {
-  const lines = [
-    "# .env.local — Auto-generated protected vars (DO NOT COMMIT)",
-    "# Managed by pre-deploy and update-env.mjs",
-    "",
-  ];
-  for (const [key, val] of Object.entries(vars)) {
-    lines.push(`${key}=${val}`);
+/** Upsert auto-generated vars into .env under the auto-generated section. */
+function appendToEnv(vars) {
+  const envPath = join(ROOT, ".env");
+  let content = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
+
+  // Split into user section and auto-generated section
+  const headerIdx = content.indexOf(AUTO_GENERATED_HEADER);
+  let userSection = headerIdx >= 0 ? content.slice(0, headerIdx) : content;
+  let autoSection = headerIdx >= 0 ? content.slice(headerIdx + AUTO_GENERATED_HEADER.length) : "";
+
+  // Parse existing auto-generated vars
+  const autoVars = autoSection ? dotenv.parse(autoSection) : {};
+
+  // Merge new vars (new values win)
+  Object.assign(autoVars, vars);
+
+  // Rebuild auto-generated section
+  const autoLines = [AUTO_GENERATED_HEADER, ""];
+  for (const [key, val] of Object.entries(autoVars)) {
+    autoLines.push(`${key}=${val}`);
   }
-  writeFileSync(join(ROOT, ".env.local"), lines.join("\n") + "\n");
+
+  // Ensure user section ends with a newline
+  if (userSection.length > 0 && !userSection.endsWith("\n")) {
+    userSection += "\n";
+  }
+
+  writeFileSync(envPath, userSection + autoLines.join("\n") + "\n");
 }
 
 // ── Step 1: Read .env ────────────────────────────────────────────────────────
@@ -327,7 +339,7 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     const gwUrl = claw.ai_gateway?.url || stack.ai_gateway.url;
     const gwToken = claw.ai_gateway?.token || stack.ai_gateway.token;
 
-    // gateway_token already resolved in main() via .env.local
+    // gateway_token already resolved in main() via .env
     claw.anthropic_api_key = gwToken;
     claw.anthropic_base_url = gwUrl + "/anthropic";
     claw.openai_api_key = gwToken;
@@ -489,26 +501,23 @@ async function main() {
   const env = readDotEnv();
   success(`.env loaded (${Object.keys(env).length} vars)`);
 
-  // 1b. Resolve protected vars (.env > .env.local > generate)
+  // 1b. Resolve protected vars (.env > generate)
   info("Resolving protected vars...");
-  const envLocal = readEnvLocal();
   const resolvedProtected = {};
   let generated = 0;
   for (const [name, generator] of Object.entries(PROTECTED_VARS)) {
     if (env[name]) {
       resolvedProtected[name] = env[name];
-    } else if (envLocal[name]) {
-      resolvedProtected[name] = envLocal[name];
     } else {
       resolvedProtected[name] = generator();
       generated++;
     }
   }
-  // writeEnvLocal deferred to step 5a (combined with gateway tokens)
+  // appendToEnv deferred to step 5a (combined with gateway tokens)
   if (generated > 0) {
-    success(`Protected vars: ${generated} generated, cached in .env.local`);
+    success(`Protected vars: ${generated} generated, will append to .env`);
   } else {
-    success("Protected vars: all cached (no new generation)");
+    success("Protected vars: all present in .env");
   }
 
   // 2. Read and resolve stack.yml
@@ -542,17 +551,17 @@ async function main() {
   stack.resources.max_cpu = resolvedResources.max_cpu;
   stack.resources.max_mem = formatMemory(resolvedResources.max_mem_mb);
 
-  // 5a. Resolve per-claw gateway tokens (stack.yml > .env.local > generate)
+  // 5a. Resolve per-claw gateway tokens (stack.yml > .env > generate)
   const gwTokenGenerator = () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
   const gwTokenUpdates = {};
   for (const [name, claw] of Object.entries(claws)) {
     const envKey = name.replace(/-/g, "_").toUpperCase() + "_GATEWAY_TOKEN";
     if (!claw.gateway_token) {
-      claw.gateway_token = envLocal[envKey] || gwTokenGenerator();
+      claw.gateway_token = env[envKey] || gwTokenGenerator();
     }
     gwTokenUpdates[envKey] = claw.gateway_token;
   }
-  writeEnvLocal({ ...envLocal, ...resolvedProtected, ...gwTokenUpdates });
+  appendToEnv({ ...resolvedProtected, ...gwTokenUpdates });
 
   // 5b. Compute derived values for template
   info("Computing derived values...");
