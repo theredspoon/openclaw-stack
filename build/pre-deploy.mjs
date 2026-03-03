@@ -10,7 +10,7 @@
  *   npm run pre-deploy:dry      # Dry run (show what would be generated)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, rmSync, readdirSync, statSync, renameSync } from "fs";
 import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { spawn, spawnSync } from "child_process";
@@ -680,21 +680,66 @@ async function main() {
     success("Generated sandbox-registry/htpasswd");
   }
 
-  // 7h. Process openclaw.jsonc for each claw → .deploy/instances/<name>/.openclaw/openclaw.json
-  // Output mirrors VPS layout so sync-deploy.sh can rsync directly.
+  // 7h. Ensure each claw has its own openclaw.jsonc (source of truth for sync-deploy).
+  // If missing, copies from the default template and updates stack.yml to reference it.
   for (const [name, claw] of Object.entries(claws)) {
-    const templateFile = claw.openclaw_json || "openclaw/default/openclaw.jsonc";
-    info(`Processing openclaw config for ${name} (from ${templateFile})...`);
+    const clawConfigDir = join(ROOT, "openclaw", name);
+    let clawConfigPath = join(clawConfigDir, "openclaw.jsonc");
 
-    const raw = readRoot(templateFile);
-    // Parse JSONC to validate and strip comments, then re-serialize as clean JSON
-    const parsed = parseJsoncFile(raw, templateFile);
-    const cleanJson = JSON.stringify(parsed, null, 2);
+    // Normalize: rename .json → .jsonc if needed
+    const jsonVariant = join(clawConfigDir, "openclaw.json");
+    if (!existsSync(clawConfigPath) && existsSync(jsonVariant)) {
+      renameSync(jsonVariant, clawConfigPath);
+      info(`Renamed openclaw/${name}/openclaw.json → openclaw.jsonc`);
+    }
 
-    const outDir = join(DEPLOY_DIR, "instances", name, ".openclaw");
-    mkdirSync(outDir, { recursive: true });
-    writeFileSync(join(outDir, "openclaw.json"), cleanJson + "\n");
-    success(`Wrote instances/${name}/.openclaw/openclaw.json`);
+    if (!existsSync(clawConfigPath)) {
+      // Copy default template to per-claw location
+      const templateFile = claw.openclaw_json || "openclaw/default/openclaw.jsonc";
+      info(`Creating openclaw/${name}/openclaw.jsonc from ${templateFile}...`);
+
+      const raw = readRoot(templateFile);
+      parseJsoncFile(raw, templateFile);
+
+      mkdirSync(clawConfigDir, { recursive: true });
+      writeFileSync(clawConfigPath, raw);
+      success(`Created openclaw/${name}/openclaw.jsonc`);
+
+      // Update stack.yml to set per-claw openclaw_json
+      const stackYmlPath = join(ROOT, "stack.yml");
+      let stackYml = readFileSync(stackYmlPath, "utf-8");
+      const expectedLine = `    openclaw_json: openclaw/${name}/openclaw.jsonc`;
+
+      if (!stackYml.includes(expectedLine.trim())) {
+        const clawLineRegex = new RegExp(`^(  ${name}:)(.*)$`, "m");
+        const match = stackYml.match(clawLineRegex);
+        if (match) {
+          const clawStart = stackYml.indexOf(match[0]);
+          // Find this claw's section boundary (next line at claw indentation or EOF)
+          const afterClaw = stackYml.slice(clawStart + match[0].length);
+          const nextClawMatch = afterClaw.match(/\n  [a-zA-Z]/);
+          const sectionEnd = nextClawMatch
+            ? clawStart + match[0].length + nextClawMatch.index
+            : stackYml.length;
+          const clawSection = stackYml.slice(clawStart, sectionEnd);
+
+          // Replace existing openclaw_json or insert new one
+          const existingLine = clawSection.match(/^    openclaw_json:.*$/m);
+          if (existingLine) {
+            stackYml = stackYml.replace(existingLine[0], expectedLine);
+          } else {
+            const insertAt = clawStart + match[0].length;
+            stackYml = stackYml.slice(0, insertAt) + "\n" + expectedLine + stackYml.slice(insertAt);
+          }
+          writeFileSync(stackYmlPath, stackYml);
+          success(`Updated stack.yml: ${name}.openclaw_json`);
+        }
+      }
+    } else {
+      const raw = readFileSync(clawConfigPath, "utf-8");
+      parseJsoncFile(raw, `openclaw/${name}/openclaw.jsonc`);
+      success(`Validated openclaw/${name}/openclaw.jsonc`);
+    }
   }
 
   // Summary

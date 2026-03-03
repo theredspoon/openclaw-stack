@@ -159,33 +159,40 @@ success "Ownership fixed"
 # ── Sync per-instance configs ─────────────────────────────────────────────────
 
 if [ -n "$SYNC_INSTANCES" ]; then
-  # Discover instance names from .deploy/instances/
-  INSTANCES_DIR="${DEPLOY_DIR}/instances"
-  if [ ! -d "$INSTANCES_DIR" ]; then
-    echo "Error: No instances found in .deploy/instances/. Run 'npm run pre-deploy'." >&2
-    exit 1
-  fi
-
+  # Discover instances from stack config (not .deploy/instances/)
+  CLAWS_IDS="$STACK__CLAWS__IDS"
   if [ "$SYNC_INSTANCES" = "all" ]; then
-    INSTANCE_LIST=$(ls -1 "$INSTANCES_DIR")
+    INSTANCE_LIST=$(echo "$CLAWS_IDS" | tr ',' ' ')
   else
-    if [ ! -d "${INSTANCES_DIR}/${SYNC_INSTANCES}" ]; then
-      echo "Error: Instance '${SYNC_INSTANCES}' not found in .deploy/instances/." >&2
+    if ! echo ",$CLAWS_IDS," | grep -q ",${SYNC_INSTANCES},"; then
+      echo "Error: Instance '${SYNC_INSTANCES}' not found in stack config." >&2
       exit 1
     fi
     INSTANCE_LIST="$SYNC_INSTANCES"
   fi
 
+  CONFIG_HASH="${DEPLOY_DIR}/openclaw-stack/config-hash.mjs"
   DRIFT_DETECTED=false
 
   for name in $INSTANCE_LIST; do
-    local_file="${INSTANCES_DIR}/${name}/.openclaw/openclaw.json"
+    # Resolve local config: openclaw/<claw>/openclaw.jsonc (source of truth)
+    # Always .jsonc locally, uploaded as .json remotely (both support comments).
+    local_dir="${REPO_ROOT}/openclaw/${name}"
+    local_file="${local_dir}/openclaw.jsonc"
+
+    # Normalize: rename .json → .jsonc if needed
+    if [ ! -f "$local_file" ] && [ -f "${local_dir}/openclaw.json" ]; then
+      mv "${local_dir}/openclaw.json" "$local_file"
+      info "Renamed openclaw/${name}/openclaw.json → openclaw.jsonc"
+    fi
+
     if [ ! -f "$local_file" ]; then
-      echo "Warning: No openclaw.json for instance '${name}', skipping." >&2
+      warn "No openclaw.jsonc for '${name}' — copy openclaw/default/openclaw.jsonc to openclaw/${name}/openclaw.jsonc"
       continue
     fi
 
     remote_dir="${INSTALL_DIR}/instances/${name}/.openclaw"
+    live_version="${REPO_ROOT}/openclaw/${name}/openclaw.live-version.jsonc"
 
     # Ensure remote directory exists and fix permissions to match setup-infra.sh:
     #   instances/<name>/  → openclaw:openclaw 755 (host scripts can traverse)
@@ -195,25 +202,35 @@ if [ -n "$SYNC_INSTANCES" ]; then
       sudo chown 1000:1000 ${remote_dir} && \
       sudo chmod 700 ${remote_dir}"
 
-    # Check if remote config exists (first deploy detection)
-    remote_exists=$(${SSH_CMD} "${VPS}" "sudo test -f ${remote_dir}/openclaw.json && echo yes || echo no")
+    if ! $FRESH && ! $FORCE; then
+      # Pull live config + stored hash locally for drift detection.
+      # All comparison runs locally with node — no VPS runtime dependencies.
+      tmp_dir=$(mktemp -d)
+      do_rsync \
+        --include='openclaw.json' --include='openclaw.json.sha256' --exclude='*' \
+        "${VPS}:${remote_dir}/" "$tmp_dir/" 2>/dev/null || true
 
-    if [ "$remote_exists" = "yes" ] && ! $FRESH && ! $FORCE; then
-      # Drift detection: compare deployed hash vs current live hash
-      deployed_hash=$(${SSH_CMD} "${VPS}" "sudo cat ${remote_dir}/openclaw.json.sha256 2>/dev/null || echo none")
-      if [ "$deployed_hash" != "none" ]; then
-        live_hash=$(${SSH_CMD} "${VPS}" "sudo sha256sum ${remote_dir}/openclaw.json | cut -d' ' -f1")
-        if [ "$deployed_hash" != "$live_hash" ]; then
+      if [ -f "$tmp_dir/openclaw.json" ] && [ -f "$tmp_dir/openclaw.json.sha256" ]; then
+        stored_hash=$(cat "$tmp_dir/openclaw.json.sha256")
+        live_hash=$(node "$CONFIG_HASH" "$tmp_dir/openclaw.json")
+
+        if [ "$stored_hash" != "$live_hash" ]; then
+          rm -rf "$tmp_dir"
+          # Drift: download live-version with diff for user review
+          rm -f "$live_version"
+          "${SCRIPT_DIR}/sync-down-configs.sh" --instance "$name"
           warn "Config drift detected for '${name}'!"
-          warn "  Live config was modified since last deploy."
-          warn "  Run:  scripts/sync-down-configs.sh --instance ${name}"
-          warn "  Then: diff openclaw/${name}/openclaw.jsonc openclaw/${name}/openclaw.live-version.jsonc"
-          warn "  Re-run sync-deploy.sh with --force to overwrite."
+          warn "  Review: openclaw/${name}/openclaw.live-version.jsonc"
+          warn "  Re-run with --force to overwrite."
           DRIFT_DETECTED=true
           continue
         fi
       fi
+      rm -rf "$tmp_dir"
     fi
+
+    # No drift — clean up any stale live-version from previous drift
+    rm -f "$live_version"
 
     # Upload config (always as openclaw.json — no staging)
     info "Syncing instance config: ${name}..."
@@ -221,9 +238,9 @@ if [ -n "$SYNC_INSTANCES" ]; then
     ${SSH_CMD} "${VPS}" "sudo chown 1000:1000 ${remote_dir}/openclaw.json"
 
     # Write deploy hash for future drift detection
-    local_hash=$(sha256sum "$local_file" | cut -d' ' -f1)
+    local_hash=$(node "$CONFIG_HASH" "$local_file")
     ${SSH_CMD} "${VPS}" "echo ${local_hash} | sudo tee ${remote_dir}/openclaw.json.sha256 > /dev/null && sudo chown 1000:1000 ${remote_dir}/openclaw.json.sha256"
-    success "instances/${name}/.openclaw/openclaw.json (hash: ${local_hash:0:12}...)"
+    success "openclaw/${name}/openclaw.jsonc → instances/${name}/.openclaw/openclaw.json (hash: ${local_hash:0:12}...)"
   done
 
   if $DRIFT_DETECTED; then

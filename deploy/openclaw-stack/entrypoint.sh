@@ -56,9 +56,6 @@ if [ -f "$config_file" ]; then
   if [ "$resolved_count" -gt 0 ]; then
     chmod 600 "$config_file"
     chown 1000:1000 "$config_file"
-    # Update deploy hash to match post-resolution state (prevents false drift detection)
-    sha256sum "$config_file" | cut -d' ' -f1 > "${config_file}.sha256"
-    chown 1000:1000 "${config_file}.sha256"
     echo "[entrypoint] Resolved ${resolved_count} empty env var(s) in openclaw.json"
   fi
 fi
@@ -295,7 +292,25 @@ mkdir -p "$TMPDIR"
 chown 1000:1000 "$TMPDIR"
 echo "[entrypoint] TMPDIR: $TMPDIR"
 
-# ── 3. Drop privileges and exec gateway ─────────────────────────────
+# ── 3. Background hash finalization ────────────────────────────────────
+# OpenClaw rewrites openclaw.json on startup (resolves ${VAR}, adds meta,
+# reorganizes keys). The deploy-time hash is immediately invalidated.
+# Wait for the gateway to finish processing, then compute a stable hash
+# for drift detection on the next deploy. config-hash.mjs strips meta and
+# deep-sorts keys, so only real config value changes cause drift.
+config_file="/home/node/.openclaw/openclaw.json"
+if [ -f "$config_file" ]; then
+  (
+    sleep 90
+    if [ -f "$config_file" ]; then
+      node /app/openclaw-stack/config-hash.mjs "$config_file" > "${config_file}.sha256"
+      chown 1000:1000 "${config_file}.sha256"
+      echo "[entrypoint] Config hash finalized (post-startup)"
+    fi
+  ) &
+fi
+
+# ── 4. Drop privileges and exec gateway ─────────────────────────────
 # gosu drops from root to node user without spawning a subshell,
 # preserving PID structure for proper signal handling via tini
 echo "[entrypoint] Executing as node: $*"
