@@ -1,10 +1,31 @@
 # Local Browser Node
 
-Run an OpenClaw **node host** with Chromium on your local machine. The VPS gateway's main agent auto-routes browser tool calls to this node. You can see and interact with the browser via KasmVNC at **<https://localhost:6901>** — log into websites, and OpenClaw uses those authenticated sessions.
+Run an OpenClaw **node host** on your local machine that connects to your VPS gateway. The gateway's main agent auto-routes browser tool calls to this node.
 
-## Why
+## Profiles
 
-The VPS main agent (running as `non-main`) can't use a sandbox browser. This container provides a browser via the existing node proxy system — the main agent's browser tool auto-discovers it.
+| Profile | Command | What it does |
+|---------|---------|-------------|
+| **kasm** | `./run.sh --profile kasm up --build` | Full KasmVNC desktop with Chromium at `https://localhost:6901`. Requires special base image + full build (~5 min first time). |
+| **novnc** | `./run.sh --profile novnc up --build` | Chromium via noVNC at `http://localhost:6080`. ARM-native, lighter than Kasm. Supports browser fingerprint env vars (timezone, locale, user-agent). |
+| **headless** | `./run.sh --profile headless up --build` | Chromium with no GUI. Lightest option that still has a real browser. |
+| **extension** | `./run.sh --profile extension up --build` | **No browser in the container.** Controls your Mac's Chrome via the OpenClaw Browser Relay extension. Lightest overall — no Chromium, no display server. |
+
+### Extension Profile (Local Browser)
+
+The **extension** profile is different from the others — instead of running a browser inside the container, it relays commands to your Mac's Chrome via a browser extension. This means:
+
+- Your existing Chrome sessions and logins are available to OpenClaw
+- No extra memory for a containerized browser
+- You see everything happening in your own browser
+
+**Setup:**
+
+1. Start the container: `./run.sh --profile extension up --build`
+2. Load the unpacked extension from `./data/openclaw/browser/chrome-extension/` in Chrome (`chrome://extensions` → Developer mode → Load unpacked)
+3. Click the extension icon → enter the **gateway token** and **relay port** shown in the container logs
+
+> **Non-standard port:** The relay uses port **28793** instead of the default 18792. This is required because OpenClaw hardcodes the relay to `127.0.0.1` and Docker port mapping needs a socat bridge on a separate port. The container logs display the port and token on startup.
 
 ## Prerequisites
 
@@ -42,24 +63,21 @@ That's it — the gateway domain and token are resolved automatically from `stac
 
 ```bash
 cd docker/local-browser-node
-./run.sh up --build
+./run.sh --profile extension up --build    # Extension relay (lightest)
+./run.sh --profile headless up --build     # Headless Chromium
+./run.sh --profile novnc up --build        # noVNC desktop
+./run.sh --profile kasm up --build         # KasmVNC desktop
 ```
 
-First build takes ~5 min (git clone + pnpm install + build + Chromium).
-
-### 5. Access the Browser
-
-Open **<https://localhost:6901>** in your browser to see and interact with the containerized Chromium via KasmVNC. Log into websites here — OpenClaw's agent will use those authenticated sessions.
-
-Default credentials: `kasm_user` / `password`
-
 ## How It Works
+
+### Kasm / noVNC / Headless
 
 ```
 ┌──────────────────────────────────────────────┐
 │            browser-node container             │
 │                                               │
-│  Chromium ◄──── KasmVNC desktop ─────────────│──► https://localhost:6901
+│  Chromium ◄──── desktop (Kasm/noVNC/headless)│
 │     ▲                                         │
 │     │ CDP                                     │
 │  openclaw node run ──► ws-proxy.mjs ──────────┼──► wss://gateway.domain
@@ -67,25 +85,33 @@ Default credentials: `kasm_user` / `password`
 └──────────────────────────────────────────────┘
 ```
 
-1. `run.sh` sources `source-config.sh` → resolves gateway domain and token from the claw name
-2. KasmVNC provides a full desktop environment with Chromium visible
-3. `ws-proxy.mjs` listens on `localhost:18789`, proxies to `wss://<gateway>` with CF Access headers
-4. `openclaw node run` connects via the proxy → registered with `caps: ["system", "browser"]`
-5. Main agent's browser tool auto-discovers the node and routes through it
-6. You interact with Chromium via KasmVNC at `https://localhost:6901`
+### Extension Relay
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              extension-node container                    │
+│                                                          │
+│  openclaw gateway run (loopback :28790)                  │
+│     ├── browser control server (:28792)                  │
+│     └── extension relay (:28793) ◄── socat ◄────────────┼─── Docker :28793
+│                                                          │
+│  openclaw node run ──► ws-proxy.mjs ────────────────────┼──► wss://gateway.domain
+└─────────────────────────────────────────────────────────┘
+         ▲
+         │ WebSocket (ws://localhost:28793/extension)
+         │
+    Chrome + OpenClaw Browser Relay extension (on your Mac)
+```
 
 ## Operations
 
 ```bash
 # All commands via run.sh (resolves config automatically)
-./run.sh up --build            # Build & start (foreground, see logs)
-./run.sh up --build -d         # Build & start (background)
-./run.sh logs -f               # Follow logs
-./run.sh down                  # Stop
-./run.sh build --no-cache      # Rebuild (new OpenClaw version)
-
-# Headless mode (no GUI, lighter weight)
-./run.sh --profile headless up --build
+./run.sh --profile <profile> up --build      # Build & start (foreground)
+./run.sh --profile <profile> up --build -d   # Build & start (background)
+./run.sh --profile <profile> logs -f         # Follow logs
+./run.sh --profile <profile> down            # Stop
+./run.sh --profile <profile> build --no-cache  # Full rebuild
 ```
 
 ## Verification
@@ -97,15 +123,15 @@ openclaw nodes status
 # Should list the node with "browser" capability
 ```
 
-Test: ask the main agent to browse a URL — you'll see it happen in the KasmVNC window.
+Test: ask the main agent to browse a URL.
 
 ## Caveats
 
-- **Latency**: browser actions route Mac → CF → VPS → CF → Mac → Chromium → back
+- **Latency**: browser actions route Mac → CF → VPS → CF → Mac → browser → back
 - **Mac must be running**: browser only available while the container is up
-- **First build**: ~5 min (subsequent starts are instant)
-- **Chromium memory**: ~200-400MB per tab on top of container overhead
+- **First build**: kasm ~5 min, others ~2 min (subsequent starts are instant)
+- **Extension port**: relay uses **28793** not the default 18792 (see extension profile notes above)
 
 ## Resources
 
-- <https://demo.fingerprint.com/playground> - test if your settings make you look like a bot
+- <https://demo.fingerprint.com/playground> - test if your browser fingerprint settings look natural

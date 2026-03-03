@@ -80,9 +80,18 @@ if [ -n "${GATEWAY_DOMAIN:-}" ]; then
     --display-name "${NODE_DISPLAY_NAME:-local-extension-node}" &
 fi
 
-echo "[extension-node] Extension relay at ws://127.0.0.1:28793/extension"
-echo "[extension-node] Set Chrome extension relay port to: 28793"
-echo "[extension-node] Load extension from: ./data/openclaw/browser/chrome-extension/"
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║  EXTENSION RELAY READY                                      ║"
+echo "║                                                              ║"
+echo "║  Relay port:     28793                                       ║"
+echo "║  Gateway token:  ${OPENCLAW_GATEWAY_TOKEN}"
+echo "║                                                              ║"
+echo "║  1. Load extension from: ./data/openclaw/browser/chrome-extension/"
+echo "║  2. Click extension icon → set port to 28793                 ║"
+echo "║  3. Paste the gateway token above                            ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
 
 # Wait for gateway (main process)
 wait $GATEWAY_PID
