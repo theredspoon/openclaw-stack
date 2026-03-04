@@ -192,7 +192,8 @@ done
 # ── Print dashboard URL ─────────────────────────────────────────────
 
 # Derive per-claw domain vars from the gateway container name
-INSTANCE_NAME="${GATEWAY#openclaw-}"
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+INSTANCE_NAME="${GATEWAY#${PROJECT_NAME}-openclaw-}"
 CLAW_KEY=$(echo "$INSTANCE_NAME" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
 DOMAIN_VAR="STACK__CLAWS__${CLAW_KEY}__DOMAIN"
 DASHBOARD_PATH_VAR="STACK__CLAWS__${CLAW_KEY}__DASHBOARD_PATH"

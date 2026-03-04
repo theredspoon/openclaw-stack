@@ -32,7 +32,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-INSTANCE_NAME="${GATEWAY#openclaw-}"
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+INSTANCE_NAME="${GATEWAY#${PROJECT_NAME}-openclaw-}"
 
 printf '\033[32mUpdating OpenClaw on %s...\033[0m\n' "$ENV__VPS_IP"
 

@@ -127,7 +127,8 @@ log ""
 log "Checking OpenClaw gateway health..."
 
 # Pass --instance to avoid interactive picker when multiple claws are running
-INSTANCE_NAME="${GATEWAY#openclaw-}"
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+INSTANCE_NAME="${GATEWAY#${PROJECT_NAME}-openclaw-}"
 HEALTH_OUTPUT=$($SSH_CMD "openclaw --instance $INSTANCE_NAME health 2>&1" 2>/dev/null) && HEALTH_EXIT=0 || HEALTH_EXIT=$?
 
 if [ "$HEALTH_EXIT" -eq 0 ]; then
