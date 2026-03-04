@@ -3,7 +3,7 @@
 # Runs daily via cron: /etc/cron.d/openclaw-maintenance
 #
 # Writes maintenance.json to the agent workspace directory, readable by both
-# host scripts (host-alert.sh --report) and OpenClaw agents (via read tool at host-status/maintenance.json).
+# host scripts (host-alert.sh --report) and OpenClaw agents (via read tool at .host-status/maintenance.json).
 #
 # Runs as root (needs apt and systemctl access). No Telegram dependency.
 set -euo pipefail
@@ -62,7 +62,7 @@ while IFS= read -r install_dir; do
   [ -n "$install_dir" ] || continue
   for inst_dir in "${install_dir}/instances"/*/; do
     [ -d "$inst_dir" ] || continue
-    status_dir="${inst_dir}.openclaw/workspace/host-status"
+    status_dir="${inst_dir}.openclaw/workspace/.host-status"
     mkdir -p "$status_dir"
     echo "$maintenance_json" > "${status_dir}/maintenance.json"
     chmod 644 "${status_dir}/maintenance.json"

@@ -6,7 +6,7 @@
 # Only alerts on state *change* to avoid spam (tracks state in $INSTALL_DIR/.host-alert-state).
 #
 # Writes health.json to the agent workspace directory, readable by both
-# host scripts (--report mode) and OpenClaw agents (via read tool at host-status/health.json).
+# host scripts (--report mode) and OpenClaw agents (via read tool at .host-status/health.json).
 #
 # Usage:
 #   host-alert.sh           Normal mode — alert on state changes only
@@ -167,7 +167,7 @@ while IFS= read -r stack_dir; do
   [ -n "$stack_dir" ] || continue
   for inst_dir in "${stack_dir}/instances"/*/; do
     [ -d "$inst_dir" ] || continue
-    status_dir="${inst_dir}.openclaw/workspace/host-status"
+    status_dir="${inst_dir}.openclaw/workspace/.host-status"
     mkdir -p "$status_dir"
     echo "$health_json" > "${status_dir}/health.json"
     chmod 644 "${status_dir}/health.json"
@@ -283,7 +283,7 @@ if $REPORT_MODE; then
     [ -n "$stack_dir" ] || continue
     for inst_dir in "${stack_dir}/instances"/*/; do
       [ -d "$inst_dir" ] || continue
-      candidate="${inst_dir}.openclaw/workspace/host-status/maintenance.json"
+      candidate="${inst_dir}.openclaw/workspace/.host-status/maintenance.json"
       if [[ -f "$candidate" ]]; then
         maint_file="$candidate"
         break 2

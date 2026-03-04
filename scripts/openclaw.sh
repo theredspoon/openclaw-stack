@@ -23,7 +23,11 @@ INSTANCE_ARGS=()
 REMAINING_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --instance) INSTANCE_ARGS=(--instance "$2"); shift 2 ;;
+    --instance)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --instance requires a claw name" >&2; exit 1
+      fi
+      INSTANCE_ARGS=(--instance "$2"); shift 2 ;;
     *) REMAINING_ARGS+=("$1"); shift ;;
   esac
 done
@@ -35,7 +39,8 @@ if [[ ${#REMAINING_ARGS[@]} -eq 0 ]]; then
 fi
 
 GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-INSTANCE_NAME="${GATEWAY#openclaw-}"
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+INSTANCE_NAME="${GATEWAY#${PROJECT_NAME}-openclaw-}"
 
 TERM=xterm-256color ssh -t -i "${ENV__SSH_KEY}" -p "${ENV__SSH_PORT}" "${ENV__SSH_USER}@${ENV__VPS_IP}" \
   "openclaw --instance $INSTANCE_NAME ${REMAINING_ARGS[*]}"

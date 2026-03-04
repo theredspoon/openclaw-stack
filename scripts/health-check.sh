@@ -2,35 +2,30 @@
 # Run health checks on the VPS: Docker containers and OpenClaw gateway
 #
 # Usage:
-#   scripts/health-check.sh                      # run all checks (auto-detect instance)
+#   scripts/health-check.sh                      # check all containers and claws
 #   scripts/health-check.sh --quiet               # exit code only (0 = healthy, 1 = unhealthy)
-#   scripts/health-check.sh --instance test-claw  # target specific instance
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/source-config.sh"
-source "$SCRIPT_DIR/lib/resolve-gateway.sh"
 
 QUIET=false
-INSTANCE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet|-q) QUIET=true; shift ;;
-    --instance) INSTANCE_ARGS=(--instance "$2"); shift 2 ;;
     --help|-h)
-      echo "Usage: $(basename "$0") [--quiet] [--instance <name>]"
+      echo "Usage: $(basename "$0") [--quiet]"
       echo ""
-      echo "Run health checks on the VPS."
+      echo "Run health checks on all containers in the stack."
       echo ""
       echo "Checks:"
-      echo "  - Docker container status (gateway, vector if enabled)"
+      echo "  - Docker container status (all claws, cloudflared, and optional services)"
       echo "  - Docker container health (healthcheck status)"
-      echo "  - OpenClaw gateway health (openclaw health)"
+      echo "  - OpenClaw gateway health (openclaw health per claw)"
       echo ""
       echo "Options:"
-      echo "  --quiet, -q        Suppress output, exit code only (0 = healthy, 1 = unhealthy)"
-      echo "  --instance <name>  Target a specific OpenClaw instance"
+      echo "  --quiet, -q  Suppress output, exit code only (0 = healthy, 1 = unhealthy)"
       exit 0
       ;;
     *)
@@ -74,16 +69,34 @@ if ! $SSH_CMD "true" 2>/dev/null; then
 fi
 pass "SSH connection OK"
 
-# --- Docker containers ---
+# --- Build container list from stack config ---
+PROJECT_NAME="${STACK__STACK__PROJECT_NAME:-openclaw-stack}"
+
+# All claws
+CLAW_IDS="${STACK__CLAWS__IDS:?STACK__CLAWS__IDS not set in stack.env}"
+CLAW_CONTAINERS=()
+IFS=',' read -ra CLAW_NAMES <<< "$CLAW_IDS"
+for name in "${CLAW_NAMES[@]}"; do
+  CLAW_CONTAINERS+=("${PROJECT_NAME}-openclaw-${name}")
+done
+
+# Infra containers (cloudflared is always present)
+INFRA_CONTAINERS=("${PROJECT_NAME}-cloudflared")
+if [ "${STACK__STACK__LOGGING__VECTOR:-false}" = "true" ]; then
+  INFRA_CONTAINERS+=("${PROJECT_NAME}-vector")
+fi
+if [ -n "${STACK__STACK__EGRESS_PROXY__AUTH_TOKEN:-}" ]; then
+  INFRA_CONTAINERS+=("${PROJECT_NAME}-egress-proxy")
+fi
+if [ -n "${STACK__STACK__SANDBOX_REGISTRY__PORT:-}" ] && [ -z "${STACK__STACK__SANDBOX_REGISTRY__URL:-}" ]; then
+  INFRA_CONTAINERS+=("${PROJECT_NAME}-sandbox-registry")
+fi
+
+CONTAINERS=("${CLAW_CONTAINERS[@]}" "${INFRA_CONTAINERS[@]}")
+
 log ""
 log "Checking Docker containers..."
-
-GATEWAY=$(resolve_gateway ${INSTANCE_ARGS[@]+"${INSTANCE_ARGS[@]}"}) || exit 1
-CONTAINERS="$GATEWAY"
-if [ "${STACK__STACK__LOGGING__VECTOR:-true}" = "true" ]; then
-  CONTAINERS="$CONTAINERS vector"
-fi
-for CONTAINER in $CONTAINERS; do
+for CONTAINER in "${CONTAINERS[@]}"; do
   STATUS=$($SSH_CMD "sudo docker inspect -f '{{.State.Status}}' $CONTAINER 2>/dev/null" 2>/dev/null || echo "not_found")
 
   if [ "$STATUS" = "running" ]; then
@@ -111,7 +124,7 @@ done
 # --- Container restarts ---
 log ""
 log "Checking for recent container restarts..."
-for CONTAINER in $CONTAINERS; do
+for CONTAINER in "${CONTAINERS[@]}"; do
   RESTART_COUNT=$($SSH_CMD "sudo docker inspect -f '{{.RestartCount}}' $CONTAINER 2>/dev/null" 2>/dev/null || echo "unknown")
   if [ "$RESTART_COUNT" = "unknown" ]; then
     continue
@@ -122,24 +135,25 @@ for CONTAINER in $CONTAINERS; do
   fi
 done
 
-# --- OpenClaw gateway health ---
+# --- OpenClaw gateway health (per claw) ---
 log ""
 log "Checking OpenClaw gateway health..."
 
-# Pass --instance to avoid interactive picker when multiple claws are running
-INSTANCE_NAME="${GATEWAY#openclaw-}"
-HEALTH_OUTPUT=$($SSH_CMD "openclaw --instance $INSTANCE_NAME health 2>&1" 2>/dev/null) && HEALTH_EXIT=0 || HEALTH_EXIT=$?
+for CLAW_CONTAINER in "${CLAW_CONTAINERS[@]}"; do
+  INSTANCE_NAME="${CLAW_CONTAINER#${PROJECT_NAME}-openclaw-}"
+  HEALTH_OUTPUT=$($SSH_CMD "openclaw --instance $INSTANCE_NAME health 2>&1" 2>/dev/null) && HEALTH_EXIT=0 || HEALTH_EXIT=$?
 
-if [ "$HEALTH_EXIT" -eq 0 ]; then
-  pass "openclaw health: OK"
-else
-  fail "openclaw health: failed (exit $HEALTH_EXIT)"
-fi
-if [ "$QUIET" = false ] && [ -n "$HEALTH_OUTPUT" ]; then
-  while IFS= read -r line; do
-    log "    $line"
-  done <<< "$HEALTH_OUTPUT"
-fi
+  if [ "$HEALTH_EXIT" -eq 0 ]; then
+    pass "openclaw health ($INSTANCE_NAME): OK"
+  else
+    fail "openclaw health ($INSTANCE_NAME): failed (exit $HEALTH_EXIT)"
+  fi
+  if [ "$QUIET" = false ] && [ -n "$HEALTH_OUTPUT" ]; then
+    while IFS= read -r line; do
+      log "    $line"
+    done <<< "$HEALTH_OUTPUT"
+  fi
+done
 
 # --- Summary ---
 log ""

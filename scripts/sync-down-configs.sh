@@ -14,6 +14,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/source-config.sh"
+source "$SCRIPT_DIR/lib/colors.sh"
+source "$SCRIPT_DIR/lib/ssh.sh"
+source "$SCRIPT_DIR/lib/instances.sh"
 
 SYNC_INSTANCE=""
 while [[ $# -gt 0 ]]; do
@@ -23,21 +26,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-INSTALL_DIR="$STACK__STACK__INSTALL_DIR"
-SSH_CMD="ssh -i ${ENV__SSH_KEY} -p ${ENV__SSH_PORT} -o StrictHostKeyChecking=accept-new"
-VPS="${ENV__SSH_USER}@${ENV__VPS_IP}"
-
-info()    { echo -e "\033[36m→ $1\033[0m"; }
-success() { echo -e "\033[32m✓ $1\033[0m"; }
-warn()    { echo -e "\033[33m! $1\033[0m"; }
-
-# Discover instances from stack config
-CLAWS_IDS="$STACK__CLAWS__IDS"
-if [ -n "$SYNC_INSTANCE" ]; then
-  INSTANCE_LIST="$SYNC_INSTANCE"
-else
-  INSTANCE_LIST=$(echo "$CLAWS_IDS" | tr ',' ' ')
-fi
+resolve_instance_list "${SYNC_INSTANCE:-all}"
 
 CREATED_FILES=()
 DIFFED_FILES=()
@@ -51,8 +40,7 @@ for name in $INSTANCE_LIST; do
   mkdir -p "$local_dir"
 
   info "Downloading live config for ${name}..."
-  if ! eval rsync -avz -e "'${SSH_CMD}'" --rsync-path="'sudo rsync'" \
-    "${VPS}:${remote_file}" "$tmp_file" 2>/dev/null; then
+  if ! do_rsync "${VPS}:${remote_file}" "$tmp_file" 2>/dev/null; then
     warn "No live config found for ${name} (not yet deployed?)"
     rm -f "$tmp_file"
     continue
@@ -64,48 +52,20 @@ for name in $INSTANCE_LIST; do
     success "Created ${local_source} (no local config existed)"
     CREATED_FILES+=("$name")
   else
-    # Local config exists — save as live-version with diff summary header
+    # Local config exists — save as live-version with annotated drift comments
     local_live="${local_dir}/openclaw.live-version.jsonc"
 
     # Find what we're diffing against (claw-specific or default template)
     if [ -f "$local_source" ]; then
       diff_against="$local_source"
-      diff_label="openclaw/${name}/openclaw.jsonc"
     else
       diff_against="${REPO_ROOT}/openclaw/default/openclaw.jsonc"
-      diff_label="openclaw/default/openclaw.jsonc"
     fi
 
-    # Generate diff summary
-    diff_output=$(diff --unified=0 "$diff_against" "$tmp_file" 2>/dev/null || true)
-
-    # Build header comment with diff summary
-    {
-      echo "// Live config downloaded from VPS: ${name}"
-      echo "// Downloaded: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "// Compared against: ${diff_label}"
-      echo "//"
-      if [ -z "$diff_output" ]; then
-        echo "// No differences found."
-      else
-        # Count additions and removals (lines starting with + or - after the header)
-        additions=$(echo "$diff_output" | grep -c '^+[^+]' || true)
-        removals=$(echo "$diff_output" | grep -c '^-[^-]' || true)
-        echo "// Differences: +${additions} added, -${removals} removed"
-        echo "//"
-        # Include the actual diff lines as comments
-        echo "$diff_output" | while IFS= read -r line; do
-          # Skip diff file headers (--- and +++ lines)
-          case "$line" in
-            ---*|+++*) continue ;;
-          esac
-          echo "// $line"
-        done
-      fi
-      echo "//"
-      echo ""
-      cat "$tmp_file"
-    } > "$local_live"
+    # Format live version with key-order matching and inline drift annotations
+    # --claw resolves ${VAR} refs using env vars from .deploy/docker-compose.yml
+    FORMAT_SCRIPT="${REPO_ROOT}/deploy/openclaw-stack/format-live-version.mjs"
+    node "$FORMAT_SCRIPT" --claw "$name" "$diff_against" "$tmp_file" > "$local_live"
 
     rm -f "$tmp_file"
     success "${local_live}"

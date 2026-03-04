@@ -98,7 +98,7 @@ for CLAW in $CLAWS; do
 done
 
 # 7. Check Vector
-if sudo docker ps --format '{{.Names}}' | grep -q 'vector$'; then
+if sudo docker ps --format '{{.Names}}' | grep -q "^${PROJECT_NAME}-vector$"; then
   echo "" >&2
   echo "=== Vector ===" >&2
   echo "  status: running" >&2

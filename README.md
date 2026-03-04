@@ -157,19 +157,40 @@ claude
 Local CLI scripts for common tasks without Claude:
 
 ```bash
-./scripts/openclaw.sh doctor --deep    # Run OpenClaw CLI commands via SSH
-./scripts/health-check.sh             # Docker and gateway health
-./scripts/ssh-vps.sh                  # SSH to VPS host
-./scripts/ssh-openclaw.sh             # SSH into gateway container
-./scripts/logs-explorer.sh            # TUI for browsing openclaw logs
-./scripts/update-openclaw.sh          # Pull latest + rebuild gateway
-./scripts/update-sandbox-toolkit.sh   # Sync toolkit config + rebuild sandbox images
-./scripts/restart-sandboxes.sh        # Restart sandbox containers
-./scripts/start-browser.sh            # Start browser container, print dashboard URL
-./scripts/sync-media.sh               # Sync agent downloads to local machine
+# Deployment
+./scripts/deploy.sh                    # Full deploy: build + sync + restart
+./scripts/sync-claw-config.sh <claw>   # Quick config push + restart for one claw
+
+# SSH access
+./scripts/ssh-vps.sh                   # SSH to VPS host
+./scripts/ssh-openclaw.sh              # Shell into gateway container
+./scripts/ssh-agent.sh                 # Shell into agent sandbox
+
+# Logs & monitoring
+./scripts/logs-openclaw.sh             # Stream gateway logs
+./scripts/logs-docker.sh               # Stream all container logs
+./scripts/logs-explorer.sh             # TUI for session & LLM logs
+./scripts/health-check.sh              # Docker and gateway health
+
+# Updates
+./scripts/update-openclaw.sh           # Pull latest + rebuild gateway
+./scripts/update-sandbox-toolkit.sh    # Sync toolkit + rebuild sandbox images
+
+# Services
+./scripts/restart-gateway.sh           # Restart gateway container
+./scripts/restart-sandboxes.sh         # Recreate sandbox containers
+./scripts/start-browser.sh             # Start browser container
+
+# Agents
+./scripts/message-agents.sh <claw> "msg"  # Message all agents (seeds files too)
+
+# Data & config
+./scripts/openclaw.sh <command>        # Run openclaw CLI via SSH
+./scripts/sync-media.sh               # Download agent media files
+./scripts/sync-workspaces.sh <up|down> # Bidirectional workspace sync
 ```
 
-See comments at the top of each script for flags and options.
+See [docs/SCRIPTS.md](docs/SCRIPTS.md) for full flags and options.
 
 ### Updating OpenClaw
 
@@ -195,6 +216,7 @@ Tools available inside agent sandboxes are defined in `openclaw/default/sandbox-
 | [Cloudflare Tunnel](docs/CLOUDFLARE-TUNNEL.md) | Tunnel, Access, and domain routing setup |
 | [AI Gateway Config](docs/AI-GATEWAY-CONFIG.md) | LLM proxy configuration and provider credentials |
 | [Dashboard](docs/DASHBOARD.md) | Browser sessions (noVNC), media files, URL routing |
+| [Scripts Reference](docs/SCRIPTS.md) | CLI scripts — full flags and options |
 | [Sandbox Toolkit](docs/SANDBOX-TOOLKIT.md) | Adding and managing sandbox tools |
 | [Telegram](docs/TELEGRAM.md) | Telegram bot setup for chat and host alerts |
 | [Claude Subscription](docs/CLAUDE-SUBSCRIPTION.md) | Using Claude Code subscription tokens with OpenClaw |
