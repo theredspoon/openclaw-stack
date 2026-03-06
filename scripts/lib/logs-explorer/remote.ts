@@ -44,6 +44,7 @@ export interface Config {
   port: string
   user: string
   keyPath: string
+  identityAgent: string
   pythonScript: string
   baseDir: string
   llmLogPath: string

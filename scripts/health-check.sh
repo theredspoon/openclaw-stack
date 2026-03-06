@@ -125,7 +125,7 @@ done
 log ""
 log "Checking for recent container restarts..."
 for CONTAINER in "${CONTAINERS[@]}"; do
-  RESTART_COUNT=$($SSH_CMD "sudo docker inspect -f '{{.RestartCount}}' $CONTAINER 2>/dev/null" 2>/dev/null || echo "unknown")
+  RESTART_COUNT=$("${SSH_CMD[@]}" "$VPS" "sudo docker inspect -f '{{.RestartCount}}' $CONTAINER 2>/dev/null" 2>/dev/null || echo "unknown")
   if [ "$RESTART_COUNT" = "unknown" ]; then
     continue
   elif [ "$RESTART_COUNT" -gt 0 ] 2>/dev/null; then
@@ -141,7 +141,7 @@ log "Checking OpenClaw gateway health..."
 
 for CLAW_CONTAINER in "${CLAW_CONTAINERS[@]}"; do
   INSTANCE_NAME="${CLAW_CONTAINER#${PROJECT_NAME}-openclaw-}"
-  HEALTH_OUTPUT=$($SSH_CMD "openclaw --instance $INSTANCE_NAME health 2>&1" 2>/dev/null) && HEALTH_EXIT=0 || HEALTH_EXIT=$?
+  HEALTH_OUTPUT=$("${SSH_CMD[@]}" "$VPS" "openclaw --instance $INSTANCE_NAME health 2>&1" 2>/dev/null) && HEALTH_EXIT=0 || HEALTH_EXIT=$?
 
   if [ "$HEALTH_EXIT" -eq 0 ]; then
     pass "openclaw health ($INSTANCE_NAME): OK"
