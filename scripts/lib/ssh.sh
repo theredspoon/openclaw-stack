@@ -20,7 +20,6 @@ if [ -n "${ENV__SSH_IDENTITY_AGENT:-}" ]; then
 fi
 
 SSH_CMD=(ssh "${SSH_ARGS[@]}")
-SCP_CMD=(scp "${SCP_ARGS[@]}")
 SSH_RSYNC_CMD=$(printf '%q ' ssh "${SSH_ARGS[@]}")
 SSH_RSYNC_CMD=${SSH_RSYNC_CMD% }
 VPS="${ENV__SSH_USER}@${ENV__VPS_IP}"

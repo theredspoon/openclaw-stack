@@ -10,7 +10,7 @@ Triggered when the user says **"onboard"**. Walk through each configuration deci
 
 Before starting, verify that `install.sh` was run:
 
-1. Check `.env` exists and has `VPS_IP`, `SSH_USER`, and either `SSH_KEY` or `SSH_IDENTITY_AGENT` populated
+1. Check `.env` exists and has `VPS_IP`, `SSH_USER`, and either SSH auth env vars populated or a compatible local SSH config/agent setup
 2. Check `stack.yml` exists
 3. Verify SSH connectivity:
 

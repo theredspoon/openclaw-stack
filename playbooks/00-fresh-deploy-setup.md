@@ -65,7 +65,7 @@ grep -A1 '^claws:' stack.yml | tail -n +2 | grep '^\s\+[a-z]' | sed 's/://;s/^\s
 5. **`ADMIN_TELEGRAM_ID`** — Must be numeric. If empty: "Send a message to @userinfobot on Telegram to get your numeric user ID."
 6. **Bot tokens** — Each claw name needs a matching `<NAME>_TELEGRAM_BOT_TOKEN` line in `.env` (uppercased, hyphens→underscores). If missing: "Create a Telegram bot via @BotFather and paste the token. See `docs/TELEGRAM.md`."
 7. **Claws** — The `claws` section lists claw names. Single claw = standard deploy. Multiple claws: inform user each gets its own container/domain.
-8. **SSH auth** — At least one of `SSH_KEY` or `SSH_IDENTITY_AGENT` must be set. `SSH_KEY` is a file path; `SSH_IDENTITY_AGENT` is an agent socket path such as `~/.bitwarden-ssh-agent.sock`.
+8. **SSH auth** — Use `SSH_KEY`, `SSH_IDENTITY_AGENT`, or a compatible local SSH config/agent setup. `SSH_KEY` is a file path; `SSH_IDENTITY_AGENT` is an agent socket path such as `~/.bitwarden-ssh-agent.sock`. If both env vars are empty, confirm your normal `ssh` config can reach the VPS without extra flags.
 
 ### If any fields are invalid or missing
 

@@ -29,6 +29,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 LOCAL_DIR="${LOCAL_DIR:-$SCRIPT_DIR/../media}"
+# Prefix the remote shell command so rsync runs ssh with a real TERM; this is
+# only used by the inline rsync invocation below, not by do_rsync() in ssh.sh.
 SSH_RSYNC_CMD="TERM=xterm-256color ${SSH_RSYNC_CMD}"
 
 sync_instance() {

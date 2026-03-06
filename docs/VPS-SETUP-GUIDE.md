@@ -99,7 +99,7 @@ Record it in `.env`:
 
 VPS_IP=x.x.x.x
 
-# SSH Configuration (required)
+# SSH Configuration (use SSH_KEY, SSH_IDENTITY_AGENT, or your normal ssh config)
 SSH_KEY=~/.ssh/vps1_openclaw_ed25519 # Optional: path to your ssh key file
 SSH_IDENTITY_AGENT=                  # Optional: ssh agent socket path if you use an agent instead of a key file
 SSH_USER=ubuntu # Initial user created by OVH, changed to adminclaw during hardening
