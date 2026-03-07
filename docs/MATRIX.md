@@ -104,7 +104,7 @@ scripts/sync-deploy.sh
 sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d <project_name>-openclaw-personal-claw'
 ```
 
-On first boot, the entrypoint installs `@openclaw/matrix` into the claw's persisted extensions directory (`~/.openclaw/extensions/@openclaw/matrix`). Subsequent restarts skip the install (fast filesystem check).
+On first boot, the OpenClaw gateway loads the bundled `@openclaw/matrix` plugin automatically when `MATRIX_ENABLED=true`. No installation step is required — the plugin ships with OpenClaw.
 
 ---
 
@@ -199,18 +199,12 @@ openclaw pairing approve matrix <CODE>
 - Confirm `auto_join` is not set to `never`
 - Check claw logs: `sudo docker logs <project>-openclaw-<name> 2>&1 | grep -i matrix`
 
-### Plugin install failed
+### Plugin not loading
 
-Check entrypoint logs:
-
-```bash
-sudo docker logs <project>-openclaw-<name> 2>&1 | grep 'matrix'
-```
-
-If the plugin install failed, you can install it manually:
+The `@openclaw/matrix` plugin is bundled with OpenClaw. If the channel is enabled but not responding, check that the plugin entry is in `openclaw.json`:
 
 ```bash
-sudo docker exec --user node <project>-openclaw-<name> openclaw plugins install @openclaw/matrix
+sudo docker exec --user node <project>-openclaw-<name> openclaw plugins list
 ```
 
 ### E2EE verification
