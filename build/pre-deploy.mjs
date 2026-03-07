@@ -654,11 +654,6 @@ async function main() {
     EVENTS_URL: "events_url",
     LLEMTRY_URL: "llemtry_url",
     ADMIN_TELEGRAM_ID: "telegram.allow_from",
-    // Matrix vars: always present in env (openclaw.jsonc references them via ${VAR}).
-    // When Matrix is disabled, they are empty — pre-resolved here so OpenClaw's
-    // ${VAR} substitution doesn't throw MissingEnvVarError on the matrix channel block.
-    MATRIX_HOMESERVER: "matrix.homeserver",
-    MATRIX_ACCESS_TOKEN: "matrix.access_token",
   };
   // Check against first claw (these vars are stack-wide, same for all claws)
   const firstClaw = Object.values(claws)[0];
@@ -668,7 +663,13 @@ async function main() {
       return !val && val !== 0 && val !== false;
     })
     .map(([envVar]) => envVar);
-  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), emptyVars.join("\n") + "\n");
+  // Matrix vars are per-claw: only emitted in docker-compose.yml when matrix.enabled=true.
+  // Always pre-resolve them regardless of any claw's config, so openclaw.jsonc ${MATRIX_*}
+  // substitution succeeds on claws where matrix is disabled and these env vars are absent
+  // from the container environment. Checking only the first claw would break multi-claw
+  // stacks where claws have heterogeneous Matrix config.
+  const alwaysResolveVars = ["MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN"];
+  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), [...emptyVars, ...alwaysResolveVars].join("\n") + "\n");
 
   // 7d-post. Resolve {{INSTALL_DIR}} in host/ files (cron configs, logrotate)
   const installDir = String(stack.install_dir || "/home/openclaw");

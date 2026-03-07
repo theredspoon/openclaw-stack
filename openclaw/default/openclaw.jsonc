@@ -272,7 +272,8 @@
     "enabled": true,
     "allow": [
       "telemetry", // Unified telemetry — replaces llm-logger plugin and debug-logger hook
-      "memory-core" // File-backed memory search tools
+      "memory-core", // File-backed memory search tools
+      "@openclaw/matrix" // Matrix channel — loaded when enabled; ignored when disabled or not installed
     ],
     "load": {
       "paths": ["/app/openclaw-stack/plugins"] // Load directly from openclaw-stack mount — avoids copying into OpenClaw's namespace
@@ -322,6 +323,13 @@
       // Loaded from /app/extensions/memory-core/ (ships with OpenClaw).
       "memory-core": {
         "enabled": true
+      },
+      // Matrix Channel Plugin
+      // Installed by entrypoint on first boot when MATRIX_ENABLED=true.
+      // Declaring it here ensures the plugin remains allowed after sync-deploy rewrites openclaw.json.
+      // enabled: "false" → plugin is not loaded (channel inactive); OpenClaw skips missing extensions.
+      "@openclaw/matrix": {
+        "enabled": "${MATRIX_ENABLED}"
       }
     }
   },

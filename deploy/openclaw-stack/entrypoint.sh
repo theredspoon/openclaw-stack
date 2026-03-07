@@ -109,9 +109,12 @@ if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
   MATRIX_EXT_DIR="/home/node/.openclaw/extensions/@openclaw/matrix"
   if [ ! -d "$MATRIX_EXT_DIR" ]; then
     echo "[entrypoint] Installing @openclaw/matrix plugin..."
-    gosu node openclaw plugins install @openclaw/matrix && \
-      echo "[entrypoint] @openclaw/matrix installed" || \
-      echo "[entrypoint] WARNING: @openclaw/matrix install failed — Matrix channel will not be available"
+    if gosu node openclaw plugins install @openclaw/matrix; then
+      echo "[entrypoint] @openclaw/matrix installed"
+    else
+      echo "[entrypoint] ERROR: @openclaw/matrix install failed — cannot start with MATRIX_ENABLED=true" >&2
+      exit 1
+    fi
   else
     echo "[entrypoint] @openclaw/matrix already installed"
   fi

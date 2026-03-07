@@ -100,7 +100,8 @@ After running `npm run pre-deploy`, sync and restart the claw:
 
 ```bash
 scripts/sync-deploy.sh
-sudo -u openclaw bash -c 'cd /home/openclaw && docker compose up -d personal-claw'
+# Restart the specific claw (service name: <project_name>-openclaw-<claw-name>)
+sudo -u openclaw bash -c 'cd <INSTALL_DIR> && docker compose up -d <project_name>-openclaw-personal-claw'
 ```
 
 On first boot, the entrypoint installs `@openclaw/matrix` into the claw's persisted extensions directory (`~/.openclaw/extensions/@openclaw/matrix`). Subsequent restarts skip the install (fast filesystem check).
@@ -130,20 +131,25 @@ After approval, the bot responds to your DMs normally.
 
 ## Rooms and Mention Gating
 
-Rooms use `groupPolicy: allowlist` by default — the bot only responds in rooms explicitly listed in `matrix.groups`. To respond in a room:
+Rooms use `groupPolicy: allowlist` by default — the bot only responds in rooms explicitly listed in `matrix.groups`. Room allowlisting and mention gating are configured directly in the per-claw `openclaw.jsonc` (they are not rendered from `stack.yml`). To respond in a room:
 
 1. Invite the bot account to the room from your Matrix client
-2. Add the room ID to `stack.yml` under `matrix.groups`
-3. Re-deploy
+1. Edit `openclaw/<claw-name>/openclaw.jsonc` and add the room under `channels.matrix.groups`:
 
-To require the bot to be @mentioned before it responds in a room:
-
-```yaml
-groups:
-  "!roomid:matrix.org":
-    enabled: true
-    mention_only: true
+```jsonc
+"matrix": {
+  // ...
+  "groups": {
+    "!roomid:matrix.org": { "enabled": true, "mention_only": false }
+  }
+}
 ```
+
+1. Run `npm run pre-deploy && scripts/sync-deploy.sh`, then restart the claw
+
+Alternatively, configure rooms live via the Control UI without redeploying.
+
+To require the bot to be @mentioned before it responds: set `"mention_only": true` for that room.
 
 ---
 
@@ -151,11 +157,13 @@ groups:
 
 Matrix E2EE is supported but requires additional setup:
 
-1. Set `encryption: true` in `openclaw.jsonc` (in the `channels.matrix` block)
+1. Edit `openclaw/<claw-name>/openclaw.jsonc` and set `"encryption": true` in the `channels.matrix` block, then run `npm run pre-deploy && scripts/sync-deploy.sh`
 2. Verify the bot's Matrix device from another Matrix client (e.g., Element → Security → Verify)
-3. Ensure `~/.openclaw/matrix/` is included in your backup (crypto state must survive restarts)
+3. Ensure `~/.openclaw/matrix/` is included in your backup (crypto state must survive restarts — the backup script covers this automatically)
 
-> **Recommendation:** Start without E2EE (`encryption: false`). Add E2EE only after confirming the Matrix channel works and backup coverage includes `~/.openclaw/matrix/`. Rotating the access token creates a new device identity and requires re-verification in encrypted rooms.
+> **Note:** `encryption` is not rendered from `stack.yml` — it must be set directly in the per-claw `openclaw.jsonc`. Use the Control UI or a direct file edit.
+
+> **Recommendation:** Start without E2EE (`encryption: false`). Add E2EE only after confirming the Matrix channel works. Rotating the access token creates a new device identity and requires re-verification in encrypted rooms.
 
 > **Beeper:** Beeper requires E2EE to be enabled. Configure `encryption: true` and complete device verification before using Beeper as a Matrix client.
 
