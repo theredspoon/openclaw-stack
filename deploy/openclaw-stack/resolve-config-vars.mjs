@@ -53,7 +53,8 @@ for (const entry of service[1]?.environment || []) {
 
 // Resolve ${VAR} and ${VAR:-default} in the raw text (preserves comments, formatting)
 let content = readFileSync(configFile, "utf-8");
-content = content.replace(/\$\{([^}]+)\}/g, (_match, expr) => {
+
+function resolveExpr(expr) {
   const defaultMatch = expr.match(/^([^:]+):-(.*)$/);
   if (defaultMatch) {
     const key = defaultMatch[1];
@@ -61,6 +62,18 @@ content = content.replace(/\$\{([^}]+)\}/g, (_match, expr) => {
     return (key in env && env[key] !== "") ? env[key] : defaultVal;
   }
   return (expr in env) ? env[expr] : "";
+}
+
+// When a "${VAR}" is the entire JSON value (quoted), coerce booleans and numbers
+// so "enabled": "${MATRIX_ENABLED}" becomes "enabled": true, not "enabled": "true".
+content = content.replace(/"(\$\{([^}]+)\})"/g, (_match, _fullRef, expr) => {
+  const val = resolveExpr(expr);
+  if (val === "true" || val === "false") return val;
+  if (val !== "" && !isNaN(val) && !isNaN(parseFloat(val))) return val;
+  return `"${val}"`;
 });
+
+// Resolve remaining ${VAR} refs (inside longer strings, unquoted positions)
+content = content.replace(/\$\{([^}]+)\}/g, (_match, expr) => resolveExpr(expr));
 
 process.stdout.write(content);

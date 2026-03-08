@@ -76,7 +76,7 @@
       "deviceName": "OPENCLAW_GATEWAY", // Device name shown in Matrix clients' device list
       "encryption": false, // Set to true for E2EE (requires crypto module — see docs/MATRIX.md)
       "dm": { "policy": "pairing" }, // Require device pairing for DMs
-      "groupPolicy": "allowlist" // Only respond in explicitly listed rooms
+      "groupPolicy": "open" // Respond in any room when @mentioned
     }
   },
   "logging": {
@@ -327,9 +327,10 @@
       },
       // Matrix Channel Plugin
       // @openclaw/matrix is bundled with OpenClaw — no install step needed.
-      // Plugin key is "matrix" (unscoped). enabled: "false" → channel inactive.
+      // Plugin key is "matrix" (unscoped). Always loaded; channel activation
+      // is controlled by channels.matrix.enabled, not this field.
       "matrix": {
-        "enabled": "${MATRIX_ENABLED}"
+        "enabled": true
       }
     }
   },
