@@ -67,6 +67,23 @@ describe("maskCredentials", () => {
     expect(result).toHaveProperty("anthropic");
     expect(result).not.toHaveProperty("openai");
   });
+
+  it("masks generic provider API keys", () => {
+    const creds: UserCredentials = {
+      providers: {
+        groq: { apiKey: "gsk-very-long-groq-api-key-here-1234" },
+      },
+    };
+    const result = maskCredentials(creds);
+    const providers = result.providers as Record<string, Record<string, unknown>>;
+    expect(providers.groq.apiKey).toContain("...");
+  });
+
+  it("skips empty providers section", () => {
+    const creds: UserCredentials = {};
+    const result = maskCredentials(creds);
+    expect(result).not.toHaveProperty("providers");
+  });
 });
 
 describe("mergeCredentials", () => {
@@ -147,5 +164,43 @@ describe("mergeCredentials", () => {
     };
     const result = mergeCredentials(existing, update);
     expect(result.openai?.oauth?.accessToken).toBe("at");
+  });
+
+  it("sets new generic provider key", () => {
+    const existing: UserCredentials = {};
+    const update = { providers: { groq: { apiKey: "new-key" } } };
+    const result = mergeCredentials(existing, update);
+    expect(result.providers?.groq?.apiKey).toBe("new-key");
+  });
+
+  it("deletes generic provider with null", () => {
+    const existing: UserCredentials = {
+      providers: { groq: { apiKey: "old-key" } },
+    };
+    const update = { providers: { groq: null } };
+    const result = mergeCredentials(existing, update);
+    expect(result.providers?.groq).toBeUndefined();
+  });
+
+  it("cleans up empty providers section", () => {
+    const existing: UserCredentials = {
+      providers: { groq: { apiKey: "only-key" } },
+    };
+    const update = { providers: { groq: null } };
+    const result = mergeCredentials(existing, update);
+    expect(result.providers).toBeUndefined();
+  });
+
+  it("preserves existing generic providers when updating another", () => {
+    const existing: UserCredentials = {
+      providers: {
+        groq: { apiKey: "groq-key" },
+        deepseek: { apiKey: "ds-key" },
+      },
+    };
+    const update = { providers: { groq: { apiKey: "new-groq-key" } } };
+    const result = mergeCredentials(existing, update);
+    expect(result.providers?.groq?.apiKey).toBe("new-groq-key");
+    expect(result.providers?.deepseek?.apiKey).toBe("ds-key");
   });
 });

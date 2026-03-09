@@ -1,5 +1,6 @@
 import type { ProviderConfig, Log } from '../types'
 import { sanitizeHeaders, truncateBody } from '../log'
+import { stripCloudflareHeaders, getRequestBody } from '../headers'
 
 /** Proxy the request to a generic OpenAI-compatible provider. */
 export async function proxyGeneric(
@@ -19,9 +20,7 @@ export async function proxyGeneric(
   headers.set('Authorization', `Bearer ${apiKey}`)
 
   // Strip Cloudflare-injected metadata headers that shouldn't reach upstream providers
-  for (const key of [...headers.keys()]) {
-    if (key.startsWith('cf-')) headers.delete(key)
-  }
+  stripCloudflareHeaders(headers)
 
   // Set provider-config headers (e.g. cf-aig-authorization for CF AI Gateway mode)
   if (config.headers) {
@@ -38,6 +37,6 @@ export async function proxyGeneric(
   return fetch(targetUrl, {
     method: request.method,
     headers,
-    body: request.method !== 'GET' ? body : undefined,
+    body: getRequestBody(body, request.method),
   })
 }

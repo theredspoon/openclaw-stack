@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchProviderRoute } from "../src/routing";
+import { matchProviderRoute, matchGenericRoute } from "../src/routing";
 
 describe("matchProviderRoute", () => {
   it("matches anthropic/v1/messages POST", () => {
@@ -59,5 +59,42 @@ describe("matchProviderRoute", () => {
   it("generates gateway path without /v1/ segment", () => {
     const result = matchProviderRoute("POST", "/anthropic/v1/messages");
     expect(result!.gatewayPath).toBe("anthropic/messages");
+  });
+});
+
+describe("matchGenericRoute", () => {
+  it("matches POST /proxy/groq/v1/chat/completions", () => {
+    const result = matchGenericRoute("POST", "/proxy/groq/v1/chat/completions");
+    expect(result).toEqual({ provider: "groq", directPath: "v1/chat/completions" });
+  });
+
+  it("matches POST /proxy/deepseek/v1/embeddings", () => {
+    const result = matchGenericRoute("POST", "/proxy/deepseek/v1/embeddings");
+    expect(result).toEqual({ provider: "deepseek", directPath: "v1/embeddings" });
+  });
+
+  it("matches GET /proxy/xai/v1/models", () => {
+    const result = matchGenericRoute("GET", "/proxy/xai/v1/models");
+    expect(result).toEqual({ provider: "xai", directPath: "v1/models" });
+  });
+
+  it("returns null for unknown provider", () => {
+    expect(matchGenericRoute("POST", "/proxy/unknown/v1/chat/completions")).toBeNull();
+  });
+
+  it("returns null for unknown endpoint", () => {
+    expect(matchGenericRoute("POST", "/proxy/groq/v1/unknown")).toBeNull();
+  });
+
+  it("returns null for wrong method", () => {
+    expect(matchGenericRoute("GET", "/proxy/groq/v1/chat/completions")).toBeNull();
+  });
+
+  it("returns null for missing path segments", () => {
+    expect(matchGenericRoute("POST", "/proxy/groq")).toBeNull();
+  });
+
+  it("returns null for non-proxy path", () => {
+    expect(matchGenericRoute("POST", "/groq/v1/chat/completions")).toBeNull();
   });
 });
