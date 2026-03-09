@@ -47,10 +47,10 @@ describe("resolve-config-vars.mjs", () => {
     expect(result).toContain('"token": "abc123"');
   });
 
-  it("resolves ${VAR:-default} with env value when set", () => {
+  it("resolves ${VAR:-default} with env value when set (coerced to number)", () => {
     const configPath = setup('{"port": "${PORT:-9090}"}', composeYml);
     const result = run(configPath, "main");
-    expect(result).toContain('"port": "8080"');
+    expect(result).toContain('"port": 8080');
   });
 
   it("uses default when var is empty", () => {
@@ -92,5 +92,78 @@ describe("resolve-config-vars.mjs", () => {
     writeFileSync(configPath, '{"token": "${TOKEN}"}');
     const result = run(configPath, "main");
     expect(result).toContain("${TOKEN}");
+  });
+
+  // Boolean coercion: "${VAR}" as entire value → unquoted true/false
+  it("coerces boolean string to unquoted boolean", () => {
+    const compose = `
+services:
+  test-openclaw-main:
+    environment:
+      - ENABLED=true
+      - DISABLED=false
+`;
+    const configPath = setup('{"a": "${ENABLED}", "b": "${DISABLED}"}', compose);
+    const result = run(configPath, "main");
+    // Should be unquoted booleans in JSON output
+    expect(result).toContain('"a": true');
+    expect(result).toContain('"b": false');
+  });
+
+  // Number coercion: "${VAR}" as entire value → unquoted number
+  it("coerces numeric string to unquoted number", () => {
+    const configPath = setup('{"port": "${PORT}"}', composeYml);
+    const result = run(configPath, "main");
+    expect(result).toContain('"port": 8080');
+  });
+
+  // String values remain quoted
+  it("keeps non-boolean non-numeric strings quoted", () => {
+    const configPath = setup('{"name": "${TOKEN}"}', composeYml);
+    const result = run(configPath, "main");
+    expect(result).toContain('"name": "abc123"');
+  });
+
+  // Channel stripping: disabled channel removed from output
+  it("strips disabled telegram channel from output", () => {
+    const compose = `
+services:
+  test-openclaw-main:
+    environment:
+      - TELEGRAM_ENABLED=false
+`;
+    const config = '{"channels": {"telegram": {"enabled": "${TELEGRAM_ENABLED}"}}}';
+    const configPath = setup(config, compose);
+    const result = run(configPath, "main");
+    const parsed = JSON.parse(result);
+    expect(parsed.channels.telegram).toBeUndefined();
+  });
+
+  it("strips disabled matrix channel from output", () => {
+    const compose = `
+services:
+  test-openclaw-main:
+    environment:
+      - MATRIX_ENABLED=false
+`;
+    const config = '{"channels": {"matrix": {"enabled": "${MATRIX_ENABLED}"}}}';
+    const configPath = setup(config, compose);
+    const result = run(configPath, "main");
+    const parsed = JSON.parse(result);
+    expect(parsed.channels.matrix).toBeUndefined();
+  });
+
+  it("preserves enabled channels in output", () => {
+    const compose = `
+services:
+  test-openclaw-main:
+    environment:
+      - TELEGRAM_ENABLED=true
+      - TELEGRAM_BOT_TOKEN=bot:tok
+`;
+    const config = '{"channels": {"telegram": {"enabled": "${TELEGRAM_ENABLED}", "botToken": "${TELEGRAM_BOT_TOKEN}"}}}';
+    const configPath = setup(config, compose);
+    const result = run(configPath, "main");
+    expect(result).toContain("telegram");
   });
 });

@@ -99,8 +99,18 @@ export function validateClaw(name, claw, onWarn) {
   }
 
   const telegram = claw.telegram;
-  if (!telegram?.bot_token) {
-    if (onWarn) onWarn(`Claw '${name}' has no telegram.bot_token — Telegram will be disabled`);
+  if (telegram?.enabled && !telegram?.bot_token) {
+    if (onWarn) onWarn(`Claw '${name}' has telegram.enabled: true but no bot_token — Telegram may not work without a token (env var fallback allowed)`);
+  }
+
+  const matrix = claw.matrix;
+  if (matrix?.enabled) {
+    if (!matrix.homeserver) {
+      throw new Error(`Claw '${name}' has matrix.enabled: true but matrix.homeserver is not set`);
+    }
+    if (!matrix.access_token) {
+      throw new Error(`Claw '${name}' has matrix.enabled: true but matrix.access_token is empty — set the access token env var in .env`);
+    }
   }
 }
 
