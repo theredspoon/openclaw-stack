@@ -304,6 +304,8 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     claw.llemtry_url = logUrl ? logUrl + "/llemtry" : "";
     claw.enable_events_logging = stack.logging?.events || false;
     claw.enable_llemtry_logging = stack.logging?.llemtry || false;
+    claw.telegram_enabled = !!claw.telegram?.enabled;
+    claw.matrix_enabled = !!claw.matrix?.enabled;
   }
 
   return autoTokens;
