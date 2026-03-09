@@ -81,4 +81,15 @@ describe("generateStackEnv", () => {
     const result = generateStackEnv(env, config, claws);
     expect(result).toContain("STACK__STACK__LOGGING__VECTOR=true");
   });
+
+  it("includes SSH_IDENTITY_AGENT when set", () => {
+    const envWithAgent = { ...env, SSH_IDENTITY_AGENT: "/tmp/ssh-agent.sock" };
+    const result = generateStackEnv(envWithAgent, config, claws);
+    expect(result).toContain("ENV__SSH_IDENTITY_AGENT=/tmp/ssh-agent.sock");
+  });
+
+  it("omits SSH_IDENTITY_AGENT when not set", () => {
+    const result = generateStackEnv(env, config, claws);
+    expect(result).not.toContain("SSH_IDENTITY_AGENT");
+  });
 });

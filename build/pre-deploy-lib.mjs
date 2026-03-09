@@ -174,7 +174,7 @@ export function generateStackEnv(env, config, claws) {
 
   // Source: .env
   const envVars = [
-    "VPS_IP", "SSH_KEY", "SSH_PORT", "SSH_USER",
+    "VPS_IP", "SSH_KEY", "SSH_IDENTITY_AGENT", "SSH_PORT", "SSH_USER",
     "HOSTALERT_TELEGRAM_BOT_TOKEN", "HOSTALERT_TELEGRAM_CHAT_ID",
     "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN",
   ];
