@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
-import { maskString, maskCredentials, mergeCredentials, handleCodexTokenGeneration, handleTokenRotation } from "../src/admin";
+import { maskString, maskCredentials, mergeCredentials, handleCodexTokenGeneration, handleTokenRotation, handleAdminRequest } from "../src/admin";
 import type { UserCredentials, UsersRegistry } from "../src/types";
 import type { Log } from "../src/log";
 
@@ -320,5 +320,29 @@ describe("codex token expiry", () => {
     // Codex hash should still be absent from KV
     const stillGone = await kv.get(`token:${codexHash}`);
     expect(stillGone).toBeNull();
+  });
+
+  it("user deletion revokes active codex token", async () => {
+    await seedUser(kv, userId);
+
+    // Generate a codex token
+    const res = await handleCodexTokenGeneration(userId, kv, noopLog);
+    const body = (await res.json()) as { codexPasteToken: string };
+    const codexHash = await sha256Hex(body.codexPasteToken);
+
+    // Verify it resolves before deletion
+    expect(await kv.get(`token:${codexHash}`)).toBe(userId);
+
+    // Delete the user via admin API
+    const deleteReq = new Request("https://example.com/admin/users/" + userId, {
+      method: "DELETE",
+    });
+    const deleteRes = await handleAdminRequest(deleteReq, `/admin/users/${userId}`, kv, noopLog);
+    expect(deleteRes.status).toBe(200);
+
+    // Codex token should be revoked
+    expect(await kv.get(`token:${codexHash}`)).toBeNull();
+    // Tracking key should be gone
+    expect(await kv.get(`codex:${userId}`)).toBeNull();
   });
 });
