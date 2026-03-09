@@ -40,8 +40,9 @@ agents/
 screencasts/
 .deploy-logs/
 
-# Local backlog (not shared upstream)
+# Local files (not shared upstream)
 /backlog
+/LOCAL-OPS.md
 
 # CLI binary (built from cli/)
 /claw
