@@ -31,6 +31,7 @@ import {
   formatEnvValue,
   generateStackEnv,
   resolveAutoToken as _resolveAutoToken,
+  buildVpsSshArgs,
   computeDerivedValues as _computeDerivedValues,
 } from "./pre-deploy-lib.mjs";
 
@@ -167,18 +168,13 @@ async function queryVpsCapacity(env) {
   const ip = env.VPS_IP;
   const user = env.SSH_USER || "adminclaw";
   const port = env.SSH_PORT || "222";
-  const keyPath = env.SSH_KEY || "~/.ssh/vps1_openclaw_ed25519";
 
   if (!ip) fatal("VPS_IP not set in .env — cannot query VPS capacity for resource % resolution");
 
-  const expandedKey = keyPath.replace(/^~/, process.env.HOME || "");
   info(`Querying VPS capacity at ${user}@${ip}:${port}...`);
 
-  const sshArgs = [
-    "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10",
-    "-i", expandedKey, "-p", port, `${user}@${ip}`,
-    "nproc && grep MemTotal /proc/meminfo | awk '{print $2}'"
-  ];
+  const sshArgs = buildVpsSshArgs(env, process.env.HOME || "");
+  sshArgs.push("nproc && grep MemTotal /proc/meminfo | awk '{print $2}'");
 
   const { stdout, stderr, exitCode } = await spawnAsync("ssh", sshArgs);
 

@@ -340,3 +340,28 @@ export function resolveAutoToken(value, cachePath, previousDeploy, generateFn) {
   if (cached) return cached;
   return generateFn();
 }
+
+/**
+ * Build SSH args array for VPS capacity probe.
+ * Mirrors the pattern from scripts/lib/ssh.sh:6-12.
+ * @param {object} env - Environment variables (SSH_KEY, SSH_IDENTITY_AGENT, SSH_USER, SSH_PORT, VPS_IP)
+ * @param {string} homedir - Home directory for tilde expansion
+ * @returns {string[]} SSH arguments array
+ */
+export function buildVpsSshArgs(env, homedir) {
+  const user = env.SSH_USER || "adminclaw";
+  const port = env.SSH_PORT || "222";
+
+  const args = [
+    "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10",
+  ];
+  if (env.SSH_KEY) {
+    const expandedKey = env.SSH_KEY.replace(/^~/, homedir || "");
+    args.push("-i", expandedKey);
+  }
+  if (env.SSH_IDENTITY_AGENT) {
+    args.push("-o", `IdentityAgent=${env.SSH_IDENTITY_AGENT}`);
+  }
+  args.push("-p", port, `${user}@${env.VPS_IP}`);
+  return args;
+}
