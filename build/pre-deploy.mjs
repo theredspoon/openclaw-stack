@@ -19,6 +19,19 @@ import * as yaml from "js-yaml";
 import * as dotenv from "dotenv";
 import Handlebars from "handlebars";
 import { parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
+import {
+  resolveEnvRefs as _resolveEnvRefs,
+  isPlainObject,
+  deepMerge,
+  parseMemoryValue,
+  formatMemory,
+  parseJsoncFile as _parseJsoncFile,
+  validateClaw as _validateClaw,
+  parseDailyReportTime as _parseDailyReportTime,
+  formatEnvValue,
+  generateStackEnv,
+  resolveAutoToken as _resolveAutoToken,
+} from "./pre-deploy-lib.mjs";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,15 +82,10 @@ function loadPreviousDeploy() {
  * Tokens resolved this way persist in stack.json between builds, so they remain stable
  * across `npm run pre-deploy` runs without requiring the user to set them in .env.
  */
+const defaultTokenGenerator = () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+
 function resolveAutoToken(value, cachePath, previousDeploy) {
-  if (value) return value;
-  // Walk dot-separated path into previous deploy config
-  let cached = previousDeploy;
-  for (const key of cachePath.split(".")) {
-    cached = cached?.[key];
-  }
-  if (cached) return cached;
-  return randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  return _resolveAutoToken(value, cachePath, previousDeploy, defaultTokenGenerator);
 }
 
 // ── Protected Vars ───────────────────────────────────────────────────────────
@@ -135,49 +143,10 @@ function readDotEnv() {
 // ── Step 2: Resolve ${VAR} in stack.yml ──────────────────────────────────────
 
 function resolveEnvRefs(text, env) {
-  // Process line-by-line to skip YAML comments
-  return text.split("\n").map((line) => {
-    // Skip comment lines (YAML comments start with optional whitespace + #)
-    if (line.trimStart().startsWith("#")) return line;
-
-    // Match ${VAR} and ${VAR:-default}
-    return line.replace(/\$\{([^}]+)\}/g, (_match, expr) => {
-      const defaultMatch = expr.match(/^([^:]+):-(.*)$/);
-      if (defaultMatch) {
-        const key = defaultMatch[1];
-        const defaultVal = defaultMatch[2];
-        return env[key] !== undefined && env[key] !== "" ? env[key] : defaultVal;
-      }
-      const value = env[expr];
-      if (value === undefined) {
-        warn(`Unresolved env var: \${${expr}} (will be empty string)`);
-        return "";
-      }
-      return value;
-    });
-  }).join("\n");
+  return _resolveEnvRefs(text, env, (msg) => warn(msg));
 }
 
-// ── Step 3: Deep merge ───────────────────────────────────────────────────────
-
-function isPlainObject(val) {
-  return typeof val === "object" && val !== null && !Array.isArray(val);
-}
-
-/** Deep merge source into target. Source values win at any depth. */
-function deepMerge(target, source) {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const srcVal = source[key];
-    const tgtVal = result[key];
-    if (isPlainObject(srcVal) && isPlainObject(tgtVal)) {
-      result[key] = deepMerge(tgtVal, srcVal);
-    } else {
-      result[key] = srcVal;
-    }
-  }
-  return result;
-}
+// ── Step 3: Deep merge (imported from pre-deploy-lib.mjs) ────────────────────
 
 // ── Step 4: Resolve resource percentages ─────────────────────────────────────
 
@@ -197,28 +166,18 @@ async function queryVpsCapacity(env) {
   const ip = env.VPS_IP;
   const user = env.SSH_USER || "adminclaw";
   const port = env.SSH_PORT || "222";
-  const keyPath = env.SSH_KEY?.trim() || "";
-  const identityAgent = env.SSH_IDENTITY_AGENT?.trim() || "";
+  const keyPath = env.SSH_KEY || "~/.ssh/vps1_openclaw_ed25519";
 
   if (!ip) fatal("VPS_IP not set in .env — cannot query VPS capacity for resource % resolution");
 
+  const expandedKey = keyPath.replace(/^~/, process.env.HOME || "");
   info(`Querying VPS capacity at ${user}@${ip}:${port}...`);
 
   const sshArgs = [
     "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10",
-  ];
-
-  if (keyPath) {
-    sshArgs.push("-i", keyPath.replace(/^~/, process.env.HOME || ""));
-  }
-  if (identityAgent) {
-    sshArgs.push("-o", `IdentityAgent=${identityAgent.replace(/^~/, process.env.HOME || "")}`);
-  }
-
-  sshArgs.push(
-    "-p", port, `${user}@${ip}`,
+    "-i", expandedKey, "-p", port, `${user}@${ip}`,
     "nproc && grep MemTotal /proc/meminfo | awk '{print $2}'"
-  );
+  ];
 
   const { stdout, stderr, exitCode } = await spawnAsync("ssh", sshArgs);
 
@@ -235,20 +194,7 @@ async function queryVpsCapacity(env) {
   return { cpus, memory_mb: memMb };
 }
 
-function parseMemoryValue(val) {
-  const str = String(val).trim();
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*(G|M|GB|MB|g|m|gb|mb)?$/i);
-  if (!match) fatal(`Invalid memory value: ${val}`);
-  const num = parseFloat(match[1]);
-  const unit = (match[2] || "M").toUpperCase().replace("B", "");
-  const mb = unit === "G" ? Math.floor(num * 1024) : Math.floor(num);
-  return { mb, original: str };
-}
-
-function formatMemory(mb) {
-  if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024}G`;
-  return `${mb}M`;
-}
+// parseMemoryValue and formatMemory imported from pre-deploy-lib.mjs
 
 async function resolveStackResources(stackResources, env) {
   const maxCpu = String(stackResources?.max_cpu || "100%");
@@ -281,41 +227,23 @@ async function resolveStackResources(stackResources, env) {
   return { max_cpu: resolvedCpu, max_mem_mb: resolvedMemMb };
 }
 
-// ── Step 5: Parse JSONC (JSON with Comments) ─────────────────────────────────
+// ── Step 5: Parse JSONC (imported from pre-deploy-lib.mjs) ───────────────────
 
 function parseJsoncFile(text, filePath) {
-  const errors = [];
-  const result = parseJsonc(text, errors, { allowTrailingComma: true });
-  if (errors.length > 0) {
-    const errorMsgs = errors.map(e => `  offset ${e.offset}: ${printParseErrorCode(e.error)}`).join("\n");
-    fatal(`JSONC parse errors in ${filePath}:\n${errorMsgs}`);
+  try {
+    return _parseJsoncFile(text, filePath);
+  } catch (e) {
+    fatal(e.message);
   }
-  return result;
 }
 
-// ── Step 6: Validate required fields ─────────────────────────────────────────
+// ── Step 6: Validate required fields (imported from pre-deploy-lib.mjs) ──────
 
 function validateClaw(name, claw) {
-  const required = ["domain", "gateway_port", "dashboard_port"];
-  for (const field of required) {
-    if (claw[field] === undefined || claw[field] === "") {
-      fatal(`Claw '${name}' is missing required field: ${field}`);
-    }
-  }
-
-  const telegram = claw.telegram;
-  if (telegram?.enabled && !telegram?.bot_token) {
-    warn(`Claw '${name}' has telegram.enabled: true but no bot_token — Telegram may not work without a token (env var fallback allowed)`);
-  }
-
-  const matrix = claw.matrix;
-  if (matrix?.enabled) {
-    if (!matrix.homeserver) {
-      fatal(`Claw '${name}' has matrix.enabled: true but matrix.homeserver is not set`);
-    }
-    if (!matrix.access_token) {
-      fatal(`Claw '${name}' has matrix.enabled: true but matrix.access_token is empty — set the access token env var in .env`);
-    }
+  try {
+    _validateClaw(name, claw, (msg) => warn(msg));
+  } catch (e) {
+    fatal(e.message);
   }
 }
 
@@ -376,148 +304,16 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     claw.llemtry_url = logUrl ? logUrl + "/llemtry" : "";
     claw.enable_events_logging = stack.logging?.events || false;
     claw.enable_llemtry_logging = stack.logging?.llemtry || false;
-    // telegram_enabled / matrix_enabled are flat booleans for Handlebars — avoids
-    // empty-string output when the section is absent from stack.yml.
-    claw.telegram_enabled = claw.telegram?.enabled === true;
-    claw.matrix_enabled = claw.matrix?.enabled === true;
   }
 
   return autoTokens;
 }
 
-// ── Step 8: Parse human-readable time → cron expression + IANA timezone ──────
-
-const TZ_ABBREVIATIONS = {
-  PST: "America/Los_Angeles", PDT: "America/Los_Angeles",
-  EST: "America/New_York", EDT: "America/New_York",
-  CST: "America/Chicago", CDT: "America/Chicago",
-  MST: "America/Denver", MDT: "America/Denver",
-  UTC: "UTC", GMT: "Europe/London",
-  CET: "Europe/Berlin", CEST: "Europe/Berlin",
-};
+// ── Steps 8-9: parseDailyReportTime, formatEnvValue, generateStackEnv ────────
+// Imported from pre-deploy-lib.mjs
 
 function parseDailyReportTime(timeStr) {
-  const fallback = { cronExpr: "30 9 * * *", ianaTz: "America/Los_Angeles" };
-  if (!timeStr) return fallback;
-
-  const match = String(timeStr).match(/^(\d{1,2}):(\d{2})\s*(AM|PM)\s*(\w+)$/i);
-  if (!match) {
-    warn(`Could not parse daily_report time "${timeStr}" — using default 9:30 AM PST`);
-    return fallback;
-  }
-
-  let hour = parseInt(match[1], 10);
-  const minute = parseInt(match[2], 10);
-  const ampm = match[3].toUpperCase();
-  const tzAbbr = match[4].toUpperCase();
-
-  if (ampm === "PM" && hour !== 12) hour += 12;
-  if (ampm === "AM" && hour === 12) hour = 0;
-
-  const ianaTz = TZ_ABBREVIATIONS[tzAbbr];
-  if (!ianaTz) {
-    warn(`Unknown timezone abbreviation "${match[4]}" — using America/Los_Angeles`);
-    return { cronExpr: `${minute} ${hour} * * *`, ianaTz: "America/Los_Angeles" };
-  }
-
-  return { cronExpr: `${minute} ${hour} * * *`, ianaTz };
-}
-
-// ── Step 9: Generate stack.env ───────────────────────────────────────────────
-// Bash-sourceable key=value file for shell scripts.
-// Convention: ENV__<key> for .env vars, STACK__<path> for stack.yml vars.
-
-function formatEnvValue(val) {
-  const s = String(val ?? "");
-  if (s === "") return "";
-  if (/[\s'"\\$`!#&|;()<>{}]/.test(s)) {
-    return "'" + s.replace(/'/g, "'\\''") + "'";
-  }
-  return s;
-}
-
-function generateStackEnv(env, config, claws) {
-  const lines = [
-    "# Generated by pre-deploy — DO NOT EDIT",
-    "# To regenerate: npm run pre-deploy",
-    "",
-  ];
-
-  // Source: .env
-  const envVars = [
-    "VPS_IP", "SSH_KEY", "SSH_IDENTITY_AGENT", "SSH_PORT", "SSH_USER",
-    "HOSTALERT_TELEGRAM_BOT_TOKEN", "HOSTALERT_TELEGRAM_CHAT_ID",
-    "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN",
-  ];
-  lines.push("# Source: .env");
-  for (const key of envVars) {
-    if (env[key] !== undefined) {
-      lines.push(`ENV__${key}=${formatEnvValue(env[key])}`);
-    }
-  }
-  lines.push("");
-
-  const stack = config.stack || {};
-  const host = config.host || {};
-
-  // Source: stack.yml → host
-  lines.push("# Source: stack.yml → host");
-  if (host.hostname) lines.push(`STACK__HOST__HOSTNAME=${formatEnvValue(host.hostname)}`);
-  lines.push("");
-
-  // Source: stack.yml → stack
-  const installDir = String(stack.install_dir || "/home/openclaw");
-  const projectName = String(stack.project_name || "openclaw-stack");
-  lines.push("# Source: stack.yml → stack");
-  lines.push(`STACK__STACK__INSTALL_DIR=${formatEnvValue(installDir)}`);
-  lines.push(`STACK__STACK__PROJECT_NAME=${formatEnvValue(projectName)}`);
-  lines.push(`STACK__STACK__LOGGING__VECTOR=${stack.logging?.vector ?? false}`);
-  if (stack.openclaw?.version) {
-    lines.push(`STACK__STACK__OPENCLAW__VERSION=${formatEnvValue(stack.openclaw.version)}`);
-  }
-  if (stack.openclaw?.source) {
-    lines.push(`STACK__STACK__OPENCLAW__SOURCE=${formatEnvValue(stack.openclaw.source)}`);
-  }
-  if (stack.sandbox_toolkit) {
-    lines.push(`STACK__STACK__SANDBOX_TOOLKIT=${formatEnvValue(stack.sandbox_toolkit)}`);
-  }
-  if (stack.sandbox_registry) {
-    lines.push(`STACK__STACK__SANDBOX_REGISTRY__PORT=${stack.sandbox_registry_port || ""}`);
-    lines.push(`STACK__STACK__SANDBOX_REGISTRY__URL=${stack.sandbox_registry_url || ""}`);
-  }
-  if (stack.egress_proxy) {
-    lines.push(`STACK__STACK__EGRESS_PROXY__AUTH_TOKEN=${formatEnvValue(stack.egress_proxy.auth_token)}`);
-  }
-  lines.push("");
-
-  // Derived
-  lines.push("# Derived");
-  lines.push(`STACK__STACK__INSTANCES_DIR=${formatEnvValue(installDir + "/instances")}`);
-  lines.push(`STACK__STACK__IMAGE=${formatEnvValue("openclaw-" + projectName + ":local")}`);
-  lines.push(`STACK__CLAWS__IDS=${formatEnvValue(Object.keys(claws).join(","))}`);
-  lines.push("");
-
-  // Derived: host alerter schedule
-  const hostAlerter = (config.host || {}).host_alerter || {};
-  const schedule = parseDailyReportTime(hostAlerter.daily_report);
-  lines.push("# Derived: host alerter schedule");
-  lines.push(`STACK__HOST__HOSTALERT__CRON_EXPR=${formatEnvValue(schedule.cronExpr)}`);
-  lines.push(`STACK__HOST__HOSTALERT__CRON_TZ=${formatEnvValue(schedule.ianaTz)}`);
-  lines.push("");
-
-  // Per-claw (merged with defaults)
-  lines.push("# Per-claw (merged with defaults)");
-  for (const [name, claw] of Object.entries(claws)) {
-    const envKey = name.replace(/-/g, "_").toUpperCase();
-    lines.push(`STACK__CLAWS__${envKey}__DOMAIN=${formatEnvValue(claw.domain || "")}`);
-    lines.push(`STACK__CLAWS__${envKey}__DASHBOARD_PATH=${formatEnvValue(claw.dashboard_path || "")}`);
-    lines.push(`STACK__CLAWS__${envKey}__GATEWAY_PORT=${claw.gateway_port || ""}`);
-    lines.push(`STACK__CLAWS__${envKey}__DASHBOARD_PORT=${claw.dashboard_port || ""}`);
-    lines.push(`STACK__CLAWS__${envKey}__HEALTH_CHECK_CRON=${claw.health_check_cron ?? false}`);
-  }
-  lines.push("");
-
-  return lines.join("\n");
+  return _parseDailyReportTime(timeStr, (msg) => warn(msg));
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -664,6 +460,7 @@ async function main() {
     LOG_WORKER_TOKEN: "log_worker_token",
     EVENTS_URL: "events_url",
     LLEMTRY_URL: "llemtry_url",
+    ADMIN_TELEGRAM_ID: "telegram.allow_from",
   };
   // Check against first claw (these vars are stack-wide, same for all claws)
   const firstClaw = Object.values(claws)[0];
@@ -673,13 +470,7 @@ async function main() {
       return !val && val !== 0 && val !== false;
     })
     .map(([envVar]) => envVar);
-  // Channel vars are per-claw: only emitted in docker-compose.yml when the channel is enabled.
-  // Always pre-resolve them regardless of any claw's config, so openclaw.jsonc ${VAR}
-  // substitution succeeds on claws where the channel is disabled and these env vars are absent
-  // from the container environment. Checking only the first claw would break multi-claw
-  // stacks where claws have heterogeneous channel config.
-  const alwaysResolveVars = ["ADMIN_TELEGRAM_ID", "MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN"];
-  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), [...emptyVars, ...alwaysResolveVars].join("\n") + "\n");
+  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), emptyVars.join("\n") + "\n");
 
   // 7d-post. Resolve {{INSTALL_DIR}} in host/ files (cron configs, logrotate)
   const installDir = String(stack.install_dir || "/home/openclaw");
