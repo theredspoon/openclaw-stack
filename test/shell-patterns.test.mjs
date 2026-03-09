@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
 import { execSync } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -72,5 +73,27 @@ describe("build-openclaw.sh grep patterns", () => {
         grepExits('"openclaw/plugin-sdk/keyed-async-queue"', join(FIXTURES, "send-queue.fixed.ts"))
       ).toBe(false);
     });
+  });
+});
+
+describe("source-config.sh stale variable clearing", () => {
+  const SOURCE_CONFIG = join(__dirname, "..", "deploy", "host", "source-config.sh");
+  const content = readFileSync(SOURCE_CONFIG, "utf-8");
+  const lines = content.split("\n");
+
+  it('OPENCLAW_CONTEXT="" initialization present', () => {
+    expect(content).toContain('OPENCLAW_CONTEXT=""');
+  });
+
+  it('REPO_ROOT="" initialization present', () => {
+    expect(content).toContain('REPO_ROOT=""');
+  });
+
+  it("initialization appears before detection loop", () => {
+    const initIndex = lines.findIndex((l) => l.trim() === 'OPENCLAW_CONTEXT=""');
+    const loopIndex = lines.findIndex((l) => l.trim().startsWith("while"));
+    expect(initIndex).toBeGreaterThan(-1);
+    expect(loopIndex).toBeGreaterThan(-1);
+    expect(initIndex).toBeLessThan(loopIndex);
   });
 });
