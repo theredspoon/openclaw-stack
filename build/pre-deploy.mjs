@@ -31,6 +31,7 @@ import {
   formatEnvValue,
   generateStackEnv,
   resolveAutoToken as _resolveAutoToken,
+  computeDerivedValues as _computeDerivedValues,
 } from "./pre-deploy-lib.mjs";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -250,65 +251,10 @@ function validateClaw(name, claw) {
 // ── Step 7: Compute derived values per claw ──────────────────────────────────
 // Pre-computes all values the Handlebars template needs so the template
 // is a pure data projection with no inline logic.
+// Implementation in pre-deploy-lib.mjs; bound here with the local resolveAutoToken wrapper.
 
 function computeDerivedValues(claws, stack, host, previousDeploy) {
-  const logUrl = stack.logging?.worker_url || "";
-  const logToken = stack.logging?.worker_token || "";
-  const autoTokens = {};  // env var name → value, for .env persistence
-
-  // Stack-level derived values
-  stack.vector = !!stack.logging?.vector;
-
-  if (stack.egress_proxy) {
-    const before = stack.egress_proxy.auth_token;
-    stack.egress_proxy.auth_token = resolveAutoToken(
-      before,
-      "stack.egress_proxy.auth_token",
-      previousDeploy
-    );
-    autoTokens.EGRESS_PROXY_AUTH_TOKEN = stack.egress_proxy.auth_token;
-  }
-
-  if (stack.sandbox_registry) {
-    const sr = stack.sandbox_registry;
-    const before = sr.token;
-    sr.token = resolveAutoToken(before, "stack.sandbox_registry.token", previousDeploy);
-    autoTokens.SANDBOX_REGISTRY_TOKEN = sr.token;
-    sr.log_level = sr.log_level || "warn";
-    if (sr.port && !sr.url) {
-      stack.sandbox_registry_container = true;
-      stack.sandbox_registry_port = sr.port;
-      stack.sandbox_registry_url = "";  // Computed at runtime in entrypoint
-    } else if (sr.url) {
-      stack.sandbox_registry_container = false;
-      stack.sandbox_registry_port = "";
-      stack.sandbox_registry_url = sr.url;
-    }
-  }
-
-  for (const claw of Object.values(claws)) {
-    const gwUrl = claw.ai_gateway?.url || stack.ai_gateway.url;
-    const gwToken = claw.ai_gateway?.token || stack.ai_gateway.token;
-
-    // gateway_token already resolved in main() via .env
-    claw.anthropic_api_key = gwToken;
-    claw.anthropic_base_url = gwUrl + "/anthropic";
-    claw.openai_api_key = gwToken;
-    claw.openai_base_url = gwUrl + "/openai/v1";
-    claw.openai_codex_base_url = gwUrl + "/openai-codex";
-    claw.allowed_origin = "https://" + claw.domain;
-    claw.vps_hostname = host.hostname || "";
-    claw.log_worker_url = logUrl;
-    claw.log_worker_token = logToken;
-    claw.events_url = logUrl ? logUrl + "/openclaw/events" : "";
-    claw.llemtry_url = logUrl ? logUrl + "/llemtry" : "";
-    claw.enable_events_logging = stack.logging?.events || false;
-    claw.enable_llemtry_logging = stack.logging?.llemtry || false;
-    claw.telegram_enabled = !!claw.telegram?.enabled;
-    claw.matrix_enabled = !!claw.matrix?.enabled;
-  }
-
-  return autoTokens;
+  return _computeDerivedValues(claws, stack, host, previousDeploy, resolveAutoToken);
 }
 
 // ── Steps 8-9: parseDailyReportTime, formatEnvValue, generateStackEnv ────────
