@@ -18,6 +18,11 @@ export async function proxyGeneric(
   // Replace gateway auth token with the real provider API key
   headers.set('Authorization', `Bearer ${apiKey}`)
 
+  // Strip Cloudflare-injected metadata headers that shouldn't reach upstream providers
+  for (const key of [...headers.keys()]) {
+    if (key.startsWith('cf-')) headers.delete(key)
+  }
+
   // Set provider-config headers (e.g. cf-aig-authorization for CF AI Gateway mode)
   if (config.headers) {
     for (const [key, value] of Object.entries(config.headers)) {

@@ -357,30 +357,26 @@ const CONFIG_HTML = /* html */ `<!DOCTYPE html>
         // Clean up empty nested objects
         if (Object.keys(update[root][name]).length === 0) delete update[root][name];
         if (Object.keys(update[root]).length === 0) delete update[root];
-        return;
-      }
+      } else {
+        // 2-segment path: {provider}.{key}
+        const [provider, key] = segments;
+        if (!update[provider]) update[provider] = {};
 
-      // 2-segment path: {provider}.{key}
-      const [provider, key] = segments;
-      if (!update[provider]) update[provider] = {};
-
-      if (state.cleared) {
-        // Send null to delete
-        update[provider][key] = null;
-      } else if (newVal) {
-        // Parse Codex auth JSON for openai.oauth
-        if (path === 'openai.oauth') {
-          const parsed = parseCodexAuth(newVal);
-          if (parsed.error) {
-            showStatus('#save-status', parsed.error, 'error');
-            return;
+        if (state.cleared) {
+          update[provider][key] = null;
+        } else if (newVal) {
+          if (path === 'openai.oauth') {
+            const parsed = parseCodexAuth(newVal);
+            if (parsed.error) {
+              showStatus('#save-status', parsed.error, 'error');
+              return;
+            }
+            update[provider][key] = parsed.value;
+          } else {
+            update[provider][key] = newVal;
           }
-          update[provider][key] = parsed.value;
-        } else {
-          update[provider][key] = newVal;
         }
       }
-      // Absent = no change (omit from update)
     });
 
     // Remove provider keys with no actual changes
