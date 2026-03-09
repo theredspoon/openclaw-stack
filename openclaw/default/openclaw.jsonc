@@ -186,9 +186,8 @@
         "id": "main",
         "default": true,
         "sandbox": {
-          // Override default "all" — operator DM runs on host for full filesystem/docker access.
-          // Group chats and subagent spawns still get sandboxed.
-          "mode": "non-main",
+          // All sessions run sandboxed — use /elevated for host access when needed.
+          "mode": "all",
           "docker": {
             // Host-status reports (health.json, maintenance.json) written by host cron scripts.
             // Bind into sandbox workspace so the read tool can access them (.host-status/health.json).
