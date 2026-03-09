@@ -314,6 +314,10 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     claw.llemtry_url = logUrl ? logUrl + "/llemtry" : "";
     claw.enable_events_logging = stack.logging?.events || false;
     claw.enable_llemtry_logging = stack.logging?.llemtry || false;
+    // telegram_enabled / matrix_enabled are flat booleans for Handlebars — avoids
+    // empty-string output when the section is absent from stack.yml.
+    claw.telegram_enabled = claw.telegram?.enabled === true;
+    claw.matrix_enabled = claw.matrix?.enabled === true;
   }
 
   return autoTokens;
@@ -470,7 +474,6 @@ async function main() {
     LOG_WORKER_TOKEN: "log_worker_token",
     EVENTS_URL: "events_url",
     LLEMTRY_URL: "llemtry_url",
-    ADMIN_TELEGRAM_ID: "telegram.allow_from",
   };
   // Check against first claw (these vars are stack-wide, same for all claws)
   const firstClaw = Object.values(claws)[0];
@@ -480,7 +483,13 @@ async function main() {
       return !val && val !== 0 && val !== false;
     })
     .map(([envVar]) => envVar);
-  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), emptyVars.join("\n") + "\n");
+  // Channel vars are per-claw: only emitted in docker-compose.yml when the channel is enabled.
+  // Always pre-resolve them regardless of any claw's config, so openclaw.jsonc ${VAR}
+  // substitution succeeds on claws where the channel is disabled and these env vars are absent
+  // from the container environment. Checking only the first claw would break multi-claw
+  // stacks where claws have heterogeneous channel config.
+  const alwaysResolveVars = ["ADMIN_TELEGRAM_ID", "MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN"];
+  writeFileSync(join(DEPLOY_DIR, "openclaw-stack", "empty-env-vars"), [...emptyVars, ...alwaysResolveVars].join("\n") + "\n");
 
   // 7d-post. Resolve {{INSTALL_DIR}} in host/ files (cron configs, logrotate)
   const installDir = String(stack.install_dir || "/home/openclaw");
