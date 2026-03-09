@@ -34,6 +34,8 @@ function render(overrides = {}) {
         openai_base_url: "https://gw/openai/v1",
         openai_codex_base_url: "https://gw/openai-codex",
         telegram: { bot_token: "bot:tok", allow_from: "123" },
+        telegram_enabled: true,
+        matrix_enabled: false,
         vps_hostname: "vps1",
         log_worker_url: "",
         log_worker_token: "",
@@ -74,10 +76,53 @@ describe("docker-compose.yml.hbs", () => {
     expect(rendered).toContain("NODE_ENV=production");
   });
 
-  it("always outputs TELEGRAM_BOT_TOKEN", () => {
+  it("always outputs TELEGRAM_ENABLED", () => {
     const { rendered } = render();
+    expect(rendered).toContain("TELEGRAM_ENABLED=");
+  });
+
+  it("outputs TELEGRAM_BOT_TOKEN only when telegram_enabled is true", () => {
+    const claws = {
+      main: {
+        gateway_port: 18789, dashboard_port: 6090, gateway_token: "t1",
+        domain: "a.com", domain_path: "", dashboard_path: "/d1",
+        allowed_origin: "https://a.com", allow_updates: false,
+        anthropic_api_key: "ak", anthropic_base_url: "u",
+        openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
+        telegram: { bot_token: "bot:tok", allow_from: "123" },
+        telegram_enabled: true,
+        vps_hostname: "", log_worker_url: "", log_worker_token: "",
+        events_url: "", llemtry_url: "",
+        enable_events_logging: false, enable_llemtry_logging: false,
+        resources: { cpus: "4", memory: "8G" },
+        mdns_hostname: "main",
+      },
+    };
+    const { rendered } = render({ claws });
     expect(rendered).toContain("TELEGRAM_BOT_TOKEN=bot:tok");
     expect(rendered).toContain("ADMIN_TELEGRAM_ID=123");
+  });
+
+  it("omits TELEGRAM_BOT_TOKEN when telegram_enabled is false", () => {
+    const claws = {
+      main: {
+        gateway_port: 18789, dashboard_port: 6090, gateway_token: "t1",
+        domain: "a.com", domain_path: "", dashboard_path: "/d1",
+        allowed_origin: "https://a.com", allow_updates: false,
+        anthropic_api_key: "ak", anthropic_base_url: "u",
+        openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
+        telegram: { bot_token: "", allow_from: "" },
+        telegram_enabled: false,
+        vps_hostname: "", log_worker_url: "", log_worker_token: "",
+        events_url: "", llemtry_url: "",
+        enable_events_logging: false, enable_llemtry_logging: false,
+        resources: { cpus: "4", memory: "8G" },
+        mdns_hostname: "main",
+      },
+    };
+    const { rendered } = render({ claws });
+    expect(rendered).toContain("TELEGRAM_ENABLED=false");
+    expect(rendered).not.toContain("TELEGRAM_BOT_TOKEN=");
   });
 
   it("generates multiple claw services", () => {
@@ -89,6 +134,8 @@ describe("docker-compose.yml.hbs", () => {
         anthropic_api_key: "ak", anthropic_base_url: "u",
         openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
         telegram: { bot_token: "", allow_from: "" },
+        telegram_enabled: false,
+        matrix_enabled: false,
         vps_hostname: "", log_worker_url: "", log_worker_token: "",
         events_url: "", llemtry_url: "",
         enable_events_logging: false, enable_llemtry_logging: false,
@@ -101,6 +148,8 @@ describe("docker-compose.yml.hbs", () => {
         anthropic_api_key: "ak", anthropic_base_url: "u",
         openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
         telegram: { bot_token: "", allow_from: "" },
+        telegram_enabled: false,
+        matrix_enabled: false,
         vps_hostname: "", log_worker_url: "", log_worker_token: "",
         events_url: "", llemtry_url: "",
         enable_events_logging: false, enable_llemtry_logging: false,
@@ -164,6 +213,54 @@ describe("docker-compose.yml.hbs", () => {
   it("sets healthcheck with correct port", () => {
     const { rendered } = render();
     expect(rendered).toContain("http://localhost:18789/");
+  });
+
+  it("outputs MATRIX_HOMESERVER only when matrix_enabled is true", () => {
+    const claws = {
+      main: {
+        gateway_port: 18789, dashboard_port: 6090, gateway_token: "t1",
+        domain: "a.com", domain_path: "", dashboard_path: "/d1",
+        allowed_origin: "https://a.com", allow_updates: false,
+        anthropic_api_key: "ak", anthropic_base_url: "u",
+        openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
+        telegram: { bot_token: "", allow_from: "" },
+        telegram_enabled: false,
+        matrix: { homeserver: "https://hs.example.com", access_token: "mat-tok" },
+        matrix_enabled: true,
+        vps_hostname: "", log_worker_url: "", log_worker_token: "",
+        events_url: "", llemtry_url: "",
+        enable_events_logging: false, enable_llemtry_logging: false,
+        resources: { cpus: "4", memory: "8G" },
+        mdns_hostname: "main",
+      },
+    };
+    const { rendered } = render({ claws });
+    expect(rendered).toContain("MATRIX_ENABLED=true");
+    expect(rendered).toContain("MATRIX_HOMESERVER=https://hs.example.com");
+    expect(rendered).toContain("MATRIX_ACCESS_TOKEN=mat-tok");
+  });
+
+  it("omits MATRIX_HOMESERVER when matrix_enabled is false", () => {
+    const claws = {
+      main: {
+        gateway_port: 18789, dashboard_port: 6090, gateway_token: "t1",
+        domain: "a.com", domain_path: "", dashboard_path: "/d1",
+        allowed_origin: "https://a.com", allow_updates: false,
+        anthropic_api_key: "ak", anthropic_base_url: "u",
+        openai_api_key: "ok", openai_base_url: "u", openai_codex_base_url: "u",
+        telegram: { bot_token: "", allow_from: "" },
+        telegram_enabled: false,
+        matrix_enabled: false,
+        vps_hostname: "", log_worker_url: "", log_worker_token: "",
+        events_url: "", llemtry_url: "",
+        enable_events_logging: false, enable_llemtry_logging: false,
+        resources: { cpus: "4", memory: "8G" },
+        mdns_hostname: "main",
+      },
+    };
+    const { rendered } = render({ claws });
+    expect(rendered).toContain("MATRIX_ENABLED=false");
+    expect(rendered).not.toContain("MATRIX_HOMESERVER=");
   });
 
   it("includes openclaw-net network", () => {

@@ -6,7 +6,7 @@ describe("validateClaw", () => {
     domain: "example.com",
     gateway_port: 18789,
     dashboard_port: 6090,
-    telegram: { bot_token: "123:abc" },
+    telegram: { enabled: true, bot_token: "123:abc" },
   };
 
   it("accepts a valid claw", () => {
@@ -33,28 +33,62 @@ describe("validateClaw", () => {
     expect(() => validateClaw("main", claw, () => {})).toThrow("missing required field: domain");
   });
 
-  it("warns when telegram.bot_token is missing", () => {
+  // Telegram validation: only warns when enabled AND bot_token missing
+  it("warns when telegram.enabled is true but bot_token is missing", () => {
     const onWarn = vi.fn();
-    const claw = { ...validClaw, telegram: {} };
+    const claw = { ...validClaw, telegram: { enabled: true } };
     validateClaw("main", claw, onWarn);
     expect(onWarn).toHaveBeenCalledWith(
-      expect.stringContaining("telegram.bot_token")
+      expect.stringContaining("bot_token")
     );
   });
 
-  it("warns when telegram section is missing entirely", () => {
+  it("does not warn when telegram.enabled is false and bot_token is missing", () => {
+    const onWarn = vi.fn();
+    const claw = { ...validClaw, telegram: { enabled: false } };
+    validateClaw("main", claw, onWarn);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when telegram section is missing entirely", () => {
     const onWarn = vi.fn();
     const claw = { domain: "ex.com", gateway_port: 1, dashboard_port: 2 };
     validateClaw("main", claw, onWarn);
-    expect(onWarn).toHaveBeenCalledWith(
-      expect.stringContaining("telegram.bot_token")
-    );
+    expect(onWarn).not.toHaveBeenCalled();
   });
 
   it("does not warn when telegram.bot_token is present", () => {
     const onWarn = vi.fn();
     validateClaw("main", validClaw, onWarn);
     expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  // Matrix validation
+  it("throws when matrix.enabled is true but homeserver is missing", () => {
+    const claw = { ...validClaw, matrix: { enabled: true, access_token: "tok" } };
+    expect(() => validateClaw("main", claw, () => {})).toThrow("matrix.homeserver");
+  });
+
+  it("throws when matrix.enabled is true but access_token is missing", () => {
+    const claw = { ...validClaw, matrix: { enabled: true, homeserver: "https://hs.example.com" } };
+    expect(() => validateClaw("main", claw, () => {})).toThrow("matrix.access_token");
+  });
+
+  it("does not throw when matrix.enabled is false", () => {
+    const claw = { ...validClaw, matrix: { enabled: false } };
+    expect(() => validateClaw("main", claw, () => {})).not.toThrow();
+  });
+
+  it("does not throw when matrix section is missing entirely", () => {
+    expect(() => validateClaw("main", validClaw, () => {})).not.toThrow();
+  });
+
+  it("accepts valid matrix config", () => {
+    const claw = {
+      ...validClaw,
+      matrix: { enabled: true, homeserver: "https://hs.example.com", access_token: "tok" },
+    };
+    expect(() => validateClaw("main", claw, () => {})).not.toThrow();
   });
 
   it("includes claw name in error messages", () => {
