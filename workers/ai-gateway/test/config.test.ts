@@ -41,6 +41,14 @@ describe("buildCodexHeaders", () => {
     });
   });
 
+  it("omits CF Access headers when only client ID is set (no secret)", () => {
+    expect(buildCodexHeaders({ CF_ACCESS_CLIENT_ID: "id-only" })).toBeUndefined();
+  });
+
+  it("omits CF Access headers when only client secret is set (no ID)", () => {
+    expect(buildCodexHeaders({ CF_ACCESS_CLIENT_SECRET: "secret-only" })).toBeUndefined();
+  });
+
   it("returns all three headers when both mechanisms are configured", () => {
     expect(
       buildCodexHeaders({
