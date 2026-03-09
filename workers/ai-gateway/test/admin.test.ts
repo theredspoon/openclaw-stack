@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { maskString, maskCredentials, mergeCredentials } from "../src/admin";
-import type { UserCredentials } from "../src/types";
+import { env } from "cloudflare:test";
+import { maskString, maskCredentials, mergeCredentials, handleCodexTokenGeneration } from "../src/admin";
+import type { UserCredentials, UsersRegistry } from "../src/types";
+import type { Log } from "../src/log";
 
 describe("maskString", () => {
   it("returns *** for short strings", () => {
@@ -202,5 +204,90 @@ describe("mergeCredentials", () => {
     const result = mergeCredentials(existing, update);
     expect(result.providers?.groq?.apiKey).toBe("new-groq-key");
     expect(result.providers?.deepseek?.apiKey).toBe("ds-key");
+  });
+});
+
+// --- Codex token expiry ---
+
+const noopLog: Log = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function seedUser(kv: KVNamespace, userId: string) {
+  const registry: UsersRegistry = {
+    [userId]: {
+      name: "test",
+      tokens: ["initial-token"],
+      createdAt: new Date().toISOString(),
+    },
+  };
+  await kv.put("users", JSON.stringify(registry));
+  await kv.put(`token:initial-token`, userId);
+  await kv.put(
+    `creds:${userId}`,
+    JSON.stringify({
+      openai: {
+        oauth: {
+          accessToken: "fake-at",
+          refreshToken: "fake-rt",
+          expiresAt: "2099-12-31",
+        },
+      },
+    } satisfies UserCredentials)
+  );
+}
+
+describe("codex token expiry", () => {
+  const kv = env.AUTH_KV;
+  const userId = "usr_codex_test";
+
+  it("first codex token sets tracking key", async () => {
+    await seedUser(kv, userId);
+    const res = await handleCodexTokenGeneration(userId, kv, noopLog);
+    expect(res.status).toBe(200);
+
+    const trackingHash = await kv.get(`codex:${userId}`);
+    expect(trackingHash).toBeTruthy();
+
+    // The tracked hash should resolve to our userId
+    const resolved = await kv.get(`token:${trackingHash!}`);
+    expect(resolved).toBe(userId);
+  });
+
+  it("regeneration updates tracking key and old token still resolves", async () => {
+    await seedUser(kv, userId);
+
+    // First generation
+    const res1 = await handleCodexTokenGeneration(userId, kv, noopLog);
+    const body1 = (await res1.json()) as { codexPasteToken: string };
+    const firstHash = await sha256Hex(body1.codexPasteToken);
+    const trackingAfterFirst = await kv.get(`codex:${userId}`);
+    expect(trackingAfterFirst).toBe(firstHash);
+
+    // Second generation
+    const res2 = await handleCodexTokenGeneration(userId, kv, noopLog);
+    const body2 = (await res2.json()) as { codexPasteToken: string };
+    const secondHash = await sha256Hex(body2.codexPasteToken);
+
+    // Tracking key should now point to the new hash
+    const trackingAfterSecond = await kv.get(`codex:${userId}`);
+    expect(trackingAfterSecond).toBe(secondHash);
+    expect(secondHash).not.toBe(firstHash);
+
+    // Old token still resolves during grace period (has TTL, not deleted)
+    const oldResolved = await kv.get(`token:${firstHash}`);
+    expect(oldResolved).toBe(userId);
+
+    // New token also resolves
+    const newResolved = await kv.get(`token:${secondHash}`);
+    expect(newResolved).toBe(userId);
   });
 });
