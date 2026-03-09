@@ -263,6 +263,13 @@ describe("docker-compose.yml.hbs", () => {
     expect(rendered).not.toContain("MATRIX_HOMESERVER=");
   });
 
+  it("cloudflared uses host networking", () => {
+    const { parsed } = render();
+    const cf = parsed.services["cloudflared"];
+    expect(cf.network_mode).toBe("host");
+    expect(cf.networks).toBeUndefined();
+  });
+
   it("includes openclaw-net network", () => {
     const { parsed } = render();
     expect(parsed.networks["openclaw-net"]).toBeDefined();

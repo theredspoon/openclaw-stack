@@ -16,23 +16,21 @@ function grepExits(pattern, file) {
 }
 
 describe("build-openclaw.sh grep patterns", () => {
-  // Main uses: grep -q "docker.io" Dockerfile
-  // This is the CURRENT pattern on main — it has a known false-positive
-  // where FROM docker.io/library/node matches even without the install line.
-  describe('grep -q "docker.io" (main branch pattern)', () => {
-    it("matches patched Dockerfile (has install line)", () => {
-      expect(grepExits('"docker.io"', join(FIXTURES, "Dockerfile.patched"))).toBe(true);
+  // Fixed pattern: grep -q "gosu" instead of "docker.io" to avoid false positives
+  // from OCI labels like FROM docker.io/library/node in multi-stage Dockerfiles.
+  describe('grep -q "gosu" (patch detection)', () => {
+    it("matches patched Dockerfile (has gosu)", () => {
+      expect(grepExits('"gosu"', join(FIXTURES, "Dockerfile.patched"))).toBe(true);
     });
 
     it("does NOT match unpatched Dockerfile", () => {
-      expect(grepExits('"docker.io"', join(FIXTURES, "Dockerfile.unpatched"))).toBe(false);
+      expect(grepExits('"gosu"', join(FIXTURES, "Dockerfile.unpatched"))).toBe(false);
     });
 
-    it("FALSE POSITIVE: matches OCI label Dockerfile (known bug)", () => {
-      // This documents the known bug on main: FROM docker.io/library/node
-      // triggers the grep, so the patch is skipped even though docker.io
-      // package isn't installed. Fixed on the deploy fix branch.
-      expect(grepExits('"docker.io"', join(FIXTURES, "Dockerfile.oci-label"))).toBe(true);
+    it("does NOT match OCI label Dockerfile (no false positive)", () => {
+      // OCI label has docker.io/library/node but NOT gosu — correctly detected
+      // as needing the patch.
+      expect(grepExits('"gosu"', join(FIXTURES, "Dockerfile.oci-label"))).toBe(false);
     });
   });
 
