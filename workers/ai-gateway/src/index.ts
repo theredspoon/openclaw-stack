@@ -153,7 +153,6 @@ export default {
     // --- Legacy provider route ---
     const apiKey = await getProviderApiKey(route!.provider, userId, env.AUTH_KV, log)
     if (!apiKey) {
-      console.error(`No API key configured for ${route!.provider}: ${request.method} ${route}`)
       return addCorsHeaders(jsonError(`No API key configured for ${route!.provider}`, 401))
     }
 

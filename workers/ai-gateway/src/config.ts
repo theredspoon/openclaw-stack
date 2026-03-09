@@ -79,22 +79,13 @@ const PROVIDER_DEFAULTS: Record<string, { baseUrl: string }> = {
   xai:        { baseUrl: 'https://api.x.ai' },
 }
 
-/** Look up the config for a generic provider. Includes egress proxy if configured. Returns null for unknown providers. */
+/** Look up the config for a generic provider. Returns null for unknown providers.
+ *  Generic providers do not inherit the egress proxy — EGRESS_PROXY_URL is scoped
+ *  to openai-codex (chatgpt.com WAF workaround) and should not add an extra hop
+ *  for providers that accept requests from CF Worker IPs directly. */
 export function getGenericProviderConfig(provider: string): ProviderConfig | null {
   const defaults = PROVIDER_DEFAULTS[provider]
   if (!defaults) return null
 
-  return {
-    baseUrl: defaults.baseUrl,
-    egressProxyUrl: env.EGRESS_PROXY_URL || undefined,
-    headers: env.EGRESS_PROXY_AUTH_TOKEN
-      ? {
-          'X-Proxy-Auth': `Bearer ${env.EGRESS_PROXY_AUTH_TOKEN}`,
-          ...(env.CF_ACCESS_CLIENT_ID && {
-            'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
-            'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
-          }),
-        }
-      : undefined,
-  }
+  return { baseUrl: defaults.baseUrl }
 }
