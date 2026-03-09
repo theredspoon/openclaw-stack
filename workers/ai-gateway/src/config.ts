@@ -80,12 +80,19 @@ const PROVIDER_DEFAULTS: Record<string, { baseUrl: string }> = {
 }
 
 /** Look up the config for a generic provider. Returns null for unknown providers.
- *  Generic providers do not inherit the egress proxy — EGRESS_PROXY_URL is scoped
- *  to openai-codex (chatgpt.com WAF workaround) and should not add an extra hop
- *  for providers that accept requests from CF Worker IPs directly. */
+ *  Uses CF AI Gateway when configured (same as legacy providers).
+ *  Does NOT inherit the egress proxy — EGRESS_PROXY_URL is scoped to openai-codex. */
 export function getGenericProviderConfig(provider: string): ProviderConfig | null {
   const defaults = PROVIDER_DEFAULTS[provider]
   if (!defaults) return null
+
+  const useCfGateway = env.CF_AI_GATEWAY_TOKEN && env.CF_AI_GATEWAY_ID && env.CF_AI_GATEWAY_ACCOUNT_ID
+  if (useCfGateway) {
+    return {
+      baseUrl: `https://gateway.ai.cloudflare.com/v1/${env.CF_AI_GATEWAY_ACCOUNT_ID}/${env.CF_AI_GATEWAY_ID}`,
+      headers: { 'cf-aig-authorization': `Bearer ${env.CF_AI_GATEWAY_TOKEN}` },
+    }
+  }
 
   return { baseUrl: defaults.baseUrl }
 }

@@ -115,6 +115,12 @@ export default {
         return addCorsHeaders(jsonError(`Unknown provider: ${genericRoute.provider}`, 404))
       }
 
+      // CF AI Gateway uses a different path format: {provider}/chat/completions (no /v1/)
+      const isGateway = providerConfig.baseUrl.includes('gateway.ai.cloudflare.com')
+      const upstreamPath = isGateway
+        ? `${genericRoute.provider}/${genericRoute.directPath.replace('v1/', '')}`
+        : genericRoute.directPath
+
       const llemtryActive = isLlemtryEnabled(env, log) && isLlmRoute(genericRoute.directPath)
       const startTime = llemtryActive ? new Date() : undefined
       const requestBody = llemtryActive ? await request.text() : undefined
@@ -123,7 +129,7 @@ export default {
         apiKey,
         request,
         providerConfig,
-        genericRoute.directPath,
+        upstreamPath,
         log,
         genericRoute.provider,
         requestBody
