@@ -122,7 +122,8 @@ fi
 # package.json but they aren't installed in the Docker image. Install
 # them on first boot if the node_modules dir is missing.
 MATRIX_EXT="/app/extensions/matrix"
-if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$MATRIX_EXT/package.json" ] && [ ! -d "$MATRIX_EXT/node_modules" ]; then
+if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$MATRIX_EXT/package.json" ] && \
+   { [ ! -d "$MATRIX_EXT/node_modules" ] || [ ! -d "$MATRIX_EXT/node_modules/@vector-im/matrix-bot-sdk" ]; }; then
   echo "[entrypoint] Installing matrix plugin dependencies..."
   cd "$MATRIX_EXT"
   if npm install --omit=dev 2>&1; then
