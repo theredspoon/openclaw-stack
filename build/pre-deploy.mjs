@@ -300,10 +300,8 @@ function computeDerivedValues(claws, stack, host, previousDeploy) {
     claw.llemtry_url = logUrl ? logUrl + "/llemtry" : "";
     claw.enable_events_logging = stack.logging?.events || false;
     claw.enable_llemtry_logging = stack.logging?.llemtry || false;
-    // telegram_enabled / matrix_enabled are flat booleans for Handlebars — avoids
-    // empty-string output when the section is absent from stack.yml.
-    claw.telegram_enabled = claw.telegram?.enabled === true;
-    claw.matrix_enabled = claw.matrix?.enabled === true;
+    claw.telegram_enabled = !!claw.telegram?.enabled;
+    claw.matrix_enabled = !!claw.matrix?.enabled;
   }
 
   return autoTokens;
