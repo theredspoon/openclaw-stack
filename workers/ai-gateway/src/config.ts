@@ -59,3 +59,40 @@ export function getProviderConfig(provider: string): ProviderConfig {
       return { baseUrl: '' }
   }
 }
+
+// --- Generic provider defaults ---
+
+/** Verified base URLs for generic OpenAI-compatible providers.
+ *  Base URLs do NOT include /v1 — the directPath from route matching provides it.
+ *  e.g. Groq: baseUrl="https://api.groq.com/openai" + "/v1/chat/completions" */
+export const PROVIDER_DEFAULTS: Record<string, { baseUrl: string }> = {
+  cohere:     { baseUrl: 'https://api.cohere.ai/compatibility' },
+  deepseek:   { baseUrl: 'https://api.deepseek.com' },
+  fireworks:  { baseUrl: 'https://api.fireworks.ai/inference' },
+  groq:       { baseUrl: 'https://api.groq.com/openai' },
+  minimax:    { baseUrl: 'https://api.minimax.io' },
+  mistral:    { baseUrl: 'https://api.mistral.ai' },
+  moonshot:   { baseUrl: 'https://api.moonshot.ai' },
+  openrouter: { baseUrl: 'https://openrouter.ai/api' },
+  perplexity: { baseUrl: 'https://api.perplexity.ai' },
+  together:   { baseUrl: 'https://api.together.xyz' },
+  xai:        { baseUrl: 'https://api.x.ai' },
+}
+
+/** Look up the config for a generic provider. Returns null for unknown providers.
+ *  Uses CF AI Gateway when configured (same as legacy providers).
+ *  Does NOT inherit the egress proxy — EGRESS_PROXY_URL is scoped to openai-codex. */
+export function getGenericProviderConfig(provider: string): ProviderConfig | null {
+  const defaults = PROVIDER_DEFAULTS[provider]
+  if (!defaults) return null
+
+  const useCfGateway = env.CF_AI_GATEWAY_TOKEN && env.CF_AI_GATEWAY_ID && env.CF_AI_GATEWAY_ACCOUNT_ID
+  if (useCfGateway) {
+    return {
+      baseUrl: `https://gateway.ai.cloudflare.com/v1/${env.CF_AI_GATEWAY_ACCOUNT_ID}/${env.CF_AI_GATEWAY_ID}`,
+      headers: { 'cf-aig-authorization': `Bearer ${env.CF_AI_GATEWAY_TOKEN}` },
+    }
+  }
+
+  return { baseUrl: defaults.baseUrl }
+}
