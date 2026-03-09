@@ -3,7 +3,7 @@
 // This template is used by default when a claw doesn't specify its own
 // openclaw_json path in stack.yml.
 //
-// It creates main & code agents. Main runs as "non-main" inside the container.
+// It creates main & code agents. All agents run sandboxed by default (mode: "all").
 // This template is a good starting point for most claws if you don't need specific security permissions.
 // OpenClaw Control UI can be used after deployment to customize the openclaw config.
 //
