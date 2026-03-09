@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { env } from "cloudflare:test";
-import { maskString, maskCredentials, mergeCredentials, handleCodexTokenGeneration } from "../src/admin";
+import { maskString, maskCredentials, mergeCredentials, handleCodexTokenGeneration, handleTokenRotation } from "../src/admin";
 import type { UserCredentials, UsersRegistry } from "../src/types";
 import type { Log } from "../src/log";
 
@@ -289,5 +289,36 @@ describe("codex token expiry", () => {
     // New token also resolves
     const newResolved = await kv.get(`token:${secondHash}`);
     expect(newResolved).toBe(userId);
+  });
+
+  it("codex hash is not added to user.tokens registry", async () => {
+    await seedUser(kv, userId);
+    await handleCodexTokenGeneration(userId, kv, noopLog);
+
+    const registry = JSON.parse((await kv.get("users"))!) as UsersRegistry;
+    const user = registry[userId];
+    // user.tokens should only contain the initial seed token, not the codex hash
+    expect(user.tokens).toEqual(["initial-token"]);
+  });
+
+  it("token rotation does not resurrect expired codex hashes", async () => {
+    await seedUser(kv, userId);
+
+    // Generate a codex token
+    const res = await handleCodexTokenGeneration(userId, kv, noopLog);
+    const body = (await res.json()) as { codexPasteToken: string };
+    const codexHash = await sha256Hex(body.codexPasteToken);
+
+    // Simulate the codex token expiring out of KV
+    await kv.delete(`token:${codexHash}`);
+    const gone = await kv.get(`token:${codexHash}`);
+    expect(gone).toBeNull();
+
+    // Rotate normal tokens — should not touch codex hashes
+    await handleTokenRotation(userId, kv, noopLog);
+
+    // Codex hash should still be absent from KV
+    const stillGone = await kv.get(`token:${codexHash}`);
+    expect(stillGone).toBeNull();
   });
 });
