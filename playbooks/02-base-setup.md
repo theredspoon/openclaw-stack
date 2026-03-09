@@ -245,7 +245,6 @@ LoginGraceTime 30
 
 # Disable unused features
 X11Forwarding no
-AllowTcpForwarding no
 AllowAgentForwarding no
 PermitEmptyPasswords no
 PermitUserEnvironment no
@@ -254,6 +253,10 @@ PermitUserEnvironment no
 KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+
+# Disable TCP forwarding for the service account (allow for human operators)
+Match User openclaw
+    AllowTcpForwarding no
 EOF
 
 # Systemd socket override: listen on BOTH ports during transition

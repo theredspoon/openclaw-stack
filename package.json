@@ -3,6 +3,8 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "deploy": "scripts/deploy.sh",
+    "deploy:dry": "scripts/deploy.sh --dry-run",
     "pre-deploy": "node build/pre-deploy.mjs",
     "pre-deploy:dry": "node build/pre-deploy.mjs --dry-run",
     "test": "vitest run && npm test --prefix workers/ai-gateway"
